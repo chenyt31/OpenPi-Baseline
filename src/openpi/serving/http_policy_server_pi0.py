@@ -1,7 +1,3 @@
-import os
-
-os.environ["JAX_PLATFORMS"] = "cpu"
-
 import logging
 import pathlib
 
@@ -147,10 +143,12 @@ def make_aloha_norm_stats():
 def main(
     port: int = 8000,
 ) -> None:
+    logging.info("Loading model...")
     model = load_pi0_model()
 
     norm_stats = make_aloha_norm_stats()
 
+    logging.info("Creating policy...")
     policy = _policy.Policy(
         model,
         transforms=[
@@ -162,10 +160,13 @@ def main(
         ],
     )
 
+    logging.info("Creating server...")
     server = http_policy_server.HttpPolicyServer(policy=policy, host="0.0.0.0", port=port)
+
+    logging.info("Serving...")
     server.serve_forever()
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, force=True)
     tyro.cli(main)

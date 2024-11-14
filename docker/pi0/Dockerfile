@@ -1,6 +1,7 @@
 # docker build . -t pi0_server -f docker/pi0/Dockerfile
 # docker run --rm -it --network=host -v .:/app --gpus=all pi0_server /bin/bash
-FROM python:3.11-slim-bookworm@sha256:e8381c802593deb0c4d25bd3f4e05e94382f6bf33090de22679fc7488cd68bbb
+# FROM python:3.11-slim-bookworm@sha256:e8381c802593deb0c4d25bd3f4e05e94382f6bf33090de22679fc7488cd68bbb
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04@sha256:2d913b09e6be8387e1a10976933642c73c840c0b735f0bf3c28d97fc9bc422e0
 COPY --from=ghcr.io/astral-sh/uv:0.5.1 /uv /uvx /bin/
 
 # Copy the project config so we can install dependencies.
@@ -14,7 +15,12 @@ WORKDIR /app
 # Copy from the cache instead of linking since it's a mounted volume
 ENV UV_LINK_MODE=copy
 
+# Write the virtual environment outside of the project directory so it doesn't
+# leak out of the container when we mount the application code.
+ENV UV_PROJECT_ENVIRONMENT=/.venv
+
 # Sync the project into a new environment, using the frozen lockfile.
+RUN uv venv --python 3.11.9 $UV_PROJECT_ENVIRONMENT
 RUN uv sync --frozen --no-install-project --no-dev
 
 CMD ["uv", "run", "src/openpi/serving/http_policy_server_pi0.py"]

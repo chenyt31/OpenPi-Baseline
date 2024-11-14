@@ -21,6 +21,7 @@ class HttpPolicyServer:
         self._started_event = threading.Event()
 
     def serve_forever(self) -> None:
+        logging.info(f"Serving policy on {self._host}:{self._port}")
         with http.server.HTTPServer((self._host, self._port), self) as http_server:
             self._server = http_server
             self._started_event.set()

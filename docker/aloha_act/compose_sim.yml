@@ -8,6 +8,9 @@ services:
     build:
       context: ../..
       dockerfile: docker/aloha_act/Dockerfile
+      # Uncomment this along with some lines in the Dockerfile for local development.
+      # args:
+      #   HOST_ACT_DIR: act
     init: true
     tty: true
     network_mode: host
@@ -60,10 +63,10 @@ services:
       - $PWD:/app
 
     # Comment out this block if not running on a machine with GPUs.
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

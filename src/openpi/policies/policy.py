@@ -59,7 +59,13 @@ class Policy(BasePolicy):
 
 
 def make_batch(data: dict) -> dict:
-    return jax.tree_util.tree_map(lambda x: x[jnp.newaxis, ...], data)
+    def _make_batch(x: np.ndarray | str) -> np.ndarray:
+        # TODO: How to handle strings?
+        if isinstance(x, str):
+            return x
+        return x[jnp.newaxis, ...]
+
+    return jax.tree_util.tree_map(_make_batch, data)
 
 
 def unbatch(data: dict) -> dict:

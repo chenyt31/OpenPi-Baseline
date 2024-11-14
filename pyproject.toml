@@ -6,10 +6,17 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 dependencies = [
+    "augmax>=0.3.4",
+    "einops>=0.8.0",
+    "equinox>=0.11.8",
     "flax==0.9.0",
+    "ipykernel>=6.29.5",
     "jax[cuda12]==0.4.34",
     "jaxtyping==0.2.34",
     "orbax-checkpoint==0.7.0",
+    "pytest>=8.3.3",
+    "ruff>=0.7.1",
+    "sentencepiece>=0.2.0",
 ]
 
 [project.urls]
@@ -18,3 +25,15 @@ Repository = "https://github.com/Physical-Intelligence/openpi"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+
+[tool.ruff.lint.isort]
+# Do our best to match the Google Style.
+force-single-line = true
+force-sort-within-sections = true
+single-line-exclusions = ["collections.abc", "typing", "typing_extensions"]
+known-third-party = ["wandb"]

@@ -1,13 +1,20 @@
+import os
+
+os.environ["JAX_PLATFORMS"] = "cpu"
+
+import logging
 import pathlib
 
 import jax
 import numpy as np
+import tyro
 
 from openpi import transforms
 from openpi.models import model as _model
 from openpi.models import pi0
 from openpi.models import tokenizer
 from openpi.policies import policy as _policy
+from openpi.serving import http_policy_server
 
 
 def load_pi0_model() -> _model.Model:
@@ -15,19 +22,8 @@ def load_pi0_model() -> _model.Model:
     return _model.restore_params(model, pathlib.Path("checkpoints/pi0_base/model").absolute())
 
 
-def make_aloha_example() -> dict:
-    image = np.random.randint(256, size=(480, 640, 3), dtype=np.uint8)
-
-    return {
-        "image/cam_left_wrist": image,
-        "image/cam_right_wrist": image,
-        "image/cam_high_base": image,
-        "image/cam_low_base": image,
-        "state": np.ones((14,)),
-    }
-
-
 def make_aloha_norm_stats():
+    """Define the normalization stats for ALOHA."""
     return {
         "actions": transforms.NormStats(
             mean=np.array(
@@ -148,10 +144,11 @@ def make_aloha_norm_stats():
     }
 
 
-def test_infer():
+def main(
+    port: int = 8000,
+) -> None:
     model = load_pi0_model()
 
-    # Define the normalization stats.
     norm_stats = make_aloha_norm_stats()
 
     policy = _policy.Policy(
@@ -165,5 +162,10 @@ def test_infer():
         ],
     )
 
-    outputs = policy.infer(make_aloha_example())
-    assert outputs["actions"].shape == (50, 24)
+    server = http_policy_server.HttpPolicyServer(policy=policy, host="0.0.0.0", port=port)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    tyro.cli(main)

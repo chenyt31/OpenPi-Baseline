@@ -1,7 +1,7 @@
 import abc
 
-import flax.linen as nn
 from flax import struct
+import flax.linen as nn
 
 from openpi.base import array_typing as at
 

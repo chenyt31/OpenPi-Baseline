@@ -1,5 +1,5 @@
 from collections.abc import Callable, Sequence
-from typing import Any, TypeAlias, TypeVar, Protocol
+from typing import Any, Protocol, TypeAlias, TypeVar
 
 import flax.traverse_util as traverse_util
 import jax
@@ -7,7 +7,6 @@ import jax.numpy as jnp
 
 from openpi.base import array_typing as at
 from openpi.base import normalize as _normalize
-
 
 Batch: TypeAlias = dict[str, Any]
 NormStats: TypeAlias = _normalize.NormStats
@@ -115,7 +114,7 @@ def apply_tree(
     return traverse_util.unflatten_dict({k: transform(k, v) for k, v in tree.items()}, sep="/")
 
 
-def pad_to_dim(x: jax.Array, target_dim: int, axis: int = -1) -> at.Array:
+def pad_to_dim(x: jax.Array, target_dim: int, axis: int = -1) -> at.Array:  # type: ignore
     current_dim = x.shape[axis]
     if current_dim < target_dim:
         pad_width = [(0, 0)] * len(x.shape)

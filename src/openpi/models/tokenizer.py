@@ -1,7 +1,8 @@
 import abc
+
 import numpy as np
-from typing_extensions import override
 import sentencepiece
+from typing_extensions import override
 
 
 class Tokenizer(abc.ABC):

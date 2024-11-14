@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 import dataclasses
 import logging
-from etils import epath
 
 import augmax
+from etils import epath
 import jax
 import jax.numpy as jnp
 import numpy as np

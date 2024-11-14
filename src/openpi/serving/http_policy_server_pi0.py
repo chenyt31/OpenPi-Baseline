@@ -157,6 +157,7 @@ def main(
         ],
         output_transforms=[
             transforms.Unnormalize(norm_stats),
+            transforms.AlohaOutputs(),
         ],
     )
 

@@ -47,6 +47,7 @@ services:
       - "256"
       - --render_width
       - "320"
+
   pi0_server:
     image: pi0_server
     build:
@@ -56,4 +57,13 @@ services:
     tty: true
     network_mode: host
     volumes:
-      - ./checkpoints:/app/checkpoints
+      - $PWD:/app
+
+    # Comment out this block if not running on a machine with GPUs.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

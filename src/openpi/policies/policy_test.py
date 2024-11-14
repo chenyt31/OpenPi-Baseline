@@ -19,11 +19,11 @@ def make_aloha_example() -> dict:
     image = np.random.randint(256, size=(480, 640, 3), dtype=np.uint8)
 
     return {
-        "image/cam_left_wrist": image,
-        "image/cam_right_wrist": image,
-        "image/cam_high_base": image,
-        "image/cam_low_base": image,
-        "state": np.ones((14,)),
+        "observation/image/cam_left_wrist": image,
+        "observation/image/cam_right_wrist": image,
+        "observation/image/cam_high": image,
+        "observation/image/cam_low": image,
+        "observation/qpos": np.ones((14,)),
     }
 
 
@@ -162,8 +162,9 @@ def test_infer():
         ],
         output_transforms=[
             transforms.Unnormalize(norm_stats),
+            transforms.AlohaOutputs(),
         ],
     )
 
     outputs = policy.infer(make_aloha_example())
-    assert outputs["actions"].shape == (50, 24)
+    assert outputs["action/qpos"].shape == (50, 24)

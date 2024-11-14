@@ -38,6 +38,10 @@ class HttpPolicyServer:
 
     def __call__(self, *args, **kwargs):
         class Handler(http.server.BaseHTTPRequestHandler):
+            def do_HEAD(handler):  # type: ignore # noqa: N802,N805
+                handler.send_response(200)
+                handler.end_headers()
+
             def do_POST(handler):  # type: ignore # noqa: N802,N805
                 response = None
                 try:

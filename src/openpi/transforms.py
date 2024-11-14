@@ -62,7 +62,7 @@ class AlohaInputs(DataTransformFn):
         data = traverse_util.flatten_dict(data, sep="/")
 
         # Assume that base image always exists.
-        base_image = data["image/cam_low_base"]
+        base_image = data["observation/image/cam_low"]
         batch_size = base_image.shape[:-3]
 
         images = {
@@ -72,8 +72,9 @@ class AlohaInputs(DataTransformFn):
 
         # Add the extra images.
         extra_images = {
-            "left_wrist_0_rgb": "image/cam_left_wrist",
-            "right_wrist_0_rgb": "image/cam_right_wrist",
+            "base_1_rgb": "observation/image/cam_high",
+            "left_wrist_0_rgb": "observation/image/cam_left_wrist",
+            "right_wrist_0_rgb": "observation/image/cam_right_wrist",
         }
         for dest, source in extra_images.items():
             if source in data:
@@ -85,14 +86,22 @@ class AlohaInputs(DataTransformFn):
 
         inputs = {
             "image": images,
-            "state": pad_to_dim(data["state"], self._action_dim),
+            "state": pad_to_dim(data["observation/qpos"], self._action_dim),
         }
 
         # Actions are only available during training.
-        if "action" in data:
-            inputs["actions"] = pad_to_dim(data["action"], self._action_dim)
+        if "action/qpos" in data:
+            inputs["actions"] = pad_to_dim(data["action/qpos"], self._action_dim)
 
         return inputs
+
+
+class AlohaOutputs(DataTransformFn):
+    def __call__(self, data: dict) -> dict:
+        data = traverse_util.flatten_dict(data, sep="/")
+        return {
+            "action/qpos": data["actions"],
+        }
 
 
 def apply_tree(

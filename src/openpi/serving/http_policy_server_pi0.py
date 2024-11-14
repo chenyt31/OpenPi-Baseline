@@ -149,16 +149,18 @@ def main(
     norm_stats = make_aloha_norm_stats()
 
     logging.info("Creating policy...")
-    policy = _policy.Policy(
-        model,
-        transforms=[
-            transforms.AlohaInputs(action_dim=model.action_dim),
-            transforms.Normalize(norm_stats),
-        ],
-        output_transforms=[
-            transforms.Unnormalize(norm_stats),
-            transforms.AlohaOutputs(),
-        ],
+    policy = _policy.ActionChunkBroker(
+        _policy.Policy(
+            model,
+            transforms=[
+                transforms.AlohaInputs(action_dim=model.action_dim),
+                transforms.Normalize(norm_stats),
+            ],
+            output_transforms=[
+                transforms.Unnormalize(norm_stats),
+                transforms.AlohaOutputs(),
+            ],
+        )
     )
 
     logging.info("Creating server...")

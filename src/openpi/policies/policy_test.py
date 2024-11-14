@@ -154,17 +154,19 @@ def test_infer():
     # Define the normalization stats.
     norm_stats = make_aloha_norm_stats()
 
-    policy = _policy.Policy(
-        model,
-        transforms=[
-            transforms.AlohaInputs(action_dim=model.action_dim),
-            transforms.Normalize(norm_stats),
-        ],
-        output_transforms=[
-            transforms.Unnormalize(norm_stats),
-            transforms.AlohaOutputs(),
-        ],
+    policy = _policy.ActionChunkBroker(
+        _policy.Policy(
+            model,
+            transforms=[
+                transforms.AlohaInputs(action_dim=model.action_dim),
+                transforms.Normalize(norm_stats),
+            ],
+            output_transforms=[
+                transforms.Unnormalize(norm_stats),
+                transforms.AlohaOutputs(),
+            ],
+        )
     )
 
     outputs = policy.infer(make_aloha_example())
-    assert outputs["action/qpos"].shape == (50, 24)
+    assert outputs["action/qpos"].shape == (24,)

@@ -25,6 +25,8 @@ The first time you run the examples, docker will build the images. Go grab a cof
 
 ### ALOHA+ACT Sim
 
+Per [this answer](https://askubuntu.com/a/1470341) you'll probably need to run `xhost +Local:*` in a terminal for the sim visualization to render.
+
 ```bash
 docker compose -f docker/aloha_act/compose_sim.yml up --build
 ```

@@ -22,8 +22,7 @@ RUN apt-get update && \
     keyboard-configuration
 
 # Required for running the mujoco simulator.
-RUN sudo apt-get install -y libglfw3-dev libgles2-mesa-dev
-ENV MUJOCO_GL=egl
+RUN apt-get install -y libosmesa6-dev libgl1-mesa-glx libglew-dev libglfw3-dev libgles2-mesa-dev
 
 WORKDIR /root
 RUN curl 'https://raw.githubusercontent.com/Interbotix/interbotix_ros_manipulators/main/interbotix_ros_xsarms/install/amd64/xsarm_amd64_install.sh' > xsarm_amd64_install.sh

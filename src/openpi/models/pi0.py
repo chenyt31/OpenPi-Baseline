@@ -1,17 +1,17 @@
 import logging
 from typing import Literal
-from typing_extensions import override
 
 import einops
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
+from typing_extensions import override
 
 from openpi.base import array_typing as at
 from openpi.models import common
-from openpi.models import vit
 from openpi.models import transformer
+from openpi.models import vit
 
 logger = logging.getLogger("openpi")
 
@@ -270,7 +270,7 @@ class Module(common.BaseModule):
                 decode=False,
             )
             return out_proj(out[:, -action_horizon:])
-        elif mode == "fill_cache":
+        if mode == "fill_cache":
             # fill the KV cache using the prefix tokens. this mutates the "cache" variable in place.
             self.put_variable("cache", "prefix_mask", input_mask.astype(bool))
             positions = jnp.cumsum(input_mask, axis=-1) - 1
@@ -282,7 +282,7 @@ class Module(common.BaseModule):
                 decode=True,
             )
             return None
-        elif mode == "decode":
+        if mode == "decode":
             # decode using the existing KV cache
             prefix_len = gemma.variables["cache"]["layers"]["attn"]["k_cache"].shape[2]
             # `prefix_mask` is shape (b, suffix_len, prefix_len) indicating how the suffix tokens can attend to the

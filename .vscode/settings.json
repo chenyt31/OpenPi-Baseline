@@ -1,4 +1,8 @@
 {
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+    },
     "python.testing.pytestArgs": [
         "src"
     ],

@@ -30,11 +30,8 @@ RUN curl 'https://raw.githubusercontent.com/Interbotix/interbotix_ros_manipulato
 RUN chmod +x xsarm_amd64_install.sh
 RUN export DEBIAN_FRONTEND=noninteractive && export TZ='America/Los_Angeles' && ./xsarm_amd64_install.sh -d noetic -n
 
-RUN cd /root/interbotix_ws/src && \
-    git clone https://github.com/tonyzhaozh/aloha.git && \
-    cd aloha && \
-    git checkout 06369f03cd8e0a47e16d3a90167853fd33af7557 && \
-    sed -i 's/<put your data dir here>/\/data/g' ./aloha_scripts/constants.py
+COPY ./third_party/aloha /root/interbotix_ws/src/aloha
+RUN sed -i 's/<put your data dir here>/\/data/g' /root/interbotix_ws/src/aloha/aloha_scripts/constants.py
 
 COPY ./docker/aloha_act/arm.py /root/interbotix_ws/src/interbotix_ros_toolboxes/interbotix_xs_toolbox/interbotix_xs_modules/src/interbotix_xs_modules/arm.py
 RUN cd /root/interbotix_ws && source /opt/ros/noetic/setup.sh && source /root/interbotix_ws/devel/setup.sh && catkin_make
@@ -45,19 +42,11 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86
     /bin/bash ~/miniconda.sh -b -p $CONDA_DIR
 ENV PATH=$CONDA_DIR/bin:$PATH
 
-RUN git clone https://github.com/jimmyt857/act.git && \
-    cd act && \
-    git checkout 3b845523edbc1fe6e998cc40071a1ea5f04835c5
-
-# Comment out the `git clone act.git` above and uncomment this for local development.
-# ARG HOST_ACT_DIR  # Path to the cloned ACT repo on the host machine.
-# COPY ${HOST_ACT_DIR}/conda_env.yaml /root/act/conda_env.yaml
-
+COPY ./third_party/act/conda_env.yaml /root/act/conda_env.yaml
 RUN conda env create -n aloha -f /root/act/conda_env.yaml python=3.8.10
 RUN source /opt/conda/bin/activate aloha && conda install -y mkl==2024.0 && pip install modern_robotics
 
-# Uncomment this for local development.
-# COPY ${HOST_ACT_DIR}/ /root/act
+COPY ./third_party/act /root/act
 
 COPY ./docker/aloha_act/ros_nodes.launch /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
 ENV PYTHONPATH=$PYTHONPATH:/root/interbotix_ws/src/aloha/aloha_scripts:/root/interbotix_ws/src/aloha:/root/act/detr

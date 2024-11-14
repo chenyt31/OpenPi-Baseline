@@ -8,9 +8,6 @@ services:
     build:
       context: ../..
       dockerfile: docker/aloha_act/Dockerfile
-      # Uncomment this along with some lines in the Dockerfile for local development.
-      # args:
-      #   HOST_ACT_DIR: act
     init: true
     tty: true
     network_mode: host

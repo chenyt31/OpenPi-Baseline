@@ -174,8 +174,20 @@ def save_params(model: Model, ckpt_path: epath.Path):
 
 
 def restore_params(model: Model, ckpt_path: epath.Path) -> Model:
-    with ocp.StandardCheckpointer() as ckptr:
-        params = ckptr.restore(ckpt_path)
+    def numpy_restore_args(tree):
+        return jax.tree.map(lambda _: ocp.RestoreArgs(restore_type=np.ndarray), tree)
+
+    # TODO(ury): Replace with a proper version that loads into GPU directly.
+    # Keep this version for now since it makes it easy to run this code on CPU.
+    with ocp.PyTreeCheckpointer() as ckptr:
+        item = ckptr.metadata(ckpt_path)
+        params = ckptr.restore(
+            ckpt_path,
+            ocp.args.PyTreeRestore(
+                item=model.params,
+                restore_args=numpy_restore_args(item),
+            ),
+        )
         return dataclasses.replace(model, params=params)
 
 

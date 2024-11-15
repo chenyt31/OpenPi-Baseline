@@ -6,6 +6,7 @@ services:
     depends_on:
       - aloha_ros_nodes
       - ros_master
+      - pi0_server
     build:
       context: ../..
       dockerfile: docker/aloha_act/Dockerfile
@@ -72,3 +73,23 @@ services:
     privileged: true
     command:
       - roscore
+
+  pi0_server:
+    image: pi0_server
+    build:
+      context: ../..
+      dockerfile: docker/pi0/Dockerfile
+    init: true
+    tty: true
+    network_mode: host
+    volumes:
+      - $PWD:/app
+
+    # Comment out this block if not running on a machine with GPUs.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

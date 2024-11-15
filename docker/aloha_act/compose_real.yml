@@ -44,9 +44,9 @@ services:
       - --seed
       - "0"
       - --render_height
-      - "256"
+      - "224"
       - --render_width
-      - "320"
+      - "224"
 
   aloha_ros_nodes:
     image: aloha_act

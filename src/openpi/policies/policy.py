@@ -41,6 +41,7 @@ class Policy(BasePolicy):
         self,
         model: _model.Model,
         *,
+        rng: at.KeyArrayLike | None = None,
         transforms: Sequence[_transforms.DataTransformFn] = (),
         output_transforms: Sequence[_transforms.DataTransformFn] = (),
     ):
@@ -48,12 +49,14 @@ class Policy(BasePolicy):
         self._input_transform = _transforms.CompositeTransform(transforms)
         self._output_transform = _transforms.CompositeTransform(output_transforms)
         self._tokenizer = None
+        self._rng = rng or jax.random.key(0)
 
     def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
         inputs = _make_batch(obs)
         inputs = self._input_transform(inputs)
         # TODO: Add check that ensures that all the necessary inputs are present.
-        outputs = {"state": inputs["state"], "actions": self._model.sample_actions(inputs)}
+        self._rng, sample_rng = jax.random.split(self._rng)
+        outputs = {"state": inputs["state"], "actions": self._model.sample_actions(sample_rng, inputs)}
         outputs = self._output_transform(outputs)
         return _unbatch(jax.device_get(outputs))
 

@@ -11,11 +11,12 @@ def test_model():
 
     assert batch["actions"].shape == (batch_size, 50, 24)
 
-    model = _model.Model(pi0.Module(), rng=jax.random.key(0), tokenizer=_tokenizer.PaligemmaTokenizer())
-    model = model.init_params(batch)
+    rng = jax.random.key(0)
+    model = _model.Model(pi0.Module(), tokenizer=_tokenizer.PaligemmaTokenizer())
+    model = model.init_params(rng, batch)
 
-    loss = model.compute_loss(batch)
+    loss = model.compute_loss(rng, batch)
     assert loss.shape == (batch_size, 50)
 
-    actions = model.sample_actions(batch)
+    actions = model.sample_actions(rng, batch)
     assert actions.shape == (batch_size, 50, 24)

@@ -28,6 +28,9 @@ IMAGE_KEYS = (
 # This may need change if we release a small model.
 IMAGE_RESOLUTION = (224, 224)
 
+# This is the default text prompt for the model.
+DEFAULT_PROMPT = "be a good robot"
+
 
 def preprocess_batch(
     rng: at.KeyArrayLike,
@@ -89,7 +92,7 @@ def preprocess_batch(
             out_masks[mask_name] = images[mask_name]
 
     if (prompt := batch.get("prompt")) is None:
-        prompt = np.array(["be a good robot"] * batch_size)
+        prompt = np.array([DEFAULT_PROMPT] * batch_size)
     tokens, token_masks = tokenizer.tokenize(prompt)
 
     return common.Observation(
@@ -104,7 +107,6 @@ def preprocess_batch(
 @dataclasses.dataclass(frozen=True)
 class Model:
     module: common.BaseModule
-    rng: at.KeyArrayLike
     tokenizer: tokenizer.Tokenizer
     params: at.Params | None = None
 
@@ -113,8 +115,8 @@ class Model:
     # Action sequence length.
     action_horizon: int = 50
 
-    def init_params(self, batch: at.Batch) -> "Model":
-        preprocess_rng, init_rng = jax.random.split(self.rng)
+    def init_params(self, rng: at.KeyArrayLike, batch: at.Batch) -> "Model":
+        preprocess_rng, init_rng = jax.random.split(rng)
         obs = preprocess_batch(preprocess_rng, batch, self.tokenizer)
 
         loss_args = (obs, batch["actions"])
@@ -126,6 +128,7 @@ class Model:
     @at.typecheck
     def compute_loss(
         self,
+        rng: at.KeyArrayLike,
         batch: at.Batch,
         *,
         train: bool = False,
@@ -136,7 +139,7 @@ class Model:
         if params is None:
             raise ValueError("Model parameters not initialized.")
 
-        loss_rng, preprocess_rng = jax.random.split(self.rng)
+        loss_rng, preprocess_rng = jax.random.split(rng)
 
         obs = preprocess_batch(preprocess_rng, batch, self.tokenizer, train=train)
         loss_args = (obs, batch["actions"])
@@ -146,13 +149,14 @@ class Model:
     @at.typecheck
     def sample_actions(
         self,
+        rng: at.KeyArrayLike,
         batch: at.Batch,
         **sample_kwargs,
     ) -> at.Float[at.Array, "b ah ad"]:
         if self.params is None:
             raise ValueError("Model parameters not initialized.")
 
-        preprocess_rng, sample_rng = jax.random.split(self.rng)
+        preprocess_rng, sample_rng = jax.random.split(rng)
 
         obs = preprocess_batch(preprocess_rng, batch, self.tokenizer)
         sample_args = (self.action_horizon, self.action_dim, obs)

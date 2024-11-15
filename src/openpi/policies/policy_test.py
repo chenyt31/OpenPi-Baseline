@@ -11,7 +11,7 @@ from openpi.policies import policy as _policy
 
 
 def load_pi0_model() -> _model.Model:
-    model = _model.Model(pi0.Module(), rng=jax.random.key(0), tokenizer=tokenizer.PaligemmaTokenizer())
+    model = _model.Model(pi0.Module(), tokenizer=tokenizer.PaligemmaTokenizer())
     return _model.restore_params(model, pathlib.Path("checkpoints/pi0_base/model").absolute())
 
 

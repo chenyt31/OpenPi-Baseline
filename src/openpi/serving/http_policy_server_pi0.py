@@ -160,7 +160,8 @@ def main(
                 transforms.AlohaOutputs(),
             ],
         ),
-        action_horizon=model.action_horizon,
+        # Only execute the first half of the chunk.
+        action_horizon=model.action_horizon // 2,
     )
 
     logging.info("Creating server...")

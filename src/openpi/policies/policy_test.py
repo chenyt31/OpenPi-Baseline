@@ -175,7 +175,8 @@ def test_broker():
     model = load_pi0_model()
     policy = _policy.ActionChunkBroker(
         create_aloha_policy(model),
-        action_horizon=model.action_horizon,
+        # Only execute the first half of the chunk.
+        action_horizon=model.action_horizon // 2,
     )
 
     example = make_aloha_example()

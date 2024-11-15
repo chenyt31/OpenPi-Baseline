@@ -52,6 +52,8 @@ def preprocess_batch(
         if image.shape[1:3] != image_resolution:
             logger.info(f"Resizing image {key} from {image.shape[1:3]} to {image_resolution}")
             image = image_tools.resize_with_pad(image, *image_resolution)
+        else:
+            image = jnp.array(image)
 
         # Normalize to [0, 1].
         image = image.astype(state.dtype) / 255.0
@@ -155,7 +157,7 @@ class Model:
         obs = preprocess_batch(preprocess_rng, batch, self.tokenizer)
         sample_args = (self.action_horizon, self.action_dim, obs)
 
-        sample, _ = self.module.apply(
+        actions, _ = self.module.apply(
             self.params,
             *sample_args,
             rngs={"sample": sample_rng},
@@ -164,7 +166,7 @@ class Model:
             **sample_kwargs,
         )
 
-        return sample
+        return actions
 
 
 def save_params(model: Model, ckpt_path: epath.Path):

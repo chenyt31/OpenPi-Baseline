@@ -1,7 +1,6 @@
 import logging
 import pathlib
 
-import jax
 import numpy as np
 import tyro
 
@@ -14,7 +13,7 @@ from openpi.serving import http_policy_server
 
 
 def load_pi0_model() -> _model.Model:
-    model = _model.Model(pi0.Module(), rng=jax.random.key(0), tokenizer=tokenizer.PaligemmaTokenizer())
+    model = _model.Model(pi0.Module(), tokenizer=tokenizer.PaligemmaTokenizer())
     return _model.restore_params(model, pathlib.Path("checkpoints/pi0_base/model").absolute())
 
 

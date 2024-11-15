@@ -62,7 +62,7 @@ class AlohaInputs(DataTransformFn):
         data = traverse_util.flatten_dict(data, sep="/")
 
         # Assume that base image always exists.
-        base_image = data["observation/image/cam_low"]
+        base_image = data["observation/image/cam_high"]
         batch_size = base_image.shape[:-3]
 
         images = {
@@ -72,7 +72,7 @@ class AlohaInputs(DataTransformFn):
 
         # Add the extra images.
         extra_images = {
-            "base_1_rgb": "observation/image/cam_high",
+            "base_1_rgb": "observation/image/cam_low",
             "left_wrist_0_rgb": "observation/image/cam_left_wrist",
             "right_wrist_0_rgb": "observation/image/cam_right_wrist",
         }

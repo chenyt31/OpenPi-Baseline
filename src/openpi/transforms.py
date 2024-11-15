@@ -91,6 +91,8 @@ class AlohaInputs(DataTransformFn):
 
         # Actions are only available during training.
         if "action/qpos" in data:
+            # TODO(ury): We need to convert this to delta actions. Make sure that this is the
+            # case when we do training.
             inputs["actions"] = pad_to_dim(data["action/qpos"], self._action_dim)
 
         return inputs
@@ -98,10 +100,10 @@ class AlohaInputs(DataTransformFn):
 
 class AlohaOutputs(DataTransformFn):
     def __call__(self, data: dict) -> dict:
-        data = traverse_util.flatten_dict(data, sep="/")
-        return {
-            "action/qpos": data["actions"],
-        }
+        # Convert from delta to absolute actions.
+        actions = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
+        # Only return the first 14 actions.
+        return {"action/qpos": actions[..., :14]}
 
 
 def apply_tree(

@@ -154,6 +154,28 @@ def test_infer():
     # Define the normalization stats.
     norm_stats = make_aloha_norm_stats()
 
+    policy = _policy.Policy(
+        model,
+        transforms=[
+            transforms.AlohaInputs(action_dim=model.action_dim),
+            transforms.Normalize(norm_stats),
+        ],
+        output_transforms=[
+            transforms.Unnormalize(norm_stats),
+            transforms.AlohaOutputs(),
+        ],
+    )
+
+    outputs = policy.infer(make_aloha_example())
+    assert outputs["action/qpos"].shape == (model.action_horizon, 14)
+
+
+def test_broker():
+    model = load_pi0_model()
+
+    # Define the normalization stats.
+    norm_stats = make_aloha_norm_stats()
+
     policy = _policy.ActionChunkBroker(
         _policy.Policy(
             model,
@@ -165,8 +187,11 @@ def test_infer():
                 transforms.Unnormalize(norm_stats),
                 transforms.AlohaOutputs(),
             ],
-        )
+        ),
+        action_horizon=model.action_horizon,
     )
 
-    outputs = policy.infer(make_aloha_example())
-    assert outputs["action/qpos"].shape == (24,)
+    example = make_aloha_example()
+    for _ in range(model.action_horizon):
+        outputs = policy.infer(example)
+        assert outputs["action/qpos"].shape == (14,)

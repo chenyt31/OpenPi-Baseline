@@ -160,7 +160,8 @@ def main(
                 transforms.Unnormalize(norm_stats),
                 transforms.AlohaOutputs(),
             ],
-        )
+        ),
+        action_horizon=model.action_horizon,
     )
 
     logging.info("Creating server...")

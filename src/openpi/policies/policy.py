@@ -53,7 +53,7 @@ class Policy(BasePolicy):
         inputs = _make_batch(obs)
         inputs = self._input_transform(inputs)
         # TODO: Add check that ensures that all the necessary inputs are present.
-        outputs = {"actions": self._model.sample_actions(inputs)}
+        outputs = {"state": inputs["state"], "actions": self._model.sample_actions(inputs)}
         outputs = self._output_transform(outputs)
         return _unbatch(jax.device_get(outputs))
 
@@ -67,41 +67,34 @@ class ActionChunkBroker(BasePolicy):
     list of chunks is exhausted.
     """
 
-    def __init__(self, policy: BasePolicy):
+    def __init__(self, policy: BasePolicy, action_horizon: int):
         self._policy = policy
 
-        self._cur_inference: dict | None = None
-        self._cur_idx: int = 0
-        self._cur_len: int = 0
+        self._action_horizon = action_horizon
+        self._cur_step: int = 0
+
+        self._last_results: np.ndarray | None = None
 
     def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
-        if self._cur_inference is None:
-            self._cur_inference = self._policy.infer(obs)
-            self._cur_idx = 0
-            self._cur_len = jax.tree_util.tree_reduce(
-                lambda prev, x: max(prev, x.shape[0]),
-                self._cur_inference,
-                0,
-            )
+        if self._last_results is None:
+            self._last_results = self._policy.infer(obs)
+            self._cur_step = 0
 
-        result = jax.tree_util.tree_map(lambda x: x[self._cur_idx, ...], self._cur_inference)
+        results = jax.tree.map(lambda x: x[self._cur_step, ...], self._last_results)
+        self._cur_step += 1
 
-        self._cur_idx += 1
-        if self._cur_idx >= self._cur_len:
-            self._cur_inference = None
+        if self._cur_step >= self._action_horizon:
+            self._last_results = None
 
-        return result
+        return results
 
 
 def _make_batch(data: dict) -> dict:
-    def _transform(x: np.ndarray | str) -> np.ndarray:
-        # TODO: How to handle strings?
-        if isinstance(x, str):
-            return x
-        return x[jnp.newaxis, ...]
+    def _transform(x: np.ndarray) -> jnp.ndarray:
+        return jnp.asarray(x)[jnp.newaxis, ...]
 
     return jax.tree_util.tree_map(_transform, data)
 
 
 def _unbatch(data: dict) -> dict:
-    return jax.tree_util.tree_map(lambda x: x[0, ...], data)
+    return jax.tree_util.tree_map(lambda x: np.asarray(x[0, ...]), data)

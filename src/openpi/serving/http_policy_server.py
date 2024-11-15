@@ -13,7 +13,7 @@ class HttpPolicyServer:
     See HttpClientPolicy for a corresponding client implementation.
     """
 
-    def __init__(self, policy: _policy.Policy, host: str = "0.0.0.0", port: int = 8000) -> None:
+    def __init__(self, policy: _policy.BasePolicy, host: str = "0.0.0.0", port: int = 8000) -> None:
         self._policy = policy
         self._host = host
         self._port = port

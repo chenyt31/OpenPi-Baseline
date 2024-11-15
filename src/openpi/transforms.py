@@ -74,7 +74,6 @@ class AlohaInputs(DataTransformFn):
 
         # Add the extra images.
         extra_images = {
-            "base_1_rgb": "observation/image/cam_low",
             "left_wrist_0_rgb": "observation/image/cam_left_wrist",
             "right_wrist_0_rgb": "observation/image/cam_right_wrist",
         }

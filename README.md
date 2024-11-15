@@ -4,6 +4,12 @@ See the design doc [here](https://docs.google.com/document/d/1ykjuV0GjuaYGzhppas
 
 ## Usage
 
+When cloning this repo, make sure to update submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
 ```bash
 uv run examples/hello.py
 ```

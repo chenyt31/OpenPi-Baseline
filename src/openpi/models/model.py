@@ -12,7 +12,6 @@ import orbax.checkpoint as ocp
 from openpi.base import image_tools
 import openpi.base.array_typing as at
 from openpi.models import common
-from openpi.models import tokenizer
 
 logger = logging.getLogger("openpi")
 
@@ -28,14 +27,10 @@ IMAGE_KEYS = (
 # This may need change if we release a small model.
 IMAGE_RESOLUTION = (224, 224)
 
-# This is the default text prompt for the model.
-DEFAULT_PROMPT = "be a good robot"
-
 
 def preprocess_batch(
     rng: at.KeyArrayLike,
     batch: at.Batch,
-    tokenizer: tokenizer.Tokenizer,
     *,
     train: bool = False,
     image_keys: Sequence[str] = IMAGE_KEYS,
@@ -91,23 +86,24 @@ def preprocess_batch(
         else:
             out_masks[mask_name] = images[mask_name]
 
-    if (prompt := batch.get("prompt")) is None:
-        prompt = np.array([DEFAULT_PROMPT] * batch_size)
-    tokens, token_masks = tokenizer.tokenize(prompt)
+    tokenized_prompt = None
+    tokenized_prompt_mask = None
+    if "tokenized_prompt" in batch:
+        tokenized_prompt = jnp.array(batch["tokenized_prompt"])
+        tokenized_prompt_mask = jnp.array(batch["tokenized_prompt_mask"])
 
     return common.Observation(
         images=out_images,
         image_masks=out_masks,
         state=state,
-        tokenized_inputs=jnp.array(tokens),
-        token_input_mask=jnp.array(token_masks),
+        tokenized_prompt=tokenized_prompt,
+        tokenized_prompt_mask=tokenized_prompt_mask,
     )
 
 
 @dataclasses.dataclass(frozen=True)
 class Model:
     module: common.BaseModule
-    tokenizer: tokenizer.Tokenizer
     params: at.Params | None = None
 
     # Action space dimension.
@@ -117,7 +113,7 @@ class Model:
 
     def init_params(self, rng: at.KeyArrayLike, batch: at.Batch) -> "Model":
         preprocess_rng, init_rng = jax.random.split(rng)
-        obs = preprocess_batch(preprocess_rng, batch, self.tokenizer)
+        obs = preprocess_batch(preprocess_rng, batch)
 
         loss_args = (obs, batch["actions"])
         return dataclasses.replace(
@@ -141,7 +137,7 @@ class Model:
 
         loss_rng, preprocess_rng = jax.random.split(rng)
 
-        obs = preprocess_batch(preprocess_rng, batch, self.tokenizer, train=train)
+        obs = preprocess_batch(preprocess_rng, batch, train=train)
         loss_args = (obs, batch["actions"])
 
         return self.module.apply(params, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss)
@@ -158,7 +154,7 @@ class Model:
 
         preprocess_rng, sample_rng = jax.random.split(rng)
 
-        obs = preprocess_batch(preprocess_rng, batch, self.tokenizer)
+        obs = preprocess_batch(preprocess_rng, batch)
         sample_args = (self.action_horizon, self.action_dim, obs)
 
         actions, _ = self.module.apply(
@@ -209,8 +205,8 @@ BATCH_SPEC = {
         "right_wrist_0_rgb": jax.ShapeDtypeStruct([512, 224, 224, 3], jnp.uint8),
         "right_wrist_0_rgb_mask": jax.ShapeDtypeStruct([512], jnp.bool),
     },
-    "mask_input": jax.ShapeDtypeStruct([512, 48], jnp.int32),
-    "prompt_tokens": jax.ShapeDtypeStruct([512, 48], jnp.int32),
+    "tokenized_prompt": jax.ShapeDtypeStruct([512, 48], jnp.int32),
+    "tokenized_prompt_mask": jax.ShapeDtypeStruct([512, 48], jnp.int32),
     "state": jax.ShapeDtypeStruct([512, 24], jnp.float32),
 }
 

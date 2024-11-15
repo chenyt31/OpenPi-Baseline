@@ -1,6 +1,5 @@
 import pathlib
 
-import jax
 import numpy as np
 
 from openpi import transforms
@@ -11,8 +10,24 @@ from openpi.policies import policy as _policy
 
 
 def load_pi0_model() -> _model.Model:
-    model = _model.Model(pi0.Module(), tokenizer=tokenizer.PaligemmaTokenizer())
+    model = _model.Model(pi0.Module())
     return _model.restore_params(model, pathlib.Path("checkpoints/pi0_base/model").absolute())
+
+
+def create_aloha_policy(model: _model.Model) -> _policy.Policy:
+    norm_stats = make_aloha_norm_stats()
+    return _policy.Policy(
+        model,
+        transforms=[
+            transforms.AlohaInputs(action_dim=model.action_dim),
+            transforms.TokenizePrompt(tokenizer.PaligemmaTokenizer()),
+            transforms.Normalize(norm_stats),
+        ],
+        output_transforms=[
+            transforms.Unnormalize(norm_stats),
+            transforms.AlohaOutputs(),
+        ],
+    )
 
 
 def make_aloha_example() -> dict:
@@ -150,21 +165,7 @@ def make_aloha_norm_stats():
 
 def test_infer():
     model = load_pi0_model()
-
-    # Define the normalization stats.
-    norm_stats = make_aloha_norm_stats()
-
-    policy = _policy.Policy(
-        model,
-        transforms=[
-            transforms.AlohaInputs(action_dim=model.action_dim),
-            transforms.Normalize(norm_stats),
-        ],
-        output_transforms=[
-            transforms.Unnormalize(norm_stats),
-            transforms.AlohaOutputs(),
-        ],
-    )
+    policy = create_aloha_policy(model)
 
     outputs = policy.infer(make_aloha_example())
     assert outputs["action/qpos"].shape == (model.action_horizon, 14)
@@ -172,22 +173,8 @@ def test_infer():
 
 def test_broker():
     model = load_pi0_model()
-
-    # Define the normalization stats.
-    norm_stats = make_aloha_norm_stats()
-
     policy = _policy.ActionChunkBroker(
-        _policy.Policy(
-            model,
-            transforms=[
-                transforms.AlohaInputs(action_dim=model.action_dim),
-                transforms.Normalize(norm_stats),
-            ],
-            output_transforms=[
-                transforms.Unnormalize(norm_stats),
-                transforms.AlohaOutputs(),
-            ],
-        ),
+        create_aloha_policy(model),
         action_horizon=model.action_horizon,
     )
 

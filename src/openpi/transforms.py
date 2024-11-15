@@ -4,9 +4,11 @@ from typing import Any, Protocol, TypeAlias, TypeVar
 import flax.traverse_util as traverse_util
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from openpi.base import array_typing as at
 from openpi.base import normalize as _normalize
+from openpi.models import tokenizer as _tokenizer
 
 Batch: TypeAlias = dict[str, Any]
 NormStats: TypeAlias = _normalize.NormStats
@@ -104,6 +106,25 @@ class AlohaOutputs(DataTransformFn):
         actions = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
         # Only return the first 14 actions.
         return {"action/qpos": actions[..., :14]}
+
+
+class TokenizePrompt(DataTransformFn):
+    # This is the default text prompt for the model.
+    DEFAULT_PROMPT = "be a good robot"
+
+    def __init__(self, tokenizer: _tokenizer.Tokenizer, default_prompt: str = DEFAULT_PROMPT):
+        self._tokenizer = tokenizer
+        self._default_prompt = default_prompt
+
+    def __call__(self, data: dict) -> dict:
+        if "prompt" not in data:
+            batch_size = data["state"].shape[:-1]
+            prompt = np.full(batch_size, self._default_prompt)
+        else:
+            prompt = np.asarray(data.pop("prompt"))
+
+        tokens, token_masks = self._tokenizer.tokenize(prompt)
+        return {**data, "tokenized_prompt": jnp.asarray(tokens), "tokenized_prompt_mask": jnp.asarray(token_masks)}
 
 
 def apply_tree(

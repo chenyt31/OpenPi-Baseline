@@ -48,15 +48,22 @@ class Policy(BasePolicy):
         self._model = model
         self._input_transform = _transforms.CompositeTransform(transforms)
         self._output_transform = _transforms.CompositeTransform(output_transforms)
-        self._tokenizer = None
         self._rng = rng or jax.random.key(0)
 
     def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
+        # TODO: Add check that ensures that all the necessary inputs are present.
         inputs = _make_batch(obs)
         inputs = self._input_transform(inputs)
-        # TODO: Add check that ensures that all the necessary inputs are present.
+
+        def sample_fn(rng, batch):
+            return self._model.sample_actions(rng, batch)
+
+        # TODO: This doesn't work yet.
+        # with at.disable_typechecking():
+        #     sample_fn = jax.jit(sample_fn)
+
         self._rng, sample_rng = jax.random.split(self._rng)
-        outputs = {"state": inputs["state"], "actions": self._model.sample_actions(sample_rng, inputs)}
+        outputs = {"state": inputs["state"], "actions": sample_fn(sample_rng, inputs)}
         outputs = self._output_transform(outputs)
         return _unbatch(jax.device_get(outputs))
 

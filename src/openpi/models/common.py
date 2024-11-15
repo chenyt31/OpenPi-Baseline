@@ -14,10 +14,10 @@ class Observation:
     images: dict[str, at.Float[at.Array, "b _h _w c"]]
     image_masks: dict[str, at.Bool[at.Array, " b"]]
     state: at.Float[at.Array, "b s"]
-    # This contains input mask for tokenized prompts.
-    token_input_mask: at.Int[at.Array, "b lt"]
-    # This contains optional pre-tokenized inputs, like instruction, state, action....
-    tokenized_inputs: at.Int[at.Array, "b lt"] | None = None
+    # Tokenized prompt.
+    tokenized_prompt: at.Int[at.Array, "b lt"] | None = None
+    # Tokenized prompt mask.
+    tokenized_prompt_mask: at.Int[at.Array, "b lt"] | None = None
 
 
 class BaseModule(nn.Module, abc.ABC):

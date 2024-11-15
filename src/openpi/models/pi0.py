@@ -68,16 +68,6 @@ class Module(common.BaseModule):
     dtype: str = "bfloat16"
     use_state: bool = True
 
-    @property
-    @override
-    def action_dim(self) -> int:
-        return 24
-
-    @property
-    @override
-    def action_horizon(self) -> int:
-        return 50
-
     @at.typecheck
     @override
     def compute_loss(
@@ -202,11 +192,11 @@ class Module(common.BaseModule):
                 ar_mask += [0] * image_tokens.shape[1]
 
             # add language (aka tokenized inputs)
-            if obs.tokenized_inputs is not None:
+            if obs.tokenized_prompt is not None:
                 # run gemma in embed-only mode
-                tokenized_inputs = gemma(tokens=obs.tokenized_inputs, embedded=None)
+                tokenized_inputs = gemma(tokens=obs.tokenized_prompt, embedded=None)
                 prefix_tokens.append(tokenized_inputs)
-                input_mask.append(obs.token_input_mask)
+                input_mask.append(obs.tokenized_prompt_mask)
                 # full attention between image and language inputs
                 ar_mask += [0] * tokenized_inputs.shape[1]
             prefix_tokens = jnp.concatenate(prefix_tokens, axis=1)

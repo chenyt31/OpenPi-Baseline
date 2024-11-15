@@ -14,7 +14,7 @@
 
 """A refactored and simplified ViT adoptation for Pi, taken from big_vision."""
 
-from typing import Optional, Sequence, Union
+from collections.abc import Sequence
 
 import flax.linen as nn
 import jax
@@ -43,16 +43,15 @@ def get_posemb(self, typ, seqshape, width, name, dtype=jnp.float32):
             (1, np.prod(seqshape), width),
             dtype,
         )
-    elif typ == "sincos2d":
+    if typ == "sincos2d":
         return posemb_sincos_2d(*seqshape, width, dtype=dtype)
-    else:
-        raise ValueError(f"Unknown posemb type: {typ}")
+    raise ValueError(f"Unknown posemb type: {typ}")
 
 
 class MlpBlock(nn.Module):
     """Transformer MLP / feed-forward block."""
 
-    mlp_dim: Optional[int] = None  # Defaults to 4x input dim
+    mlp_dim: int | None = None  # Defaults to 4x input dim
     dropout: float = 0.0
     dtype_mm: str = "float32"
 
@@ -75,7 +74,7 @@ class MlpBlock(nn.Module):
 class Encoder1DBlock(nn.Module):
     """Single transformer encoder block (MHSA + MLP)."""
 
-    mlp_dim: Optional[int] = None  # Defaults to 4x input dim
+    mlp_dim: int | None = None  # Defaults to 4x input dim
     num_heads: int = 12
     dropout: float = 0.0
     dtype_mm: str = "float32"
@@ -112,7 +111,7 @@ class Encoder(nn.Module):
     """Transformer Model Encoder for sequence to sequence translation."""
 
     depth: int
-    mlp_dim: Optional[int] = None  # Defaults to 4x input dim
+    mlp_dim: int | None = None  # Defaults to 4x input dim
     num_heads: int = 12
     dropout: float = 0.0
     scan: bool = False
@@ -164,7 +163,7 @@ class Encoder(nn.Module):
 class MAPHead(nn.Module):
     """Multihead Attention Pooling."""
 
-    mlp_dim: Optional[int] = None  # Defaults to 4x input dim
+    mlp_dim: int | None = None  # Defaults to 4x input dim
     num_heads: int = 12
     dtype_mm: str = "float32"
 
@@ -190,14 +189,14 @@ class MAPHead(nn.Module):
 class _Module(nn.Module):
     """ViT model."""
 
-    num_classes: Optional[int] = None
+    num_classes: int | None = None
     patch_size: Sequence[int] = (16, 16)
     width: int = 768
     depth: int = 12
-    mlp_dim: Optional[int] = None  # Defaults to 4x input dim
+    mlp_dim: int | None = None  # Defaults to 4x input dim
     num_heads: int = 12
     posemb: str = "learn"  # Can also be "sincos2d"
-    rep_size: Union[int, bool] = False
+    rep_size: int | bool = False
     dropout: float = 0.0
     pool_type: str = "gap"  # Can also be "map" or "tok"
     head_zeroinit: bool = True

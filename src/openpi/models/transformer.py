@@ -29,7 +29,7 @@ Notes:
 """
 
 import dataclasses
-from typing import Sequence, Literal  # noqa: UP035
+from typing import Literal, Sequence  # noqa: UP035
 
 import einops
 import flax.linen as nn
@@ -63,7 +63,7 @@ def get_config(variant: Literal["gemma_300m", "gemma_2b"]) -> Config:
             num_kv_heads=1,
             head_dim=256,
         )
-    elif variant == "gemma_2b":
+    if variant == "gemma_2b":
         return Config(
             width=2048,
             depth=18,
@@ -284,7 +284,7 @@ class Block(nn.Module):
                     features=config.width,
                     hidden_dim=config.mlp_dim,
                     name=_name("mlp", i),
-                )(x)  # noqa: PLW2901
+                )(x)
             out.append(x)
 
         out = jax.tree.map(lambda x: drop(x, deterministic), out)

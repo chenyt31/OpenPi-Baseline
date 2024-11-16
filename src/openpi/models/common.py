@@ -11,7 +11,7 @@ from openpi.base import array_typing as at
 class Observation:
     """Holds a batch of observations, which is used as input to an encoder at each timestep."""
 
-    images: dict[str, at.Float[at.Array, "b _h _w c"]]
+    images: dict[str, at.Float[at.Array, "b h w c"]]
     image_masks: dict[str, at.Bool[at.Array, " b"]]
     state: at.Float[at.Array, "b s"]
     # Tokenized prompt.

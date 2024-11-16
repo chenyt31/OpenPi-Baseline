@@ -61,6 +61,7 @@ class AlohaInputs(DataTransformFn):
         self._action_dim = action_dim
 
     def __call__(self, data: dict) -> dict:
+        data = self._aloha_to_pi_request(data["qpos"], data["image"])
         data = traverse_util.flatten_dict(data, sep="/")
 
         # Assume that base image always exists.
@@ -101,13 +102,55 @@ class AlohaInputs(DataTransformFn):
 
         return inputs
 
+    def _aloha_to_pi_request(self, qpos: np.ndarray, image: np.ndarray) -> dict:
+        # qpos is (14,) of type float:
+        # 0-5: left arm joint angles
+        # 6: left arm gripper
+        # 7-12: right arm joint angles
+        # 13: right arm gripper
+        #
+        # image is [cam_idx, channel, height, width] with values in [0, 1] of type float
+        # With real robot, cam_idx order is [cam_high, cam_low, cam_left_wrist, cam_right_wrist]
+        # With sim, cam_idx order is [cam_high].
+
+        # Convert to [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
+        pi_qpos = qpos[jnp.array([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 6, 13])]
+
+        obs = {
+            "observation": {
+                "qpos": pi_qpos,
+                "image": {},
+            },
+        }
+
+        def add_image(cam_idx: int, key: str) -> None:
+            if cam_idx >= image.shape[0]:
+                return
+
+            # Convert to [height, width, channel]
+            converted_image = jnp.transpose(image[cam_idx, :, :, :] * 255, (1, 2, 0)).astype(jnp.uint8)
+
+            obs["observation"]["image"][key] = converted_image
+            obs["observation"]["image"][f"{key}_mask"] = jnp.array(True)
+
+        add_image(0, "cam_high")
+        add_image(1, "cam_low")
+        add_image(2, "cam_left_wrist")
+        add_image(3, "cam_right_wrist")
+
+        return obs
+
 
 class AlohaOutputs(DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Convert from delta to absolute actions.
         actions = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
         # Only return the first 14 actions.
-        return {"action/qpos": actions[..., :14]}
+        qpos = actions[..., :14]
+        # Convert to [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
+        qpos = qpos[jnp.array([0, 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 10, 11, 13])]
+
+        return {"qpos": qpos}
 
 
 class TokenizePrompt(DataTransformFn):

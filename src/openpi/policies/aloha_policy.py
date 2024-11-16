@@ -31,14 +31,9 @@ def create_aloha_policy(model: _model.Model) -> _policy.Policy:
 
 
 def make_aloha_example() -> dict:
-    image = np.random.randint(256, size=(480, 640, 3), dtype=np.uint8)
-
     return {
-        "observation/image/cam_left_wrist": image,
-        "observation/image/cam_right_wrist": image,
-        "observation/image/cam_high": image,
-        "observation/image/cam_low": image,
-        "observation/qpos": np.ones((14,)),
+        "qpos": np.ones((14,)),
+        "image": np.random.rand(4, 3, 480, 640).astype(np.float32),
     }
 
 

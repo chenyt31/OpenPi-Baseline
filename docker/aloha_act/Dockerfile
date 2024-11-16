@@ -60,6 +60,7 @@ RUN cat <<'EOF' > /usr/local/bin/entrypoint.sh
 source /opt/ros/noetic/setup.sh && source /root/interbotix_ws/devel/setup.sh && source /opt/conda/bin/activate aloha && "$@"
 EOF
 RUN chmod +x /usr/local/bin/entrypoint.sh
+ENV MUJOCO_GL=egl
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/bin/bash"]

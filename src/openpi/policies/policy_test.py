@@ -9,7 +9,7 @@ def test_infer():
     example = aloha_policy.make_aloha_example()
     outputs = policy.infer(example)
 
-    assert outputs["action/qpos"].shape == (model.action_horizon, 14)
+    assert outputs["qpos"].shape == (model.action_horizon, 14)
 
 
 def test_broker():
@@ -23,4 +23,4 @@ def test_broker():
     example = aloha_policy.make_aloha_example()
     for _ in range(model.action_horizon):
         outputs = policy.infer(example)
-        assert outputs["action/qpos"].shape == (14,)
+        assert outputs["qpos"].shape == (14,)

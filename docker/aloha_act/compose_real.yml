@@ -62,10 +62,14 @@ services:
     volumes:
       - /dev:/dev
     command:
-      - roslaunch
-      - --wait
-      - aloha
-      - ros_nodes.launch
+      - /bin/bash
+      - -c
+      - |
+        sed -i 's/CAM_HIGH_SERIAL/128422271950/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        sed -i 's/CAM_LOW_SERIAL/218622272463/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        sed -i 's/CAM_LEFT_WRIST_SERIAL/218622277019/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        sed -i 's/CAM_RIGHT_WRIST_SERIAL/218622277645/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        roslaunch --wait aloha ros_nodes.launch
 
   ros_master:
     image: ros:noetic-robot
@@ -86,10 +90,10 @@ services:
       - $PWD:/app
 
     # Comment out this block if not running on a machine with GPUs.
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

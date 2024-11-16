@@ -44,7 +44,8 @@
     type="static_transform_publisher"
     args="0 0.25 0 0 0 0 /world /$(arg robot_name_puppet_right)/base_link"/>
 
-  <node name="usb_cam_high" pkg="usb_cam" type="usb_cam_node" output="screen" >
+  <!-- Uncomment to use webcams -->
+  <!--<node name="usb_cam_high" pkg="usb_cam" type="usb_cam_node" output="screen" >
     <param name="video_device" value="/dev/CAM_HIGH" />
     <param name="framerate" value="60" />
     <param name="image_width" value="640" />
@@ -94,21 +95,10 @@
     <param name="autofocus" value="false"/>
     <param name="focus" value="40"/>
     <param name="autoexposure" value="true"/>
-  </node>
+  </node>-->
 
-  <!--<include file="$(find realsense2_camera)/launch/rs_camera.launch">
-    <arg name="camera" value="cam_right_wrist"/>
-    <arg name="serial_no" value="TODO"/>
-    <arg name="enable_depth" value="false"/>
-    <arg name="enable_fisheye" value="false"/>
-    <arg name="enable_confidence" value="false"/>
-    <arg name="color_width" value="640"/>
-    <arg name="color_height" value="480"/>
-    <arg name="color_fps" value="60"/>
-  </include>
-
-  <remap from="/cam_left_wrist/image_raw" to="/usb_cam_left_wrist/image_raw"/>
-  <remap from="/cam_right_wrist/image_raw" to="/usb_cam_right_wrist/image_raw"/>
-  <remap from="/cam_low/image_raw" to="/usb_cam_low/image_raw"/>
-  <remap from="/cam_high/image_raw" to="/usb_cam_high/image_raw"/>-->
+  <node name="realsense_publisher_0" args="CAM_HIGH_SERIAL cam_high" pkg="aloha" type="realsense_publisher.py" output="screen" respawn="true" />
+  <node name="realsense_publisher_1" args="CAM_LOW_SERIAL cam_low" pkg="aloha" type="realsense_publisher.py" output="screen" respawn="true" />
+  <node name="realsense_publisher_2" args="CAM_LEFT_WRIST_SERIAL cam_left_wrist" pkg="aloha" type="realsense_publisher.py" output="screen" respawn="true" />
+  <node name="realsense_publisher_3" args="CAM_RIGHT_WRIST_SERIAL cam_right_wrist" pkg="aloha" type="realsense_publisher.py" output="screen" respawn="true" />
 </launch>

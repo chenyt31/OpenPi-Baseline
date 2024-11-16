@@ -68,6 +68,7 @@ uv run src/openpi/serving/http_policy_server_pi0.py
 
 - Follow the instructions [above](#docker-setup) to install Docker.
 - Perform the [ALOHA hardware installation](https://github.com/tonyzhaozh/aloha?tab=readme-ov-file#hardware-installation).
+- Modify `docker/aloha_act/compose_real.yml` to use the correct realsense camera serial numbers for your robot.
 
 ```bash
 docker compose -f docker/aloha_act/compose_real.yml up --build

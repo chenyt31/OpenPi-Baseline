@@ -69,7 +69,9 @@ class AlohaInputs(DataTransformFn):
 
         images = {
             "base_0_rgb": base_image,
-            "base_0_rgb_mask": jnp.ones(batch_size, dtype=jnp.bool_),
+        }
+        image_masks = {
+            "base_0_rgb": jnp.ones(batch_size, dtype=jnp.bool_),
         }
 
         # Add the extra images.
@@ -80,13 +82,14 @@ class AlohaInputs(DataTransformFn):
         for dest, source in extra_images.items():
             if source in data:
                 images[dest] = data[source]
-                images[dest + "_mask"] = jnp.ones(batch_size, dtype=jnp.bool_)
+                image_masks[dest] = jnp.ones(batch_size, dtype=jnp.bool_)
             else:
                 images[dest] = jnp.zeros_like(base_image)
-                images[dest + "_mask"] = jnp.zeros(batch_size, dtype=jnp.bool_)
+                image_masks[dest] = jnp.zeros(batch_size, dtype=jnp.bool_)
 
         inputs = {
             "image": images,
+            "image_mask": image_masks,
             "state": pad_to_dim(data["observation/qpos"], self._action_dim),
         }
 

@@ -182,7 +182,7 @@ class Module(common.BaseModule):
                 prefix_tokens.append(image_tokens)
                 input_mask.append(
                     einops.repeat(
-                        obs.image_masks[name + "_mask"],
+                        obs.image_masks[name],
                         "b -> b s",
                         s=image_tokens.shape[1],
                     )

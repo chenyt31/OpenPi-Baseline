@@ -20,7 +20,7 @@ def create_aloha_policy(model: _model.Model) -> _policy.Policy:
         model,
         transforms=[
             transforms.AlohaInputs(action_dim=model.action_dim),
-            transforms.TokenizePrompt(tokenizer.PaligemmaTokenizer()),
+            transforms.TokenizePrompt(tokenizer.PaligemmaTokenizer(model.max_token_len)),
             transforms.Normalize(norm_stats),
         ],
         output_transforms=[

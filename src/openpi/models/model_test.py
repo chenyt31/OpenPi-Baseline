@@ -1,24 +1,27 @@
 import jax
+import jax.numpy as jnp
 
-from openpi.models import common
 from openpi.models import model as _model
 from openpi.models import pi0
 
 
+def make_from_spec(spec: jax.ShapeDtypeStruct):
+    return jnp.zeros(shape=spec.shape, dtype=spec.dtype)
+
+
 def test_model():
+    model = _model.Model(pi0.Module())
+
     batch_size = 8
-    batch = _model.make_example_batch(batch_size)
+    observation_spec, action_spec = _model.create_inputs_spec(model, batch_size=batch_size)
 
-    assert batch["actions"].shape == (batch_size, 50, 24)
-
-    observation = common.Observation.from_dict(batch)
+    observation = jax.tree.map(make_from_spec, observation_spec)
+    actions = jax.tree.map(make_from_spec, action_spec)
 
     rng = jax.random.key(0)
+    model = model.init_params(rng, observation, actions)
 
-    model = _model.Model(pi0.Module())
-    model = model.init_params(rng, observation, batch["actions"])
-
-    loss = model.compute_loss(rng, observation, batch["actions"])
+    loss = model.compute_loss(rng, observation, actions)
     assert loss.shape == (batch_size, 50)
 
     actions = model.sample_actions(rng, observation)

@@ -97,6 +97,8 @@ class Model:
     action_dim: int = struct.field(default=24, pytree_node=False)
     # Action sequence length.
     action_horizon: int = struct.field(default=50, pytree_node=False)
+    # Tokenized prompt maximum length.
+    max_token_len: int = struct.field(default=48, pytree_node=False)
 
     def init_params(
         self, rng: at.KeyArrayLike, observation: common.Observation, actions: at.Float[at.Array, "*b ah ad"]
@@ -182,26 +184,25 @@ def restore_params(model: Model, ckpt_path: epath.Path, *, sharding: jax.shardin
         return dataclasses.replace(model, params=params)
 
 
-# TODO(ury): This is all temporary. We should get it from the checkpoint or the model config instead.
+def create_inputs_spec(model: Model, *, batch_size: int = 1) -> tuple[common.Observation, at.Float[at.Array, "ah ad"]]:
+    image_spec = jax.ShapeDtypeStruct([batch_size, 224, 224, 3], jnp.float32)
+    image_mask_spec = jax.ShapeDtypeStruct([batch_size], jnp.bool_)
 
-BATCH_SPEC = {
-    "actions": jax.ShapeDtypeStruct([512, 50, 24], jnp.float32),
-    "image": {
-        "base_0_rgb": jax.ShapeDtypeStruct([512, 224, 224, 3], jnp.uint8),
-        "left_wrist_0_rgb": jax.ShapeDtypeStruct([512, 224, 224, 3], jnp.uint8),
-        "right_wrist_0_rgb": jax.ShapeDtypeStruct([512, 224, 224, 3], jnp.uint8),
-    },
-    "image_mask": {
-        "base_0_rgb": jax.ShapeDtypeStruct([512], jnp.bool_),
-        "left_wrist_0_rgb": jax.ShapeDtypeStruct([512], jnp.bool_),
-        "right_wrist_0_rgb": jax.ShapeDtypeStruct([512], jnp.bool),
-    },
-    "tokenized_prompt": jax.ShapeDtypeStruct([512, 48], jnp.int32),
-    "tokenized_prompt_mask": jax.ShapeDtypeStruct([512, 48], jnp.int32),
-    "state": jax.ShapeDtypeStruct([512, 24], jnp.float32),
-}
+    observation_spec = common.Observation(
+        images={
+            "base_0_rgb": image_spec,
+            "left_wrist_0_rgb": image_spec,
+            "right_wrist_0_rgb": image_spec,
+        },
+        image_masks={
+            "base_0_rgb": image_mask_spec,
+            "left_wrist_0_rgb": image_mask_spec,
+            "right_wrist_0_rgb": image_mask_spec,
+        },
+        state=jax.ShapeDtypeStruct([batch_size, model.action_dim], jnp.float32),
+        tokenized_prompt=jax.ShapeDtypeStruct([batch_size, model.max_token_len], jnp.int32),
+        tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, model.max_token_len], jnp.int32),
+    )
+    action_spec = jax.ShapeDtypeStruct([batch_size, model.action_horizon, model.action_dim], jnp.float32)
 
-
-def make_example_batch(batch_size: int):
-    specs = jax.tree.map(lambda spec: jax.ShapeDtypeStruct([batch_size, *spec.shape[1:]], spec.dtype), BATCH_SPEC)
-    return jax.tree.map(lambda spec: jnp.zeros(shape=spec.shape, dtype=spec.dtype), specs)
+    return observation_spec, action_spec

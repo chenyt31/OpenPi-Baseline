@@ -6,7 +6,9 @@ def test_infer():
     model = aloha_policy.load_pi0_model()
     policy = aloha_policy.create_aloha_policy(model)
 
-    outputs = policy.infer(aloha_policy.make_aloha_example())
+    example = aloha_policy.make_aloha_example()
+    outputs = policy.infer(example)
+
     assert outputs["action/qpos"].shape == (model.action_horizon, 14)
 
 

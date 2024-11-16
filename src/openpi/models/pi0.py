@@ -66,7 +66,6 @@ class Module(common.BaseModule):
     """Pi-0 module (transfusion-style decoder-only diffusion)."""
 
     dtype: str = "bfloat16"
-    use_state: bool = True
 
     @at.typecheck
     @override
@@ -207,13 +206,11 @@ class Module(common.BaseModule):
 
             suffix_tokens: list[at.Float[at.Array, "b s emb"]] = []
             # add a single state token
-            # TODO: this can be made part of the KV cache, but it's a little tricky
-            if self.use_state:
-                state_token = nn.Dense(action_expert_config.width, name="state_proj")(obs.state)
-                suffix_tokens.append(state_token[:, None, :])
-                input_mask.append(jnp.ones((batch_size, 1), dtype=jnp.bool_))
-                # image/language inputs do not attend to state or actions
-                ar_mask += [1]
+            state_token = nn.Dense(action_expert_config.width, name="state_proj")(obs.state)
+            suffix_tokens.append(state_token[:, None, :])
+            input_mask.append(jnp.ones((batch_size, 1), dtype=jnp.bool_))
+            # image/language inputs do not attend to state or actions
+            ar_mask += [1]
 
             action_horizon = noisy_actions.shape[1]
             # embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1]

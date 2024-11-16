@@ -4,9 +4,9 @@ import logging
 
 import augmax
 from etils import epath
+from flax import struct
 import jax
 import jax.numpy as jnp
-import numpy as np
 import orbax.checkpoint as ocp
 
 from openpi.base import image_tools
@@ -101,15 +101,14 @@ def preprocess_batch(
     )
 
 
-@dataclasses.dataclass(frozen=True)
+@struct.dataclass
 class Model:
-    module: common.BaseModule
+    module: common.BaseModule = struct.field(pytree_node=False)
     params: at.Params | None = None
-
     # Action space dimension.
-    action_dim: int = 24
+    action_dim: int = struct.field(default=24, pytree_node=False)
     # Action sequence length.
-    action_horizon: int = 50
+    action_horizon: int = struct.field(default=50, pytree_node=False)
 
     def init_params(self, rng: at.KeyArrayLike, batch: at.Batch) -> "Model":
         preprocess_rng, init_rng = jax.random.split(rng)
@@ -142,6 +141,7 @@ class Model:
 
         return self.module.apply(params, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss)
 
+    @jax.jit
     @at.typecheck
     def sample_actions(
         self,
@@ -165,7 +165,6 @@ class Model:
             mutable=["cache"],
             **sample_kwargs,
         )
-
         return actions
 
 
@@ -175,19 +174,20 @@ def save_params(model: Model, ckpt_path: epath.Path):
         ckptr.wait_until_finished()
 
 
-def restore_params(model: Model, ckpt_path: epath.Path) -> Model:
-    def numpy_restore_args(tree):
-        return jax.tree.map(lambda _: ocp.RestoreArgs(restore_type=np.ndarray), tree)
+def restore_params(model: Model, ckpt_path: epath.Path, *, sharding: jax.sharding.Sharding | None = None) -> Model:
+    if sharding is None:
+        sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
 
-    # TODO(ury): Replace with a proper version that loads into GPU directly.
-    # Keep this version for now since it makes it easy to run this code on CPU.
+    def to_restore_args(tree):
+        return jax.tree.map(lambda _: ocp.ArrayRestoreArgs(sharding=sharding), tree)
+
     with ocp.PyTreeCheckpointer() as ckptr:
-        item = ckptr.metadata(ckpt_path)
+        item = ckptr.metadata(ckpt_path) if model.params is None else model.params
         params = ckptr.restore(
             ckpt_path,
             ocp.args.PyTreeRestore(
-                item=model.params,
-                restore_args=numpy_restore_args(item),
+                item=item,
+                restore_args=to_restore_args(item),
             ),
         )
         return dataclasses.replace(model, params=params)

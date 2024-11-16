@@ -28,35 +28,30 @@ IMAGE_KEYS = (
 IMAGE_RESOLUTION = (224, 224)
 
 
-def preprocess_batch(
+def preprocess_observation(
     rng: at.KeyArrayLike,
-    batch: at.Batch,
+    observation: common.Observation,
     *,
     train: bool = False,
     image_keys: Sequence[str] = IMAGE_KEYS,
     image_resolution: tuple[int, int] = IMAGE_RESOLUTION,
 ) -> common.Observation:
-    state = batch["state"]
-    images = batch["image"]
+    if not set(image_keys).issubset(observation.images):
+        raise ValueError(f"images dict missing keys: expected {image_keys}, got {list(observation.images)}")
 
-    if not set(image_keys).issubset(images):
-        raise ValueError(f"images dict missing keys: expected {image_keys}, got {list(images)}")
-
-    batch_size = state.shape[0]
+    batch_shape = observation.state.shape[:-1]
 
     out_images = {}
     for key in image_keys:
-        image = images[key]
+        image = observation.images[key]
         if image.shape[1:3] != image_resolution:
             logger.info(f"Resizing image {key} from {image.shape[1:3]} to {image_resolution}")
             image = image_tools.resize_with_pad(image, *image_resolution)
-        else:
-            image = jnp.array(image)
-
-        # Normalize to [0, 1].
-        image = image.astype(state.dtype) / 255.0
 
         if train:
+            # Convert from [-1, 1] to [0, 1] for augmax.
+            image = image / 2.0 + 0.5
+
             transforms = []
             if "wrist" not in key:
                 height, width = image.shape[1:3]
@@ -71,33 +66,26 @@ def preprocess_batch(
             sub_rngs = jax.random.split(rng, image.shape[0])
             image = jax.vmap(augmax.Chain(*transforms))(sub_rngs, image)
 
-        # Normalize to [-1, 1].
-        image = image * 2.0 - 1.0
+            # Back to [-1, 1].
+            image = image * 2.0 - 1.0
+
         out_images[key] = image
 
     # obtain mask
     out_masks = {}
     for key in out_images:
-        mask_name = key + "_mask"
-        if mask_name not in images:
+        if key not in observation.image_masks:
             # do not mask by default
-            batch_size = jnp.shape(out_images[key])[0]
-            out_masks[mask_name] = jnp.ones(batch_size, dtype=jnp.bool)
+            out_masks[key] = jnp.ones(batch_shape, dtype=jnp.bool)
         else:
-            out_masks[mask_name] = images[mask_name]
-
-    tokenized_prompt = None
-    tokenized_prompt_mask = None
-    if "tokenized_prompt" in batch:
-        tokenized_prompt = jnp.array(batch["tokenized_prompt"])
-        tokenized_prompt_mask = jnp.array(batch["tokenized_prompt_mask"])
+            out_masks[key] = observation.image_masks[key]
 
     return common.Observation(
         images=out_images,
         image_masks=out_masks,
-        state=state,
-        tokenized_prompt=tokenized_prompt,
-        tokenized_prompt_mask=tokenized_prompt_mask,
+        state=observation.state,
+        tokenized_prompt=observation.tokenized_prompt,
+        tokenized_prompt_mask=observation.tokenized_prompt_mask,
     )
 
 
@@ -110,11 +98,13 @@ class Model:
     # Action sequence length.
     action_horizon: int = struct.field(default=50, pytree_node=False)
 
-    def init_params(self, rng: at.KeyArrayLike, batch: at.Batch) -> "Model":
+    def init_params(
+        self, rng: at.KeyArrayLike, observation: common.Observation, actions: at.Float[at.Array, "*b ah ad"]
+    ) -> "Model":
         preprocess_rng, init_rng = jax.random.split(rng)
-        obs = preprocess_batch(preprocess_rng, batch)
+        obs = preprocess_observation(preprocess_rng, observation)
 
-        loss_args = (obs, batch["actions"])
+        loss_args = (obs, actions)
         return dataclasses.replace(
             self,
             params=self.module.init(init_rng, *loss_args, method=self.module.compute_loss),
@@ -124,20 +114,19 @@ class Model:
     def compute_loss(
         self,
         rng: at.KeyArrayLike,
-        batch: at.Batch,
+        observation: common.Observation,
+        actions: at.Float[at.Array, "*b ah ad"],
         *,
         train: bool = False,
         params: at.Params | None = None,
-    ) -> at.Float[at.Array, "b ah"]:
+    ) -> at.Float[at.Array, "*b ah"]:
         if params is None:
             params = self.params
-        if params is None:
-            raise ValueError("Model parameters not initialized.")
 
         loss_rng, preprocess_rng = jax.random.split(rng)
 
-        obs = preprocess_batch(preprocess_rng, batch, train=train)
-        loss_args = (obs, batch["actions"])
+        obs = preprocess_observation(preprocess_rng, observation, train=train)
+        loss_args = (obs, actions)
 
         return self.module.apply(params, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss)
 
@@ -146,15 +135,15 @@ class Model:
     def sample_actions(
         self,
         rng: at.KeyArrayLike,
-        batch: at.Batch,
+        observation: common.Observation,
         **sample_kwargs,
-    ) -> at.Float[at.Array, "b ah ad"]:
+    ) -> at.Float[at.Array, "*b ah ad"]:
         if self.params is None:
             raise ValueError("Model parameters not initialized.")
 
         preprocess_rng, sample_rng = jax.random.split(rng)
 
-        obs = preprocess_batch(preprocess_rng, batch)
+        obs = preprocess_observation(preprocess_rng, observation)
         sample_args = (self.action_horizon, self.action_dim, obs)
 
         actions, _ = self.module.apply(
@@ -199,11 +188,13 @@ BATCH_SPEC = {
     "actions": jax.ShapeDtypeStruct([512, 50, 24], jnp.float32),
     "image": {
         "base_0_rgb": jax.ShapeDtypeStruct([512, 224, 224, 3], jnp.uint8),
-        "base_0_rgb_mask": jax.ShapeDtypeStruct([512], jnp.bool_),
         "left_wrist_0_rgb": jax.ShapeDtypeStruct([512, 224, 224, 3], jnp.uint8),
-        "left_wrist_0_rgb_mask": jax.ShapeDtypeStruct([512], jnp.bool_),
         "right_wrist_0_rgb": jax.ShapeDtypeStruct([512, 224, 224, 3], jnp.uint8),
-        "right_wrist_0_rgb_mask": jax.ShapeDtypeStruct([512], jnp.bool),
+    },
+    "image_mask": {
+        "base_0_rgb": jax.ShapeDtypeStruct([512], jnp.bool_),
+        "left_wrist_0_rgb": jax.ShapeDtypeStruct([512], jnp.bool_),
+        "right_wrist_0_rgb": jax.ShapeDtypeStruct([512], jnp.bool),
     },
     "tokenized_prompt": jax.ShapeDtypeStruct([512, 48], jnp.int32),
     "tokenized_prompt_mask": jax.ShapeDtypeStruct([512, 48], jnp.int32),

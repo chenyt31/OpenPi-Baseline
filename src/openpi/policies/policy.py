@@ -8,7 +8,7 @@ import numpy as np
 
 from openpi import transforms as _transforms
 from openpi.base import array_typing as at
-from openpi.models import model as _model
+from openpi.models import common, model as _model
 
 BatchSpec: TypeAlias = dict[str, Any]
 
@@ -39,7 +39,10 @@ class Policy(BasePolicy):
         inputs = self._input_transform(inputs)
 
         self._rng, sample_rng = jax.random.split(self._rng)
-        outputs = {"state": inputs["state"], "actions": self._model.sample_actions(sample_rng, inputs)}
+        outputs = {
+            "state": inputs["state"],
+            "actions": self._model.sample_actions(sample_rng, common.Observation.from_dict(inputs)),
+        }
         outputs = self._output_transform(outputs)
         return _unbatch(jax.device_get(outputs))
 

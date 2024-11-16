@@ -1,6 +1,5 @@
 import abc
 from collections.abc import Sequence
-import dataclasses
 from typing import Any, TypeAlias
 
 import jax
@@ -12,22 +11,6 @@ from openpi.base import array_typing as at
 from openpi.models import model as _model
 
 BatchSpec: TypeAlias = dict[str, Any]
-
-
-@dataclasses.dataclass(frozen=True)
-class PolicySpec:
-    # Names of all input fields and their shapes and dtypes.
-    input_spec: BatchSpec
-    # Names of all output fields and their shapes and dtypes.
-    output_spec: BatchSpec
-    # Expected image resolution.
-    input_resolutions: dict[str, tuple[int, int]]
-    # Whether to add masks.
-    support_masking: bool
-    # History dimension.
-    seq_len_dim: int
-    # State dimension. Not valid for all models.
-    state_dim: int
 
 
 class BasePolicy(abc.ABC):
@@ -55,15 +38,8 @@ class Policy(BasePolicy):
         inputs = _make_batch(obs)
         inputs = self._input_transform(inputs)
 
-        def sample_fn(rng, batch):
-            return self._model.sample_actions(rng, batch)
-
-        # TODO: This doesn't work yet.
-        # with at.disable_typechecking():
-        #     sample_fn = jax.jit(sample_fn)
-
         self._rng, sample_rng = jax.random.split(self._rng)
-        outputs = {"state": inputs["state"], "actions": sample_fn(sample_rng, inputs)}
+        outputs = {"state": inputs["state"], "actions": self._model.sample_actions(sample_rng, inputs)}
         outputs = self._output_transform(outputs)
         return _unbatch(jax.device_get(outputs))
 

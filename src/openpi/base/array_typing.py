@@ -23,8 +23,8 @@ import typeguard
 # Support jax.ShapeDtypeStruct for compatibility with jax.eval_shape
 # Support jax.core.ShapedArray for compatibility with various Flax transforms (e.g., nn.scan)
 Array = _Array | jax.ShapeDtypeStruct | jax.core.ShapedArray
-ArrayLike = jax.typing.ArrayLike
-KeyArrayLike = jax.typing.ArrayLike
+ArrayLike = Array | jax.typing.ArrayLike
+KeyArrayLike = Array | jax.typing.ArrayLike
 
 Params = PyTree  # don't actually check leaves, too slow
 OptState = PyTree  # don't actually check leaves, too slow

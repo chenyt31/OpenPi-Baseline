@@ -61,11 +61,10 @@ class AlohaInputs(DataTransformFn):
         self._action_dim = action_dim
 
     def __call__(self, data: dict) -> dict:
-        data = self._aloha_to_pi_request(data["qpos"], data["image"])
-        data = traverse_util.flatten_dict(data, sep="/")
+        data = _decode_aloha(data)
 
         # Assume that base image always exists.
-        base_image = data["observation/image/cam_high"]
+        base_image = data["cam_high"]
         batch_size = base_image.shape[:-3]
 
         images = {
@@ -77,8 +76,8 @@ class AlohaInputs(DataTransformFn):
 
         # Add the extra images.
         extra_images = {
-            "left_wrist_0_rgb": "observation/image/cam_left_wrist",
-            "right_wrist_0_rgb": "observation/image/cam_right_wrist",
+            "left_wrist_0_rgb": "cam_left_wrist",
+            "right_wrist_0_rgb": "cam_right_wrist",
         }
         for dest, source in extra_images.items():
             if source in data:
@@ -91,7 +90,7 @@ class AlohaInputs(DataTransformFn):
         inputs = {
             "image": images,
             "image_mask": image_masks,
-            "state": pad_to_dim(data["observation/qpos"], self._action_dim),
+            "state": pad_to_dim(data["state"], self._action_dim),
         }
 
         # Actions are only available during training.
@@ -102,55 +101,52 @@ class AlohaInputs(DataTransformFn):
 
         return inputs
 
-    def _aloha_to_pi_request(self, qpos: np.ndarray, image: np.ndarray) -> dict:
-        # qpos is (14,) of type float:
-        # 0-5: left arm joint angles
-        # 6: left arm gripper
-        # 7-12: right arm joint angles
-        # 13: right arm gripper
-        #
-        # image is [cam_idx, channel, height, width] with values in [0, 1] of type float
-        # With real robot, cam_idx order is [cam_high, cam_low, cam_left_wrist, cam_right_wrist]
-        # With sim, cam_idx order is [cam_high].
-
-        # Convert to [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
-        pi_qpos = qpos[jnp.array([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 6, 13])]
-
-        obs = {
-            "observation": {
-                "qpos": pi_qpos,
-                "image": {},
-            },
-        }
-
-        def add_image(cam_idx: int, key: str) -> None:
-            if cam_idx >= image.shape[0]:
-                return
-
-            # Convert to [height, width, channel]
-            converted_image = jnp.transpose(image[cam_idx, :, :, :] * 255, (1, 2, 0)).astype(jnp.uint8)
-
-            obs["observation"]["image"][key] = converted_image
-            obs["observation"]["image"][f"{key}_mask"] = jnp.array(True)
-
-        add_image(0, "cam_high")
-        add_image(1, "cam_low")
-        add_image(2, "cam_left_wrist")
-        add_image(3, "cam_right_wrist")
-
-        return obs
-
 
 class AlohaOutputs(DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Convert from delta to absolute actions.
         actions = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
         # Only return the first 14 actions.
-        qpos = actions[..., :14]
-        # Convert to [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
-        qpos = qpos[jnp.array([0, 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 10, 11, 13])]
+        return {"qpos": _encode_aloha(actions[..., :14])}
 
-        return {"qpos": qpos}
+
+def _decode_aloha(data: dict) -> dict:
+    # qpos is [..., 14] of type float:
+    # 0-5: left arm joint angles
+    # 6: left arm gripper
+    # 7-12: right arm joint angles
+    # 13: right arm gripper
+    qpos = jnp.asarray(data["qpos"])
+
+    # images is [..., num_cams, channel, height, width] with values in [0, 1] of type float
+    # number of cameras (num_cams) depends on the environment.
+    images = jnp.asarray(data["image"])
+
+    num_cams = images.shape[-4]
+    if num_cams == 4:
+        cam_names = ["cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist"]
+    elif num_cams == 1:
+        cam_names = ["cam_high"]
+    else:
+        raise ValueError(f"Expected 1 or 4 cameras, got {num_cams}")
+
+    # Convert to [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
+    state = qpos[..., jnp.array([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 6, 13])]
+
+    # `images` have shape [..., cam_idx, channel, height, width].
+    # Convert to uint8 RGB images [..., cam_idx, height, width, channel]
+    images = jnp.rollaxis(images, -3, len(images.shape))
+    images = (255 * images).astype(jnp.uint8)
+    # Split into a dict with keys as camera names.
+    image_splits = [jnp.squeeze(x, axis=-4) for x in jnp.split(images, num_cams, axis=-4)]
+    images_dict = dict(zip(cam_names, image_splits, strict=True))
+
+    return {**images_dict, "state": state}
+
+
+def _encode_aloha(actions: jax.Array) -> jax.Array:
+    # Convert to [left_arm_joint_angles, left_arm_gripper, right_arm_joint_angles, right_arm_gripper]
+    return actions[..., jnp.array([0, 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 10, 11, 13])]
 
 
 class TokenizePrompt(DataTransformFn):

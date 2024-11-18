@@ -45,15 +45,15 @@ class Normalize(DataTransformFn):
 
 
 class Unnormalize(DataTransformFn):
-    def __init__(self, norm_stats: at.PyTree[NormStats], *, strict: bool = False):
+    def __init__(self, norm_stats: at.PyTree[NormStats]):
         self._norm_stats = norm_stats
-        self._strict = strict
 
     def __call__(self, data: dict) -> dict:
         def unnormalize(x, stats: NormStats):
             return x * (stats.std + 1e-6) + stats.mean
 
-        return apply_tree(data, self._norm_stats, unnormalize, strict=self._strict)
+        # Make sure that all the keys in the norm stats are present in the data.
+        return apply_tree(data, self._norm_stats, unnormalize, strict=True)
 
 
 class TokenizePrompt(DataTransformFn):

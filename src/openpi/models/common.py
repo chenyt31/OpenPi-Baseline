@@ -13,15 +13,15 @@ class Observation:
     """Holds observations, i.e., inputs to the model."""
 
     # Images, in [-1, 1] float32.
-    images: dict[str, at.Float[at.ArrayLike, "*b h w c"]]
+    images: dict[str, at.Float[at.Array, "*b h w c"]]
     # Image masks, with same keys as images.
-    image_masks: dict[str, at.Bool[at.ArrayLike, "*b"]]
+    image_masks: dict[str, at.Bool[at.Array, "*b"]]
     # Low-dimensional robot state.
-    state: at.Float[at.ArrayLike, "*b s"]
+    state: at.Float[at.Array, "*b s"]
     # Tokenized prompt.
-    tokenized_prompt: at.Int[at.ArrayLike, "*b l"] | None = None
+    tokenized_prompt: at.Int[at.Array, "*b l"] | None = None
     # Tokenized prompt mask.
-    tokenized_prompt_mask: at.Int[at.ArrayLike, "*b l"] | None = None
+    tokenized_prompt_mask: at.Int[at.Array, "*b l"] | None = None
 
     @classmethod
     def from_dict(cls, data: at.PyTree[at.ArrayLike]) -> "Observation":

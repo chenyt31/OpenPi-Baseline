@@ -84,6 +84,8 @@ class ActionChunkBroker(BasePolicy):
 
 
 class PolicyRecorder(BasePolicy):
+    """Records the policy's behavior to disk."""
+
     def __init__(self, policy: BasePolicy, record_dir: str):
         self._policy = policy
 

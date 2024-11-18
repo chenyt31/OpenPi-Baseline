@@ -131,7 +131,7 @@ class Attention(nn.Module):
     configs: Sequence[Config]
 
     @nn.compact
-    def __call__(self, xs, positions, attn_mask, decode: bool, deterministic: bool = True):
+    def __call__(self, xs, positions, attn_mask, decode: bool):  # noqa: FBT001
         # all experts must share the same head dim, num heads, and num kv heads for self-attention to work
         assert all(config.head_dim == self.configs[0].head_dim for config in self.configs)
         assert all(config.num_heads == self.configs[0].num_heads for config in self.configs)
@@ -261,7 +261,7 @@ class Block(nn.Module):
     dropout_bdims: tuple[int, ...] = ()
 
     @nn.compact
-    def __call__(self, xs, unused_scan_arg, positions, attn_mask, decode, deterministic=True):
+    def __call__(self, xs, unused_scan_arg, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
         drop = nn.Dropout(self.dropout, self.dropout_bdims) if self.dropout else lambda x, _: x
 
         attn = Attention(configs=self.configs, name="attn")
@@ -272,7 +272,7 @@ class Block(nn.Module):
                 x = RMSNorm(name=_name("pre_attention_norm", i))(x)  # noqa: PLW2901
             pre_attn.append(x)
 
-        post_attn = attn(pre_attn, positions, attn_mask, decode, deterministic)
+        post_attn = attn(pre_attn, positions, attn_mask, decode)
         post_attn = jax.tree.map(lambda x: drop(x, deterministic), post_attn)
         xs = jax.tree.map(lambda x, y: x + y, xs, post_attn)
 
@@ -280,7 +280,7 @@ class Block(nn.Module):
         for i, (x, config) in enumerate(zip(xs, self.configs, strict=True)):
             if x is not None:
                 x = RMSNorm(name=_name("pre_ffw_norm", i))(x)  # noqa: PLW2901
-                x = FeedForward(
+                x = FeedForward(  # noqa: PLW2901
                     features=config.width,
                     hidden_dim=config.mlp_dim,
                     name=_name("mlp", i),
@@ -330,11 +330,13 @@ class Module(nn.Module):
             assert embedded is None, "Cannot pass both tokens and embedded"
             return embedder.encode(tokens).astype(self.embed_dtype)
 
-        assert embedded is not None and positions is not None and mask is not None
+        assert embedded is not None
+        assert positions is not None
+        assert mask is not None
 
         embedded = jax.tree.map(lambda e: e.astype(self.embed_dtype), embedded)
 
-        mask = mask[:, None, :, :]
+        mask = jnp.asarray(mask)[:, None, :, :]
 
         block_cls = nn.remat(
             Block,

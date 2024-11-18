@@ -34,6 +34,7 @@ build-backend = "hatchling.build"
 line-length = 120
 target-version = "py311"
 extend-exclude = [
+  "docker",
   "third_party",
 ]
 
@@ -73,6 +74,10 @@ select = [
   "T20",
   "UP",
   "W",
+]
+ignore = [
+  "F722",  # Conflicts with array typing.
+  "T201",  # We use print statements.
 ]
 unfixable = [
   "B905", # Fix defaults to strict=False, which is not what we want.

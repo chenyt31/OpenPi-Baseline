@@ -36,6 +36,6 @@ typecheck = ft.partial(jaxtyped, typechecker=typeguard.typechecked)
 @contextlib.contextmanager
 def disable_typechecking():
     initial = config.jaxtyping_disable
-    config.update("jaxtyping_disable", True)
+    config.update("jaxtyping_disable", True)  # noqa: FBT003
     yield
     config.update("jaxtyping_disable", initial)

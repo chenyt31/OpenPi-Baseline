@@ -56,19 +56,18 @@ class MlpBlock(nn.Module):
     dtype_mm: str = "float32"
 
     @nn.compact
-    def __call__(self, x, deterministic=True):
+    def __call__(self, x, deterministic=True):  # noqa: FBT002
         """Applies Transformer MlpBlock module."""
-        inits = dict(
-            kernel_init=nn.initializers.xavier_uniform(),
-            bias_init=nn.initializers.normal(stddev=1e-6),
-        )
+        inits = {
+            "kernel_init": nn.initializers.xavier_uniform(),
+            "bias_init": nn.initializers.normal(stddev=1e-6),
+        }
 
-        n, l, d = x.shape  # pylint: disable=unused-variable
+        _, _, d = x.shape  # n,l,d
         x = nn.Dense(self.mlp_dim or 4 * d, dtype=self.dtype_mm, **inits)(x)
         x = nn.gelu(x)
         x = nn.Dropout(rate=self.dropout)(x, deterministic)
-        x = nn.Dense(d, dtype=self.dtype_mm, **inits)(x)
-        return x
+        return nn.Dense(d, dtype=self.dtype_mm, **inits)(x)
 
 
 class Encoder1DBlock(nn.Module):
@@ -80,7 +79,7 @@ class Encoder1DBlock(nn.Module):
     dtype_mm: str = "float32"
 
     @nn.compact
-    def __call__(self, x, deterministic=True):
+    def __call__(self, x, deterministic=True):  # noqa: FBT002
         out = {}
         x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
@@ -119,7 +118,7 @@ class Encoder(nn.Module):
     dtype_mm: str = "float32"
 
     @nn.compact
-    def __call__(self, x, deterministic=True):
+    def __call__(self, x, deterministic=True):  # noqa: FBT002
         out = {}
 
         if self.scan:
@@ -143,7 +142,7 @@ class Encoder(nn.Module):
                 dropout=self.dropout,
             )(x, deterministic)
             for lyr in range(self.depth):
-                out[f"block{lyr:02d}"] = jax.tree.map(lambda o, l=lyr: o[l], scan_out)
+                out[f"block{lyr:02d}"] = jax.tree.map(lambda o, lyr=lyr: o[lyr], scan_out)
         else:
             # Input Encoder
             for lyr in range(self.depth):
@@ -169,8 +168,7 @@ class MAPHead(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        # TODO
-        n, l, d = x.shape  # pylint: disable=unused-variable
+        n, _, d = x.shape  # n,l,d
         probe = self.param("probe", nn.initializers.xavier_uniform(), (1, 1, d), x.dtype)
         probe = jnp.tile(probe, [n, 1, 1])
 
@@ -233,7 +231,7 @@ class _Module(nn.Module):
             cls = self.param("cls", nn.initializers.zeros, (1, 1, c), x.dtype)
             x = jnp.concatenate([jnp.tile(cls, [n, 1, 1]), x], axis=1)
 
-        n, l, c = x.shape  # pylint: disable=unused-variable
+        n, _, c = x.shape  # n,l,d
         x = nn.Dropout(rate=self.dropout)(x, not train)
 
         # Kevin edit: now cast back to dtype_mm (potentially half precision)
@@ -291,7 +289,7 @@ class _Module(nn.Module):
         return x, out
 
 
-def Module(num_classes=None, *, variant=None, **kw):  # pylint: disable=invalid-name
+def Module(num_classes=None, *, variant=None, **kw):  # pylint: disable=invalid-name  # noqa: N802
     """Factory function, because linen really don't like what I'm doing!"""
     return _Module(num_classes, **{**decode_variant(variant), **kw})
 

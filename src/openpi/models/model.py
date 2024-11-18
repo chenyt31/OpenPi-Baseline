@@ -78,7 +78,7 @@ def preprocess_observation(
             # do not mask by default
             out_masks[key] = jnp.ones(batch_shape, dtype=jnp.bool)
         else:
-            out_masks[key] = observation.image_masks[key]
+            out_masks[key] = jnp.asarray(observation.image_masks[key])
 
     return common.Observation(
         images=out_images,

@@ -1,7 +1,11 @@
 import abc
 from collections.abc import Sequence
+import logging
+import pathlib
 from typing import Any, TypeAlias
 
+import flax
+import flax.traverse_util
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -76,6 +80,28 @@ class ActionChunkBroker(BasePolicy):
         if self._cur_step >= self._action_horizon:
             self._last_results = None
 
+        return results
+
+
+class PolicyRecorder(BasePolicy):
+    def __init__(self, policy: BasePolicy, record_dir: str):
+        self._policy = policy
+
+        logging.info(f"Dumping policy records to: {record_dir}")
+        self._record_dir = pathlib.Path(record_dir)
+        self._record_dir.mkdir(parents=True, exist_ok=True)
+        self._record_step = 0
+
+    def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
+        results = self._policy.infer(obs)
+
+        data = {"inputs": obs, "outputs": results}
+        data = flax.traverse_util.flatten_dict(data, sep="/")
+
+        output_path = self._record_dir / f"step_{self._record_step}"
+        self._record_step += 1
+
+        np.save(output_path, np.asarray(data))
         return results
 
 

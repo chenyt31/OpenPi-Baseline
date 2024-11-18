@@ -7,18 +7,20 @@ from openpi.policies import policy as _policy
 from openpi.serving import http_policy_server
 
 
-def main(
-    port: int = 8000,
-) -> None:
+def main(port: int = 8000, *, record: bool = False) -> None:
     logging.info("Loading model...")
     model = aloha_policy.load_pi0_model()
 
     logging.info("Creating policy...")
-    policy = _policy.ActionChunkBroker(
+    policy: _policy.BasePolicy = _policy.ActionChunkBroker(
         aloha_policy.create_aloha_policy(model),
         # Only execute the first half of the chunk.
         action_horizon=model.action_horizon // 2,
     )
+
+    # Record the policy's behavior.
+    if record:
+        policy = _policy.PolicyRecorder(policy, "policy_records")
 
     logging.info("Creating server...")
     server = http_policy_server.HttpPolicyServer(policy=policy, host="0.0.0.0", port=port)

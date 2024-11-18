@@ -238,7 +238,6 @@ class Module(common.BaseModule):
         # create attention mask (shared between prefix and suffix)
         input_mask = jnp.concatenate(input_mask, axis=1)
         ar_mask = np.array(ar_mask, dtype=np.int32)
-        logger.info(f"Sequence len: {input_mask.shape[1]}, ar_mask:\n{ar_mask}")
 
         ar_mask = einops.repeat(ar_mask, "s -> b s", b=batch_size)
         attn_mask = make_attn_mask(input_mask, ar_mask)

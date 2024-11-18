@@ -8,7 +8,8 @@ import numpy as np
 
 from openpi import transforms as _transforms
 from openpi.base import array_typing as at
-from openpi.models import common, model as _model
+from openpi.models import common
+from openpi.models import model as _model
 
 BatchSpec: TypeAlias = dict[str, Any]
 

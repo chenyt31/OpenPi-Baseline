@@ -214,10 +214,10 @@ class AlohaOutputs(transforms.DataTransformFn):
         self._reorder_dims = reorder_dims
 
     def __call__(self, data: dict) -> dict:
-        # Convert from delta to absolute actions.
-        actions = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
-        # Only return the first 14 actions.
-        return {"qpos": _encode_aloha(actions[..., :14], reorder_dims=self._reorder_dims)}
+        # Convert from delta to absolute states.
+        next_states = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
+        # Only return the first 14 dims.
+        return {"qpos": _encode_aloha(next_states[..., :14], reorder_dims=self._reorder_dims)}
 
 
 def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:

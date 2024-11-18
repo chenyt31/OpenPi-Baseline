@@ -1,4 +1,5 @@
 import abc
+from typing import TypeAlias
 
 from flax import struct
 import flax.linen as nn
@@ -40,6 +41,9 @@ class Observation:
             tokenized_prompt=data.get("tokenized_prompt"),
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
         )
+
+
+Actions: TypeAlias = at.Float[at.ArrayLike, "*b ah ad"]
 
 
 class BaseModule(nn.Module, abc.ABC):

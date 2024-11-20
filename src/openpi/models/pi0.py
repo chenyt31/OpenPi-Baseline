@@ -10,8 +10,8 @@ from typing_extensions import override
 
 from openpi.base import array_typing as at
 from openpi.models import common
-from openpi.models import transformer
-from openpi.models import vit
+import openpi.models.gemma as _gemma
+import openpi.models.siglip as _siglip
 
 logger = logging.getLogger("openpi")
 
@@ -152,14 +152,14 @@ class Module(common.BaseModule):
         llm_scope = paligemma_scope.push("llm")
         img_scope = paligemma_scope.push("img")
 
-        paligemma_config = transformer.get_config("gemma_2b")
-        action_expert_config = transformer.get_config("gemma_300m")
-        gemma = transformer.Module(
+        paligemma_config = _gemma.get_config("gemma_2b")
+        action_expert_config = _gemma.get_config("gemma_300m")
+        gemma = _gemma.Module(
             configs=[paligemma_config, action_expert_config],
             embed_dtype=self.dtype,
             parent=llm_scope,
         )
-        siglip = vit.Module(
+        siglip = _siglip.Module(
             num_classes=paligemma_config.width,
             variant="So400m/14",
             pool_type="none",

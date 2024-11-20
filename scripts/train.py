@@ -1,8 +1,6 @@
-import dataclasses
 from functools import partial
 import logging
 import tqdm
-import numpy as np
 
 from flax.training import common_utils
 from flax.training import train_state
@@ -11,6 +9,7 @@ from jax.experimental import mesh_utils
 from jax.experimental import multihost_utils
 import jax.numpy as jnp
 import optax
+import tyro
 
 import openpi.base.array_typing as at
 import openpi.models.common as _common
@@ -20,16 +19,7 @@ import openpi.training.utils as training_utils
 import openpi.training.data_loader as _data_loader
 import openpi.training.optimizer as _optimizer
 import openpi.training.checkpoints as _checkpoints
-
-
-# TODO(kevin): Swap with proper config class.
-@dataclasses.dataclass
-class Config:
-    keep_interval: int = 5000
-    load_pretrained_weights: str | None = None
-    num_train_steps: int = 2000_000
-    log_interval: int = 100
-    save_interval: int = 1000
+import openpi.training.config as _config
 
 
 def init_logging() -> None:
@@ -54,7 +44,7 @@ def init_logging() -> None:
 
 
 def init_model(
-    config: Config,
+    config: _config.TrainConfig,
     model: _model.Model,
     init_rng: at.KeyArrayLike,
     data: tuple[_common.Observation, _common.Actions],
@@ -71,8 +61,15 @@ def init_model(
         weight_decay_mask = None
         freeze_mask = None
 
-        tx = _optimizer.adamw_optimizer(
-            lr=_optimizer.cosine_decay_schedule(), weight_decay_mask=weight_decay_mask, freeze_mask=freeze_mask
+        lr_schedule = (
+            _optimizer.schedule(config.lr_schedule) if isinstance(config.lr_schedule, str) else config.lr_schedule()
+        )
+        tx = (
+            _optimizer.optimizer(
+                config.optimizer, lr_schedule, weight_decay_mask=weight_decay_mask, freeze_mask=freeze_mask
+            )
+            if isinstance(config.optimizer, str)
+            else config.optimizer(lr_schedule, weight_decay_mask=weight_decay_mask, freeze_mask=freeze_mask)
         )
 
         def loss_fn(
@@ -126,13 +123,16 @@ def train_step(
     return state, info
 
 
-def main(checkpoint_dir: str, seed: int, *, overwrite: bool = False, resume: bool = False):
+def main(*, config: _config.TrainConfig, overwrite: bool = False, resume: bool = False):
     init_logging()
-    config = Config()
     jax.distributed.initialize()
+    if config.batch_size % jax.device_count() != 0:
+        raise ValueError(
+            f"Batch size {config.batch_size} must be divisible by the number of devices {jax.device_count()}."
+        )
     jax.config.update("jax_threefry_partitionable", True)
 
-    rng = jax.random.key(seed)
+    rng = jax.random.key(config.seed)
     rng, init_rng = jax.random.split(rng)
 
     # data parallel only
@@ -142,12 +142,14 @@ def main(checkpoint_dir: str, seed: int, *, overwrite: bool = False, resume: boo
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint(
-        checkpoint_dir, keep_interval=config.keep_interval, overwrite=overwrite, resume=resume
+        config.checkpoint_dir, keep_interval=config.keep_interval, overwrite=overwrite, resume=resume
     )
     multihost_utils.sync_global_devices("init_checkpoint")
 
     model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
-    data_loader = _data_loader.fake_init_data_loader(model, local_batch_size=16, dp_sharding=data_parallel_sharding)
+    data_loader = _data_loader.fake_init_data_loader(
+        model, local_batch_size=config.batch_size // jax.process_count(), dp_sharding=data_parallel_sharding
+    )
     batch = next(data_loader)
     logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")
     multihost_utils.sync_global_devices("init_dataloader")
@@ -196,4 +198,4 @@ def main(checkpoint_dir: str, seed: int, *, overwrite: bool = False, resume: boo
 
 
 if __name__ == "__main__":
-    main(checkpoint_dir="/tmp/openpi/exp", seed=42, overwrite=False, resume=True)
+    tyro.cli(main)

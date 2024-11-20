@@ -1,6 +1,21 @@
 import optax
 import jax
 import openpi.base.array_typing as at
+from typing import Protocol
+
+
+class ScheduleProvider(Protocol):
+    def __call__(self) -> optax.Schedule: ...
+
+
+class OptimizerProvider(Protocol):
+    def __call__(self, schedule: optax.ScalarOrSchedule, **kwargs) -> optax.GradientTransformation: ...
+
+
+def schedule(name: str) -> optax.Schedule:
+    if name == "cosine_decay":
+        return cosine_decay_schedule()
+    raise ValueError(f"Unknown schedule: {name}")
 
 
 def cosine_decay_schedule(
@@ -13,6 +28,12 @@ def cosine_decay_schedule(
         decay_steps=decay_steps,
         end_value=decay_lr,
     )
+
+
+def optimizer(name: str, schedule: optax.ScalarOrSchedule, **kwargs) -> OptimizerProvider:
+    if name == "adamw":
+        return adamw_optimizer(schedule, **kwargs)
+    raise ValueError(f"Unknown optimizer: {name}")
 
 
 def adamw_optimizer(

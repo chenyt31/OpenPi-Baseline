@@ -12,12 +12,11 @@ from openpi.policies import policy as _policy
 
 
 def load_pi0_model() -> _model.Model:
-    model = _model.Model(pi0.Module())
+    model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
     return _model.restore_params(model, pathlib.Path("checkpoints/pi0_base/model").absolute())
 
 
-def create_aloha_policy(model: _model.Model) -> _policy.Policy:
-    norm_stats = make_aloha_norm_stats()
+def create_aloha_policy(model: _model.BaseModel, norm_stats: dict[str, transforms.NormStats]) -> _policy.Policy:
     reorder_dims = False
 
     return _policy.Policy(

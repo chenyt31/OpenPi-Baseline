@@ -15,8 +15,6 @@ from openpi.base import array_typing as at
 from openpi.models import common
 from openpi.models import model as _model
 
-BatchSpec: TypeAlias = dict[str, Any]
-
 
 class BasePolicy(abc.ABC):
     @abc.abstractmethod
@@ -27,7 +25,7 @@ class BasePolicy(abc.ABC):
 class Policy(BasePolicy):
     def __init__(
         self,
-        model: _model.Model,
+        model: _model.BaseModel,
         *,
         rng: at.KeyArrayLike | None = None,
         transforms: Sequence[_transforms.DataTransformFn] = (),
@@ -39,7 +37,6 @@ class Policy(BasePolicy):
         self._rng = rng or jax.random.key(0)
 
     def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
-        # TODO: Add check that ensures that all the necessary inputs are present.
         inputs = _make_batch(obs)
         inputs = self._input_transform(inputs)
 

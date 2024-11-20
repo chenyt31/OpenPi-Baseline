@@ -1,3 +1,4 @@
+import abc
 from collections.abc import Sequence
 import dataclasses
 import logging
@@ -8,6 +9,7 @@ from flax import struct
 import jax
 import jax.numpy as jnp
 import orbax.checkpoint as ocp
+from typing_extensions import override
 
 from openpi.base import image_tools
 import openpi.base.array_typing as at
@@ -90,15 +92,38 @@ def preprocess_observation(
 
 
 @struct.dataclass
-class Model:
+class BaseModel(abc.ABC):
+    # Action space dimension.
+    action_dim: int = struct.field(pytree_node=False)
+    # Action sequence length.
+    action_horizon: int = struct.field(pytree_node=False)
+    # Tokenized prompt maximum length.
+    max_token_len: int = struct.field(pytree_node=False)
+
+    @abc.abstractmethod
+    def compute_loss(
+        self,
+        rng: at.KeyArrayLike,
+        observation: common.Observation,
+        actions: at.Float[at.Array, "*b ah ad"],
+        *,
+        train: bool = False,
+        params: at.Params | None = None,
+    ) -> at.Float[at.Array, "*b ah"]: ...
+
+    @abc.abstractmethod
+    def sample_actions(
+        self,
+        rng: at.KeyArrayLike,
+        observation: common.Observation,
+        **sample_kwargs,
+    ) -> at.Float[at.Array, "*b ah ad"]: ...
+
+
+@struct.dataclass
+class Model(BaseModel):
     module: common.BaseModule = struct.field(pytree_node=False)
     params: at.Params | None = None
-    # Action space dimension.
-    action_dim: int = struct.field(default=24, pytree_node=False)
-    # Action sequence length.
-    action_horizon: int = struct.field(default=50, pytree_node=False)
-    # Tokenized prompt maximum length.
-    max_token_len: int = struct.field(default=48, pytree_node=False)
 
     def init_params(
         self, rng: at.KeyArrayLike, observation: common.Observation, actions: at.Float[at.Array, "*b ah ad"]
@@ -113,6 +138,7 @@ class Model:
         )
 
     @at.typecheck
+    @override
     def compute_loss(
         self,
         rng: at.KeyArrayLike,
@@ -134,6 +160,7 @@ class Model:
 
     @jax.jit
     @at.typecheck
+    @override
     def sample_actions(
         self,
         rng: at.KeyArrayLike,

@@ -125,9 +125,7 @@ class Model(BaseModel):
     module: common.BaseModule = struct.field(pytree_node=False)
     params: at.Params | None = None
 
-    def init_params(
-        self, rng: at.KeyArrayLike, observation: common.Observation, actions: at.Float[at.Array, "*b ah ad"]
-    ) -> "Model":
+    def init_params(self, rng: at.KeyArrayLike, observation: common.Observation, actions: common.Actions) -> "Model":
         preprocess_rng, init_rng = jax.random.split(rng)
         obs = preprocess_observation(preprocess_rng, observation)
 
@@ -143,10 +141,10 @@ class Model(BaseModel):
         self,
         rng: at.KeyArrayLike,
         observation: common.Observation,
-        actions: at.Float[at.Array, "*b ah ad"],
+        actions: common.Actions,
+        params: at.Params | None = None,
         *,
         train: bool = False,
-        params: at.Params | None = None,
     ) -> at.Float[at.Array, "*b ah"]:
         if params is None:
             params = self.params
@@ -166,7 +164,7 @@ class Model(BaseModel):
         rng: at.KeyArrayLike,
         observation: common.Observation,
         **sample_kwargs,
-    ) -> at.Float[at.Array, "*b ah ad"]:
+    ) -> common.Actions:
         if self.params is None:
             raise ValueError("Model parameters not initialized.")
 

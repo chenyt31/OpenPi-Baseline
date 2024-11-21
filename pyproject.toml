@@ -22,6 +22,7 @@ dependencies = [
     "sentencepiece>=0.2.0",
     "typing-extensions>=4.12.2",
     "tyro>=0.8.14",
+    "tqdm",
 ]
 
 [project.urls]

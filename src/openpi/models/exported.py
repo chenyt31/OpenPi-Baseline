@@ -4,7 +4,7 @@ import etils.epath as epath
 import flax.serialization
 import flax.struct as struct
 import jax
-import jax.experimental.export as export
+import jax.export
 import jax.numpy as jnp
 import orbax.checkpoint as ocp
 from typing_extensions import override
@@ -16,7 +16,6 @@ from openpi.models import common
 from openpi.models import model as _model
 
 # TODO(ury): Remove before open sourcing and consider replacing with an official export API.
-# TODO: Upgrade to official export API.
 
 
 @struct.dataclass
@@ -25,14 +24,14 @@ class PiModel(_model.BaseModel):
 
     params: at.Params
 
-    exported: export.Exported = struct.field(pytree_node=False)
+    exported: jax.export.Exported = struct.field(pytree_node=False)
     example_spec: Any = struct.field(pytree_node=False)
 
     @classmethod
     def from_checkpoint(cls, ckpt_path: epath.Path) -> "PiModel":
         """Load a model from a monopi checkpoint model directory."""
         with (ckpt_path / "graph").open("rb") as f:
-            exported = export.deserialize(f.read())
+            exported = jax.export.deserialize(f.read())
 
         input_spec = jax.tree.unflatten(exported.in_tree, exported.in_avals)[0]
         params = _load_params(ckpt_path, input_spec[0])
@@ -72,7 +71,7 @@ class PiModel(_model.BaseModel):
         example["image"] = {key: resize_if_needed(key, value) for key, value in example["image"].items()}
 
         rng_data = jax.random.key_data(rng)
-        result = export.call(self.exported)(self.params, rng_data, example, {"num_steps": 10})
+        result = self.exported.call(self.params, rng_data, example, {"num_steps": 10})
 
         return _make_batch(result)["actions"]
 
@@ -152,18 +151,27 @@ def import_norm_stats(ckpt_path: epath.Path, processor_name: str) -> dict[str, _
     if not (found_files := list(path.glob("*/norm_stats.msgpack"))):
         raise FileNotFoundError(f"No norm_stats.msgpack found in {path}")
 
-    with found_files[0].open("rb") as f:
-        norm_stats = flax.serialization.msgpack_restore(f.read())
+    outputs = []
 
-    input_state = norm_stats["input_norms"]["state"]
-    state_stats = _normalize.NormStats(mean=input_state["mean"], std=input_state["std"])
+    for file in sorted(found_files):
+        with file.open("rb") as f:
+            norm_stats = flax.serialization.msgpack_restore(f.read())
 
-    output_actions = norm_stats["output_norms"]["actions"]
-    actions_stats = _normalize.NormStats(mean=output_actions["mean"], std=output_actions["std"])
+        # This is the new Normalize processor.
+        if "input_norms" in norm_stats:
+            state = norm_stats["input_norms"]["state"]
+            outputs.append(_normalize.NormStats(mean=state["mean"], std=state["std"]))
+
+            actions = norm_stats["output_norms"]["actions"]
+            outputs.append(_normalize.NormStats(mean=actions["mean"], std=actions["std"]))
+
+        # This is to support the old NormalizeActions / NormalizeState processor combo.
+        else:
+            outputs.append(_normalize.NormStats(mean=norm_stats["mean"], std=norm_stats["std"]))
 
     return {
-        "state": state_stats,
-        "actions": actions_stats,
+        "actions": outputs[0],
+        "state": outputs[1],
     }
 
 

@@ -60,9 +60,9 @@ class TokenizePrompt(DataTransformFn):
     # This is the default text prompt for the model.
     DEFAULT_PROMPT = "be a good robot"
 
-    def __init__(self, tokenizer: _tokenizer.Tokenizer, default_prompt: str = DEFAULT_PROMPT):
+    def __init__(self, tokenizer: _tokenizer.Tokenizer, *, default_prompt: str | None = None):
         self._tokenizer = tokenizer
-        self._default_prompt = default_prompt
+        self._default_prompt = default_prompt or self.DEFAULT_PROMPT
 
     def __call__(self, data: dict) -> dict:
         if "prompt" not in data:

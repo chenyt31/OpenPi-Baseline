@@ -16,19 +16,22 @@ def load_pi0_model() -> _model.Model:
     return _model.restore_params(model, pathlib.Path("checkpoints/pi0_base/model").absolute())
 
 
-def create_aloha_policy(model: _model.BaseModel, norm_stats: dict[str, transforms.NormStats]) -> _policy.Policy:
+def create_aloha_policy(
+    model: _model.BaseModel, norm_stats: dict[str, transforms.NormStats], *, default_prompt: str | None = None
+) -> _policy.Policy:
     reorder_dims = False
+    delta_actions = True
 
     return _policy.Policy(
         model,
         transforms=[
-            AlohaInputs(action_dim=model.action_dim, reorder_dims=reorder_dims),
+            AlohaInputs(action_dim=model.action_dim, reorder_dims=reorder_dims, delta_actions=delta_actions),
             transforms.Normalize(norm_stats),
-            transforms.TokenizePrompt(tokenizer.PaligemmaTokenizer(model.max_token_len)),
+            transforms.TokenizePrompt(tokenizer.PaligemmaTokenizer(model.max_token_len), default_prompt=default_prompt),
         ],
         output_transforms=[
             transforms.Unnormalize(norm_stats),
-            AlohaOutputs(reorder_dims=reorder_dims),
+            AlohaOutputs(reorder_dims=reorder_dims, delta_actions=delta_actions),
         ],
     )
 
@@ -162,9 +165,10 @@ def make_aloha_norm_stats():
 
 
 class AlohaInputs(transforms.DataTransformFn):
-    def __init__(self, action_dim: int, *, reorder_dims: bool = False):
+    def __init__(self, action_dim: int, *, reorder_dims: bool = False, delta_actions: bool = False):
         self._action_dim = action_dim
         self._reorder_dims = reorder_dims
+        self._delta_actions = delta_actions
 
     def __call__(self, data: dict) -> dict:
         data = _decode_aloha(data, reorder_dims=self._reorder_dims)
@@ -209,14 +213,18 @@ class AlohaInputs(transforms.DataTransformFn):
 
 
 class AlohaOutputs(transforms.DataTransformFn):
-    def __init__(self, *, reorder_dims: bool = False):
+    def __init__(self, *, reorder_dims: bool = False, delta_actions: bool = False):
         self._reorder_dims = reorder_dims
+        self._delta_actions = delta_actions
 
     def __call__(self, data: dict) -> dict:
-        # Convert from delta to absolute states.
-        next_states = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
+        if self._delta_actions:  # noqa: SIM108
+            # Convert from delta to absolute actions.
+            actions = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
+        else:
+            actions = data["actions"]
         # Only return the first 14 dims.
-        return {"qpos": _encode_aloha(next_states[..., :14], reorder_dims=self._reorder_dims)}
+        return {"qpos": _encode_aloha(actions[..., :14], reorder_dims=self._reorder_dims)}
 
 
 def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:

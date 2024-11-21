@@ -14,8 +14,6 @@ def fake_init_data_loader(
 ) -> Iterator[tuple[_common.Observation, _common.Actions]]:
     """Returns a faked (and infinite) data loader with input spec."""
     observation_spec, action_spec = _model.create_inputs_spec(model, batch_size=local_batch_size)
-    print(observation_spec)
-    print(action_spec)
 
     def make_from_spec(spec: jax.ShapeDtypeStruct, rng: at.KeyArrayLike):
         if spec.dtype == jnp.float32:

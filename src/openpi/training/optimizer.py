@@ -1,6 +1,17 @@
-import optax
+from typing import Protocol
+
 import jax
+import optax
+
 import openpi.base.array_typing as at
+
+
+class ScheduleFactory(Protocol):
+    def __call__(self) -> optax.Schedule: ...
+
+
+class OptimizerFactory(Protocol):
+    def __call__(self, lr: optax.ScalarOrSchedule, **kwargs) -> optax.GradientTransformation: ...
 
 
 def cosine_decay_schedule(
@@ -15,7 +26,7 @@ def cosine_decay_schedule(
     )
 
 
-def adamw_optimizer(
+def adamw(
     lr: optax.ScalarOrSchedule,
     b1: float = 0.9,
     b2: float = 0.95,

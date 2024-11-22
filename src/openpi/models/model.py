@@ -145,7 +145,7 @@ class Model(BaseModel):
         params: at.Params | None = None,
         *,
         train: bool = False,
-    ) -> at.Float[at.Array, "*b ah"]:
+    ) -> at.Float[at.Array, ""]:
         if params is None:
             params = self.params
 
@@ -154,7 +154,7 @@ class Model(BaseModel):
         obs = preprocess_observation(preprocess_rng, observation, train=train)
         loss_args = (obs, actions)
 
-        return self.module.apply(params, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss)
+        return jnp.mean(self.module.apply(params, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss))
 
     @jax.jit
     @at.typecheck

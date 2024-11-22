@@ -51,8 +51,17 @@ class Config:
     head_dim: int
 
 
-def get_config(variant: Literal["gemma_300m", "gemma_2b"]) -> Config:
+def get_config(variant: Literal["dummy", "gemma_300m", "gemma_2b"]) -> Config:
     """Returns config for specified gemma variant."""
+    if variant == "dummy":
+        return Config(
+            width=64,
+            depth=4,
+            mlp_dim=128,
+            num_heads=8,
+            num_kv_heads=1,
+            head_dim=16,
+        )
     if variant == "gemma_300m":
         # 311M params
         return Config(

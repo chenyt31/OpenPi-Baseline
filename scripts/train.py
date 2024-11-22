@@ -123,9 +123,8 @@ def train_step(
     return state, info
 
 
-def main(*, config: _config.TrainConfig, overwrite: bool = False, resume: bool = False):
+def main(config: _config.TrainConfig):
     init_logging()
-    jax.distributed.initialize()
     if config.batch_size % jax.device_count() != 0:
         raise ValueError(
             f"Batch size {config.batch_size} must be divisible by the number of devices {jax.device_count()}."
@@ -142,7 +141,7 @@ def main(*, config: _config.TrainConfig, overwrite: bool = False, resume: bool =
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint(
-        config.checkpoint_dir, keep_interval=config.keep_interval, overwrite=overwrite, resume=resume
+        config.checkpoint_dir, keep_interval=config.keep_interval, overwrite=config.override, resume=config.resume
     )
     multihost_utils.sync_global_devices("init_checkpoint")
 
@@ -198,4 +197,4 @@ def main(*, config: _config.TrainConfig, overwrite: bool = False, resume: bool =
 
 
 if __name__ == "__main__":
-    tyro.cli(main)
+    main(_config.cli())

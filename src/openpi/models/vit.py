@@ -1,4 +1,4 @@
-# Copyright 2024 Big Vision Authors.
+# Copyright 2024 Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,362 +11,299 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""ViT implementation adapted from https://github.com/google-research/vision_transformer/blob/main/vit_jax/models_vit.py."""
 
-"""A refactored and simplified ViT adoptation for Pi, taken from big_vision."""
-
-from collections.abc import Sequence
+from typing import Any, Callable, Optional, Tuple, Type
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import numpy as np
+
+from openpi.models import resnet as models_resnet
+
+Array = Any
+PRNGKey = Any
+Shape = Tuple[int]
+Dtype = Any
 
 
-def posemb_sincos_2d(h, w, width, temperature=10_000.0, dtype=jnp.float32):
-    """Follows the MoCo v3 logic."""
-    y, x = jnp.mgrid[:h, :w]
+class IdentityLayer(nn.Module):
+    """Identity layer, convenient for giving a name to an array."""
 
-    assert width % 4 == 0, "Width must be mult of 4 for sincos posemb"
-    omega = jnp.arange(width // 4) / (width // 4 - 1)
-    omega = 1.0 / (temperature**omega)
-    y = jnp.einsum("m,d->md", y.flatten(), omega)
-    x = jnp.einsum("m,d->md", x.flatten(), omega)
-    pe = jnp.concatenate([jnp.sin(x), jnp.cos(x), jnp.sin(y), jnp.cos(y)], axis=1)
-    return jnp.asarray(pe, dtype)[None, :, :]
+    @nn.compact
+    def __call__(self, x):
+        return x
 
 
-def get_posemb(self, typ, seqshape, width, name, dtype=jnp.float32):
-    if typ == "learn":
-        return self.param(
-            name,
-            nn.initializers.normal(stddev=1 / np.sqrt(width)),
-            (1, np.prod(seqshape), width),
-            dtype,
-        )
-    if typ == "sincos2d":
-        return posemb_sincos_2d(*seqshape, width, dtype=dtype)
-    raise ValueError(f"Unknown posemb type: {typ}")
+class AddPositionEmbs(nn.Module):
+    """Adds learned positional embeddings to the inputs.
+
+    Attributes:
+      posemb_init: positional embedding initializer.
+    """
+
+    posemb_init: Callable[[PRNGKey, Shape, Dtype], Array]
+    param_dtype: Dtype = jnp.float32
+
+    @nn.compact
+    def __call__(self, inputs):
+        """Applies the AddPositionEmbs module.
+
+        Args:
+          inputs: Inputs to the layer.
+
+        Returns:
+          Output tensor with shape `(bs, timesteps, in_dim)`.
+        """
+        # inputs.shape is (batch_size, seq_len, emb_dim).
+        assert inputs.ndim == 3, "Number of dimensions should be 3," " but it is: %d" % inputs.ndim
+        pos_emb_shape = (1, inputs.shape[1], inputs.shape[2])
+        pe = self.param("pos_embedding", self.posemb_init, pos_emb_shape, self.param_dtype)
+        return inputs + pe
 
 
 class MlpBlock(nn.Module):
     """Transformer MLP / feed-forward block."""
 
-    mlp_dim: int | None = None  # Defaults to 4x input dim
-    dropout: float = 0.0
-    dtype_mm: str = "float32"
+    mlp_dim: int
+    dtype: Dtype = jnp.float32
+    param_dtype: Dtype = jnp.float32
+    out_dim: Optional[int] = None
+    dropout_rate: float = 0.1
+    kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.xavier_uniform()
+    bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.normal(stddev=1e-6)
 
     @nn.compact
-    def __call__(self, x, deterministic=True):  # noqa: FBT002
+    def __call__(self, inputs, *, deterministic):
         """Applies Transformer MlpBlock module."""
-        inits = {
-            "kernel_init": nn.initializers.xavier_uniform(),
-            "bias_init": nn.initializers.normal(stddev=1e-6),
-        }
-
-        _, _, d = x.shape  # n,l,d
-        x = nn.Dense(self.mlp_dim or 4 * d, dtype=self.dtype_mm, **inits)(x)
+        actual_out_dim = inputs.shape[-1] if self.out_dim is None else self.out_dim
+        x = nn.Dense(
+            features=self.mlp_dim,
+            dtype=self.dtype,
+            param_dtype=self.param_dtype,
+            kernel_init=self.kernel_init,
+            bias_init=self.bias_init,
+        )(  # pytype: disable=wrong-arg-types
+            inputs
+        )
         x = nn.gelu(x)
-        x = nn.Dropout(rate=self.dropout)(x, deterministic)
-        return nn.Dense(d, dtype=self.dtype_mm, **inits)(x)
+        x = nn.Dropout(rate=self.dropout_rate)(x, deterministic=deterministic)
+        output = nn.Dense(
+            features=actual_out_dim,
+            dtype=self.dtype,
+            param_dtype=self.param_dtype,
+            kernel_init=self.kernel_init,
+            bias_init=self.bias_init,
+        )(  # pytype: disable=wrong-arg-types
+            x
+        )
+        output = nn.Dropout(rate=self.dropout_rate)(output, deterministic=deterministic)
+        return output
 
 
 class Encoder1DBlock(nn.Module):
-    """Single transformer encoder block (MHSA + MLP)."""
+    """Transformer encoder layer.
 
-    mlp_dim: int | None = None  # Defaults to 4x input dim
-    num_heads: int = 12
-    dropout: float = 0.0
-    dtype_mm: str = "float32"
+    Attributes:
+      inputs: input data.
+      mlp_dim: dimension of the mlp on top of attention block.
+      dtype: the dtype of the computation (default: float32).
+      dropout_rate: dropout rate.
+      attention_dropout_rate: dropout for attention heads.
+      deterministic: bool, deterministic or not (to apply dropout).
+      num_heads: Number of heads in nn.MultiHeadDotProductAttention
+    """
+
+    mlp_dim: int
+    num_heads: int
+    dtype: Dtype = jnp.float32
+    dropout_rate: float = 0.1
+    attention_dropout_rate: float = 0.1
 
     @nn.compact
-    def __call__(self, x, deterministic=True):  # noqa: FBT002
-        out = {}
-        x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
-        y = nn.LayerNorm(dtype=self.dtype_mm)(x)
-        y = out["sa"] = nn.MultiHeadDotProductAttention(
-            num_heads=self.num_heads,
-            kernel_init=nn.initializers.xavier_uniform(),
-            deterministic=deterministic,
-            dtype=self.dtype_mm,
-        )(y, y)
-        y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
-        y = nn.Dropout(rate=self.dropout)(y, deterministic)
-        x = out["+sa"] = x + y
+    def __call__(self, inputs, deterministic):
+        """Applies Encoder1DBlock module.
 
-        y = nn.LayerNorm(dtype=self.dtype_mm)(x)
-        y = out["mlp"] = MlpBlock(
-            mlp_dim=self.mlp_dim,
-            dropout=self.dropout,
-            dtype_mm=self.dtype_mm,
-        )(y, deterministic)
-        y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
-        y = nn.Dropout(rate=self.dropout)(y, deterministic)
-        x = out["+mlp"] = x + y
-        x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
-        return x, out
+        Args:
+          inputs: Inputs to the layer.
+          deterministic: Dropout will not be applied when set to true.
+
+        Returns:
+          output after transformer encoder block.
+        """
+
+        # Attention block.
+        assert inputs.ndim == 3, f"Expected (batch, seq, hidden) got {inputs.shape}"
+        x = nn.LayerNorm(dtype=self.dtype)(inputs)
+        x = nn.MultiHeadDotProductAttention(
+            dtype=self.dtype,
+            kernel_init=nn.initializers.xavier_uniform(),
+            broadcast_dropout=False,
+            deterministic=deterministic,
+            dropout_rate=self.attention_dropout_rate,
+            num_heads=self.num_heads,
+            # why isn't this true by default???
+            force_fp32_for_softmax=True,
+        )(x, x)
+        x = nn.Dropout(rate=self.dropout_rate)(x, deterministic=deterministic)
+        x = x + inputs
+
+        # MLP block.
+        y = nn.LayerNorm(dtype=self.dtype)(x)
+        y = MlpBlock(mlp_dim=self.mlp_dim, dtype=self.dtype, dropout_rate=self.dropout_rate)(
+            y, deterministic=deterministic
+        )
+
+        return x + y, None
 
 
 class Encoder(nn.Module):
-    """Transformer Model Encoder for sequence to sequence translation."""
+    """Transformer Model Encoder for sequence to sequence translation.
 
-    depth: int
-    mlp_dim: int | None = None  # Defaults to 4x input dim
-    num_heads: int = 12
-    dropout: float = 0.0
-    scan: bool = False
-    remat_policy: str = "nothing_saveable"
-    dtype_mm: str = "float32"
+    Attributes:
+      num_layers: number of layers
+      mlp_dim: dimension of the mlp on top of attention block
+      num_heads: Number of heads in nn.MultiHeadDotProductAttention
+      dropout_rate: dropout rate.
+      attention_dropout_rate: dropout rate in self attention.
+    """
 
-    @nn.compact
-    def __call__(self, x, deterministic=True):  # noqa: FBT002
-        out = {}
-
-        if self.scan:
-            block = nn.remat(
-                Encoder1DBlock,
-                prevent_cse=False,
-                static_argnums=(2,),  # 0=self, 2=deterministic
-                policy=getattr(jax.checkpoint_policies, self.remat_policy, None),
-            )
-            x, scan_out = nn.scan(
-                block,
-                variable_axes={"params": 0},
-                split_rngs={"params": True, "dropout": True},
-                in_axes=nn.broadcast,
-                length=self.depth,
-            )(
-                name="encoderblock",
-                dtype_mm=self.dtype_mm,
-                mlp_dim=self.mlp_dim,
-                num_heads=self.num_heads,
-                dropout=self.dropout,
-            )(x, deterministic)
-            for lyr in range(self.depth):
-                out[f"block{lyr:02d}"] = jax.tree.map(lambda o, lyr=lyr: o[lyr], scan_out)
-        else:
-            # Input Encoder
-            for lyr in range(self.depth):
-                block_cur = Encoder1DBlock(
-                    name=f"encoderblock_{lyr}",
-                    dtype_mm=self.dtype_mm,
-                    mlp_dim=self.mlp_dim,
-                    num_heads=self.num_heads,
-                    dropout=self.dropout,
-                )
-                x, out[f"block{lyr:02d}"] = block_cur(x, deterministic)
-            out["pre_ln"] = x  # Alias for last block, but without the number in it.
-
-        return nn.LayerNorm(name="encoder_norm", dtype=self.dtype_mm)(x), out
-
-
-class MAPHead(nn.Module):
-    """Multihead Attention Pooling."""
-
-    mlp_dim: int | None = None  # Defaults to 4x input dim
-    num_heads: int = 12
-    dtype_mm: str = "float32"
+    dtype: jax.typing.DTypeLike
+    num_layers: int
+    mlp_dim: int
+    num_heads: int
+    dropout_rate: float = 0.1
+    attention_dropout_rate: float = 0.1
+    add_position_embedding: bool = True
 
     @nn.compact
-    def __call__(self, x):
-        n, _, d = x.shape  # n,l,d
-        probe = self.param("probe", nn.initializers.xavier_uniform(), (1, 1, d), x.dtype)
-        probe = jnp.tile(probe, [n, 1, 1])
+    def __call__(self, x, *, train):
+        """Applies Transformer model on the inputs.
 
-        x = nn.MultiHeadDotProductAttention(
+        Args:
+          x: Inputs to the layer.
+          train: Set to `True` when training.
+
+        Returns:
+          output of a transformer encoder.
+        """
+        assert x.ndim == 3  # (batch, len, emb)
+
+        if self.add_position_embedding:
+            x = AddPositionEmbs(
+                posemb_init=nn.initializers.normal(stddev=0.02),  # from BERT.
+                name="posembed_input",
+            )(x)
+            x = nn.Dropout(rate=self.dropout_rate)(x, deterministic=not train)
+
+        x = x.astype(self.dtype)
+        # Input Encoder
+        block = nn.remat(Encoder1DBlock, prevent_cse=False, static_argnums=(2,))
+        x, _ = nn.scan(
+            block,
+            variable_axes={"params": 0},
+            split_rngs={"params": True, "dropout": True},
+            in_axes=nn.broadcast,
+            length=self.num_layers,
+        )(
+            name="encoderblock",
+            mlp_dim=self.mlp_dim,
+            dropout_rate=self.dropout_rate,
+            attention_dropout_rate=self.attention_dropout_rate,
+            dtype=self.dtype,
             num_heads=self.num_heads,
-            dtype=self.dtype_mm,
-            kernel_init=nn.initializers.xavier_uniform(),
-        )(probe, x)
+        )(x, not train)
+        encoded = nn.LayerNorm(name="encoder_norm", dtype=self.dtype)(x)
 
-        # TODO: dropout on head?
-        y = nn.LayerNorm(dtype=self.dtype_mm)(x)
-        x = x + MlpBlock(mlp_dim=self.mlp_dim, dtype=self.dtype_mm)(y)
-        return x[:, 0]
+        return encoded
 
 
-class _Module(nn.Module):
-    """ViT model."""
+class VisionTransformer(nn.Module):
+    """VisionTransformer."""
 
-    num_classes: int | None = None
-    patch_size: Sequence[int] = (16, 16)
-    width: int = 768
-    depth: int = 12
-    mlp_dim: int | None = None  # Defaults to 4x input dim
-    num_heads: int = 12
-    posemb: str = "learn"  # Can also be "sincos2d"
-    rep_size: int | bool = False
-    dropout: float = 0.0
-    pool_type: str = "gap"  # Can also be "map" or "tok"
-    head_zeroinit: bool = True
-    scan: bool = False
-    # or "dots_with_no_batch_dims_saveable" for more speed (memory costly)
-    remat_policy: str = "nothing_saveable"
-    dtype_mm: str = "float32"
+    dtype: jax.typing.DTypeLike
+    num_classes: int
+    patches: Any
+    transformer: Any
+    hidden_size: int
+    resnet: Optional[Any] = None
+    representation_size: Optional[int] = None
+    classifier: str = "token"
+    head_bias_init: float = 0.0
+    encoder: Type[nn.Module] = Encoder
+    model_name: Optional[str] = None
 
     @nn.compact
-    def __call__(self, image, *, train=False):
-        out = {}
+    def __call__(self, inputs, *, train):
+        x = inputs
+        # (Possibly partial) ResNet root.
+        if self.resnet is not None:
+            width = int(64 * self.resnet.width_factor)
 
-        # Kevin edit: do patch extraction and posemb in float32,
-        # because I feel like it's a bit safer.
-        image = jnp.asarray(image, jnp.float32)
+            # Root block.
+            x = models_resnet.StdConv(
+                features=width, kernel_size=(7, 7), strides=(2, 2), use_bias=False, name="conv_root"
+            )(x)
+            x = nn.GroupNorm(name="gn_root")(x)
+            x = nn.relu(x)
+            x = nn.max_pool(x, window_shape=(3, 3), strides=(2, 2), padding="SAME")
 
-        # Patch extraction
-        x = out["stem"] = nn.Conv(
-            self.width,
-            self.patch_size,
-            strides=self.patch_size,
-            padding="VALID",
-            name="embedding",
-            dtype=jnp.float32,
-        )(image)
+            # ResNet stages.
+            if self.resnet.num_layers:
+                x = models_resnet.ResNetStage(
+                    block_size=self.resnet.num_layers[0], nout=width, first_stride=(1, 1), name="block1"
+                )(x)
+                for i, block_size in enumerate(self.resnet.num_layers[1:], 1):
+                    x = models_resnet.ResNetStage(
+                        block_size=block_size, nout=width * 2**i, first_stride=(2, 2), name=f"block{i + 1}"
+                    )(x)
 
         n, h, w, c = x.shape
-        x = jnp.reshape(x, [n, h * w, c])
 
-        # Add posemb before adding extra token.
-        x = out["with_posemb"] = x + get_posemb(self, self.posemb, (h, w), c, "pos_embedding", jnp.float32)
+        # We can merge s2d+emb into a single conv; it's the same.
+        x = nn.Conv(
+            features=self.hidden_size,
+            kernel_size=self.patches.size,
+            strides=self.patches.size,
+            padding="VALID",
+            name="embedding",
+        )(x)
 
-        if self.pool_type == "tok":
-            cls = self.param("cls", nn.initializers.zeros, (1, 1, c), x.dtype)
-            x = jnp.concatenate([jnp.tile(cls, [n, 1, 1]), x], axis=1)
+        # Here, x is a grid of embeddings.
 
-        n, _, c = x.shape  # n,l,d
-        x = nn.Dropout(rate=self.dropout)(x, not train)
+        # (Possibly partial) Transformer.
+        if self.transformer is not None:
+            n, h, w, c = x.shape
+            x = jnp.reshape(x, [n, h * w, c])
 
-        # Kevin edit: now cast back to dtype_mm (potentially half precision)
-        x = x.astype(self.dtype_mm)
+            # If we want to add a class token, add it here.
+            if self.classifier in ["token", "token_unpooled"]:
+                cls = self.param("cls", nn.initializers.zeros, (1, 1, c))
+                cls = jnp.tile(cls, [n, 1, 1])
+                x = jnp.concatenate([cls, x], axis=1)
 
-        x, out["encoder"] = Encoder(
-            depth=self.depth,
-            mlp_dim=self.mlp_dim,
-            num_heads=self.num_heads,
-            dropout=self.dropout,
-            scan=self.scan,
-            remat_policy=self.remat_policy,
-            dtype_mm=self.dtype_mm,
-            name="Transformer",
-        )(x, deterministic=not train)
-        encoded = out["encoded"] = x
+            x = self.encoder(name="Transformer", **self.transformer, dtype=self.dtype)(x, train=train)
 
-        if self.pool_type == "map":
-            x = out["head_input"] = MAPHead(
-                num_heads=self.num_heads,
-                mlp_dim=self.mlp_dim,
-                dtype=self.dtype_mm,
-            )(x)
-        elif self.pool_type == "gap":
-            x = out["head_input"] = jnp.mean(x, axis=1)
-        elif self.pool_type == "0":
-            x = out["head_input"] = x[:, 0]
-        elif self.pool_type == "tok":
-            x = out["head_input"] = x[:, 0]
-            encoded = encoded[:, 1:]
-        elif self.pool_type == "none":
+        if self.classifier == "token":
+            x = x[:, 0]
+        elif self.classifier == "gap":
+            x = jnp.mean(x, axis=list(range(1, x.ndim - 1)))  # (1,) or (1,2)
+        elif self.classifier in ["unpooled", "token_unpooled"]:
             pass
         else:
-            raise ValueError(f"Unknown pool type: '{self.pool_type}'")
+            raise ValueError(f"Invalid classifier={self.classifier}")
 
-        x_2d = jnp.reshape(encoded, [n, h, w, -1])
-
-        if self.rep_size:
-            rep_size = self.width if self.rep_size is True else self.rep_size
-            hid = nn.Dense(rep_size, dtype=self.dtype_mm, name="pre_logits")
-            # NOTE: In the past we did not include tanh in pre_logits.
-            # For few-shot, it should not matter much, as it whitens anyways.
-            x_2d = nn.tanh(hid(x_2d))
-            x = nn.tanh(hid(x))
-
-        out["pre_logits_2d"] = x_2d
-        out["pre_logits"] = x
+        if self.representation_size is not None:
+            x = nn.Dense(features=self.representation_size, name="pre_logits")(x)
+            x = nn.tanh(x)
+        else:
+            x = IdentityLayer(name="pre_logits")(x)
 
         if self.num_classes:
-            kw = {"kernel_init": nn.initializers.zeros} if self.head_zeroinit else {}
-            head = nn.Dense(self.num_classes, dtype=self.dtype_mm, name="head", **kw)
-            x_2d = out["logits_2d"] = head(x_2d)
-            x = out["logits"] = head(x)
-
-        return x, out
-
-
-def Module(num_classes=None, *, variant=None, **kw):  # pylint: disable=invalid-name  # noqa: N802
-    """Factory function, because linen really don't like what I'm doing!"""
-    return _Module(num_classes, **{**decode_variant(variant), **kw})
-
-
-def decode_variant(variant):
-    """Converts a string like "B" or "B/32" into a params dict."""
-    if variant is None:
-        return {}
-
-    v, patch = variant, {}
-    if "/" in variant:
-        v, patch = variant.split("/")
-        patch = {"patch_size": (int(patch), int(patch))}
-
-    return {
-        # pylint:disable=line-too-long
-        # Reference: Table 2 of https://arxiv.org/abs/2106.04560.
-        "width": {
-            "mu": 32,
-            "Ti": 192,
-            "S": 384,
-            "M": 512,
-            "B": 768,
-            "L": 1024,
-            "So400m": 1152,
-            "H": 1280,
-            "g": 1408,
-            "g-opt": 1536,
-            "G": 1664,
-            "G-opt": 1536,
-            "e": 1792,
-        }[v],
-        "depth": {
-            "mu": 1,
-            "Ti": 12,
-            "S": 12,
-            "M": 12,
-            "B": 12,
-            "L": 24,
-            "So400m": 27,
-            "H": 32,
-            "g": 40,
-            "g-opt": 40,
-            "G": 48,
-            "G-opt": 48,
-            "e": 56,
-        }[v],
-        "mlp_dim": {
-            "mu": 128,
-            "Ti": 768,
-            "S": 1536,
-            "M": 2048,
-            "B": 3072,
-            "L": 4096,
-            "So400m": 4304,
-            "H": 5120,
-            "g": 6144,
-            "g-opt": 6144,
-            "G": 8192,
-            "G-opt": 8192,
-            "e": 15360,
-        }[v],
-        "num_heads": {
-            "mu": 2,
-            "Ti": 3,
-            "S": 6,
-            "M": 8,
-            "B": 12,
-            "L": 16,
-            "So400m": 16,
-            "H": 16,
-            "g": 16,
-            "g-opt": 16,
-            "G": 16,
-            "G-opt": 16,
-            "e": 16,
-        }[v],
-        # pylint:enable=line-too-long
-        **patch,
-    }
+            x = nn.Dense(
+                features=self.num_classes,
+                name="head",
+                kernel_init=nn.initializers.zeros,
+                bias_init=nn.initializers.constant(self.head_bias_init),
+            )(x)
+        return x

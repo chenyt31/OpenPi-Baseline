@@ -1,6 +1,5 @@
 from functools import partial
 import logging
-import tqdm
 
 from flax.training import common_utils
 from flax.training import train_state
@@ -9,17 +8,17 @@ from jax.experimental import mesh_utils
 from jax.experimental import multihost_utils
 import jax.numpy as jnp
 import optax
-import tyro
+import tqdm
 
 import openpi.base.array_typing as at
 import openpi.models.common as _common
 import openpi.models.model as _model
 import openpi.models.pi0 as pi0
-import openpi.training.utils as training_utils
-import openpi.training.data_loader as _data_loader
-import openpi.training.optimizer as _optimizer
 import openpi.training.checkpoints as _checkpoints
 import openpi.training.config as _config
+import openpi.training.data_loader as _data_loader
+import openpi.training.optimizer as _optimizer
+import openpi.training.utils as training_utils
 
 
 def init_logging() -> None:

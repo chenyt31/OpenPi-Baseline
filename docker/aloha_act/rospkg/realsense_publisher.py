@@ -147,6 +147,8 @@ while not rospy.is_shutdown():
             break
 
         color_frame = np.array(frameset.get_color_frame().get_data())
+        # Conver to RGB
+        color_frame = color_frame[..., ::-1]
         # depth_frame = np.array(frameset.get_depth_frame().get_data())
         
         rgb_imgs.append(color_frame)

@@ -55,13 +55,13 @@ class Policy(BasePolicy):
         #     else:
         #         print(f"  {key}: {type(value)}")
 
-        # with open(self._csv_saver_path + '/obs.jsonl', 'a') as f:
-        #    f.write(json.dumps({k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in obs.items() if len(v.shape) < 3}) + '\n')
+        with open(self._csv_saver_path + '/obs.jsonl', 'a') as f:
+           f.write(json.dumps({k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in obs.items() if len(v.shape) < 3}) + '\n')
 
         # # Save images from observation
-        # for i, image in enumerate(obs['image']):
-        #     # Convert from C,H,W to W,H,C format
-        #     PIL.Image.fromarray((np.transpose(image, (1, 2, 0)) * 255).astype(np.uint8)[:, :, ::-1]).save(os.path.join(self._csv_saver_path, f'image_{self._calls}_{i}.png'))
+        for i, image in enumerate(obs['image']):
+            # Convert from C,H,W to W,H,C format
+            PIL.Image.fromarray(np.transpose(image, (1, 2, 0))).save(os.path.join(self._csv_saver_path, f'image_{self._calls}_{i}.png'))
 
             
         inputs = _make_batch(obs)
@@ -81,8 +81,8 @@ class Policy(BasePolicy):
 
         outputs = self._output_transform(outputs)
 
-        # with open(self._csv_saver_path + '/actions.jsonl', 'a') as f:
-        #     f.write(json.dumps({k: v.tolist() for k, v in outputs.items()}) + '\n')
+        with open(self._csv_saver_path + '/actions.jsonl', 'a') as f:
+            f.write(json.dumps({k: v.tolist() for k, v in outputs.items()}) + '\n')
 
         self._calls += 1
 

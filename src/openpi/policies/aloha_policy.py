@@ -286,6 +286,8 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
     # `images` have shape [..., cam_idx, channel, height, width].
     # Convert to uint8 RGB images [..., cam_idx, height, width, channel]
     images = jnp.rollaxis(images, -3, len(images.shape))
+    print(f"decoding images: {images.shape=}")
+    # images = images[..., ::-1] # convert bgr to rgb
     # images = (255 * images).astype(jnp.uint8)
     # Split into a dict with keys as camera names.
     image_splits = [jnp.squeeze(x, axis=-4) for x in jnp.split(images, num_cams, axis=-4)]

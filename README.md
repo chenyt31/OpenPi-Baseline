@@ -56,6 +56,7 @@ docker compose -f docker/aloha_act/compose_sim.yml up --build
 - Perform the ALOHA software installation ([part 1](https://github.com/tonyzhaozh/aloha?tab=readme-ov-file#software-installation---ros) and [part 2](https://github.com/tonyzhaozh/aloha?tab=readme-ov-file#software-installation---conda))
 - Clone [ACT](https://github.com/tonyzhaozh/act) and follow its installation instructions [here](https://github.com/tonyzhaozh/act?tab=readme-ov-file#installation).
 - **Temporary**: Modify your ACT code to incorporate the changes in [this fork](https://github.com/jimmyt857/act). [Diff viewer](https://github.com/tonyzhaozh/act/compare/main...jimmyt857:main).
+- **Update**: All ACT changes should be applied to the [private fork](https://github.com/Physical-Intelligence/act). We'll figure out how to manage this better when we open source this repo.
 - Install [UV](https://docs.astral.sh/uv/getting-started/installation/).
 
 Run ALOHA and ACT in separate terminals. Then, in another terminal, run the following from the cloned `openpi` directory:

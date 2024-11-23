@@ -238,7 +238,7 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
     # Convert to [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
     state = qpos[..., jnp.array([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 6, 13])] if reorder_dims else qpos
 
-    # images is [..., num_cams, channel, height, width] with values in [0, 1] of type float
+    # images is [..., num_cams, channel, height, width] of type uint8.
     # number of cameras (num_cams) depends on the environment.
     images = jnp.asarray(data["image"])
 
@@ -251,9 +251,11 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
         raise ValueError(f"Expected 1 or 4 cameras, got {num_cams}")
 
     # `images` have shape [..., cam_idx, channel, height, width].
-    # Convert to uint8 RGB images [..., cam_idx, height, width, channel]
+    # Convert from [..., channel, height, width] to [..., height, width, channel].
     images = jnp.rollaxis(images, -3, len(images.shape))
-    images = (255 * images).astype(jnp.uint8)
+    # Convert to uint8 if using float images.
+    if np.issubdtype(images.dtype, jnp.floating):
+        images = (255 * images).astype(jnp.uint8)
     # Split into a dict with keys as camera names.
     image_splits = [jnp.squeeze(x, axis=-4) for x in jnp.split(images, num_cams, axis=-4)]
     images_dict = dict(zip(cam_names, image_splits, strict=True))

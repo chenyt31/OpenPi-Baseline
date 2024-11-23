@@ -49,11 +49,11 @@ class ImageRecorder:
             f"{cam_name}_rgb_image",
             self.bridge.imgmsg_to_cv2(data.images[0], desired_encoding="bgr8"),
         )
-        setattr(
-            self,
-            f"{cam_name}_depth_image",
-            self.bridge.imgmsg_to_cv2(data.images[1], desired_encoding="mono16"),
-        )
+        # setattr(
+        #     self,
+        #     f"{cam_name}_depth_image",
+        #     self.bridge.imgmsg_to_cv2(data.images[1], desired_encoding="mono16"),
+        # )
         setattr(
             self,
             f"{cam_name}_timestamp",

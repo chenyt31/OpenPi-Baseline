@@ -22,5 +22,6 @@ ENV UV_PROJECT_ENVIRONMENT=/.venv
 # Sync the project into a new environment, using the frozen lockfile.
 RUN uv venv --python 3.11.9 $UV_PROJECT_ENVIRONMENT
 RUN uv sync --frozen --no-install-project --no-dev
+RUN uv pip install opencv-python Pillow
 
 CMD ["uv", "run", "src/openpi/serving/http_policy_server_pi0.py"]

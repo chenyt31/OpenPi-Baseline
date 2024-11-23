@@ -1,4 +1,5 @@
 import pickle
+import time
 
 import requests
 from typing_extensions import override
@@ -17,8 +18,14 @@ class HttpClientPolicy(_policy.Policy):
 
     @override
     def infer(self, obs: dict) -> dict:
+        t_start = time.time()
+        print(f"Sending obs to {self._uri}")
         response = requests.post(f"{self._uri}/infer", data=pickle.dumps(obs))
         if response.status_code != 200:
             raise Exception(response.text)
+        print(f"Time to get response: {time.time() - t_start}")
 
-        return pickle.loads(response.content)
+        t_start = time.time()
+        content = pickle.loads(response.content)
+        print(f"Time deserializing: {time.time() - t_start}")
+        return content

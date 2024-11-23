@@ -64,10 +64,20 @@ class HttpPolicyServer:
         return Handler(*args, **kwargs)
 
     def _infer(self, handler: http.server.BaseHTTPRequestHandler) -> bytes:
+        import time
+        print("Infer called")
+        start_time = time.time()
         content_length = int(handler.headers["Content-Length"])
         data = handler.rfile.read(content_length)
         obs = pickle.loads(data)
+        print(f"Time to deserialize: {time.time() - start_time}")
+
+        # print(f'Obs: {obs}')
 
         action = self._policy.infer(obs)
+        print(f"Time to get action: {time.time() - start_time}")
+        # print(f'Action: {action}')
 
-        return pickle.dumps(action)
+        action_bytes = pickle.dumps(action)
+        print(f"Time to serialize: {time.time() - start_time}")
+        return action_bytes

@@ -191,11 +191,28 @@ class AlohaInputs(transforms.DataTransformFn):
         }
         for dest, source in extra_images.items():
             if source in data:
+                print(f"source: {data[source].shape}")
+                # images[dest] = data[source][..., ::-1]
                 images[dest] = data[source]
                 image_masks[dest] = jnp.ones(batch_size, dtype=jnp.bool_)
             else:
                 images[dest] = jnp.zeros_like(base_image)
                 image_masks[dest] = jnp.zeros(batch_size, dtype=jnp.bool_)
+
+        # Update the signs to match monopi
+        data["state"] = np.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1]) * data["state"]
+
+        # Scale grippers to [0, 1]
+        # PUPPET_GRIPPER_JOINT_OPEN = 1.4910
+        # PUPPET_GRIPPER_JOINT_CLOSE = -0.6213
+        # PUPPET_GRIPPER_POSITION_OPEN = 0.05800
+        # PUPPET_GRIPPER_POSITION_CLOSE = 0.01844
+        OPEN = 1.0
+        CLOSE = 0.6 # TODO figure out what this is actually suspposed because 0.5 doesn't work well
+        data["state"] = data["state"].at[..., 6].set(jnp.clip((data["state"][..., 6] - CLOSE) / (OPEN - CLOSE), 0, 1))
+        data["state"] = data["state"].at[..., 13].set(jnp.clip((data["state"][..., 13] - CLOSE) / (OPEN - CLOSE), 0, 1))
+        print("obs", data["state"][..., 6], data["state"][..., 13])
+
 
         inputs = {
             "image": images,
@@ -220,9 +237,25 @@ class AlohaOutputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         if self._delta_actions:  # noqa: SIM108
             # Convert from delta to absolute actions.
-            actions = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
+            actions = data["actions"].at[..., :6].set(jnp.expand_dims(data["state"], axis=-2)[..., :6] + data["actions"][..., :6])
+            actions = actions.at[..., 7:13].set(jnp.expand_dims(data["state"], axis=-2)[..., 7:13] + data["actions"][..., 7:13])
         else:
             actions = data["actions"]
+
+        # Update the signs to match monopi
+        actions = actions.at[..., :14].set(jnp.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1]) * actions[..., :14])
+
+        # Scale grippers to their original range.
+        # PUPPET_GRIPPER_JOINT_OPEN = 1.4910
+        # PUPPET_GRIPPER_JOINT_CLOSE = -0.6213
+        # PUPPET_GRIPPER_POSITION_OPEN = 0.05800
+        # PUPPET_GRIPPER_POSITION_CLOSE = 0.01844
+        OPEN = 1.0
+        CLOSE = 0.5
+        actions = actions.at[..., 6].set(actions[..., 6] * (OPEN - CLOSE) + CLOSE)
+        actions = actions.at[..., 13].set(actions[..., 13] * (OPEN - CLOSE) + CLOSE)
+        print("actions", actions[..., 6], actions[..., 13])
+
         # Only return the first 14 dims.
         return {"qpos": _encode_aloha(actions[..., :14], reorder_dims=self._reorder_dims)}
 
@@ -253,7 +286,7 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
     # `images` have shape [..., cam_idx, channel, height, width].
     # Convert to uint8 RGB images [..., cam_idx, height, width, channel]
     images = jnp.rollaxis(images, -3, len(images.shape))
-    images = (255 * images).astype(jnp.uint8)
+    # images = (255 * images).astype(jnp.uint8)
     # Split into a dict with keys as camera names.
     image_splits = [jnp.squeeze(x, axis=-4) for x in jnp.split(images, num_cams, axis=-4)]
     images_dict = dict(zip(cam_names, image_splits, strict=True))

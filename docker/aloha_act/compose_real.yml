@@ -61,6 +61,7 @@ services:
     privileged: true
     volumes:
       - /dev:/dev
+      - ./data:/data
     command:
       - /bin/bash
       - -c
@@ -70,6 +71,9 @@ services:
         sed -i 's/CAM_LEFT_WRIST_SERIAL/218622277019/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
         sed -i 's/CAM_RIGHT_WRIST_SERIAL/218622277645/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
         roslaunch --wait aloha ros_nodes.launch
+      # - tail
+      # - -f
+      # - /dev/null
 
   ros_master:
     image: ros:noetic-robot
@@ -88,6 +92,7 @@ services:
     network_mode: host
     volumes:
       - $PWD:/app
+      - ./data:/data
 
     # Comment out this block if not running on a machine with GPUs.
     deploy:

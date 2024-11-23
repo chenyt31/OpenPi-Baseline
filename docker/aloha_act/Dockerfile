@@ -45,7 +45,7 @@ ENV PATH=$CONDA_DIR/bin:$PATH
 
 COPY ./third_party/act/conda_env.yaml /root/act/conda_env.yaml
 RUN conda env create -n aloha -f /root/act/conda_env.yaml python=3.8.10
-RUN source /opt/conda/bin/activate aloha && conda install -y mkl==2024.0 && pip install modern_robotics pyrealsense2
+RUN source /opt/conda/bin/activate aloha && conda install -y mkl==2024.0 && pip install modern_robotics==1.1.1 pyrealsense2==2.54.2.5684 Pillow
 
 COPY ./third_party/act /root/act
 
@@ -61,6 +61,10 @@ source /opt/ros/noetic/setup.sh && source /root/interbotix_ws/devel/setup.sh && 
 EOF
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENV MUJOCO_GL=egl
+
+COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/interbotix_xsarm_control/config/vx300s.yaml
+COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/interbotix_xsarm_control/config/aloha_vx300s.yaml  
+COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/examples/interbotix_xsarm_moveit_interface/config/vx300s.yaml
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/bin/bash"]

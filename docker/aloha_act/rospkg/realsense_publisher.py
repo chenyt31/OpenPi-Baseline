@@ -8,13 +8,13 @@ import time
 import numpy as np
 
 TIMEOUT_MS = 100
-FPS = 30 #30
+FPS = 60 #30
 
 cv_bridge = CvBridge()
 rospy.init_node('realsense_publisher')
 
 camera_names = ['cam_left_wrist', 'cam_high', 'cam_low', 'cam_right_wrist']
-camera_sns = ['130322270931', '128422272318', '218722271368', '130322271696'] #'218622270083', '127122270166']
+camera_sns = ['130322271036', '218722270088', '130322272196', '218622270083'] #'218622270083', '127122270166']
 cam_dict = dict(zip(camera_sns,camera_names))
 mean_intensity_set_point_config = { # NOTE these numbers are specific to your lighting setup
     'cam_left_wrist': 500,

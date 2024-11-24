@@ -48,41 +48,48 @@ class Policy(BasePolicy):
         print(f'{self._calls=}')
 
         # Print the observation structure
-        # print("Observation structure:")
-        # for key, value in obs.items():
-        #     if isinstance(value, np.ndarray):
-        #         print(f"  {key}: shape={value.shape}, dtype={value.dtype}")
-        #     else:
-        #         print(f"  {key}: {type(value)}")
+        print("Observation structure:")
+        for key, value in obs.items():
+            if isinstance(value, np.ndarray):
+                print(f"  {key}: shape={value.shape}, dtype={value.dtype}")
+            else:
+                print(f"  {key}: {type(value)}")
 
-        # with open(self._csv_saver_path + '/obs.jsonl', 'a') as f:
-        #    f.write(json.dumps({k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in obs.items() if len(v.shape) < 3}) + '\n')
+        with open(self._csv_saver_path + '/obs.jsonl', 'a') as f:
+           f.write(json.dumps({k: v.tolist() if isinstance(v, np.ndarray) else v for k, v in obs.items() if len(v.shape) < 3}) + '\n')
 
-        # # Save images from observation
+        # normalize the images in obs['image'] to [0, 1]
+        # obs['image'] = obs['image'] / 255.0
+
+        # Save images from observation
         # for i, image in enumerate(obs['image']):
+        #     print("max pixel value:", np.max(image))
+        #     print("min pixel value:", np.min(image))
         #     # Convert from C,H,W to W,H,C format
+        #     # PIL.Image.fromarray((np.transpose(image, (1, 2, 0))).astype(np.uint8)[:, :, ::-1]).save(os.path.join(self._csv_saver_path, f'image_{self._calls}_{i}.png'))
         #     PIL.Image.fromarray((np.transpose(image, (1, 2, 0)) * 255).astype(np.uint8)[:, :, ::-1]).save(os.path.join(self._csv_saver_path, f'image_{self._calls}_{i}.png'))
 
-            
+
         inputs = _make_batch(obs)
         inputs = self._input_transform(inputs)
 
         self._rng, sample_rng = jax.random.split(self._rng)
         obs_obj = common.Observation.from_dict(inputs)
 
-        # with open(self._csv_saver_path + '/obs_obj.jsonl', 'a') as f:
-        #     f.write(json.dumps({"state": obs_obj.state.tolist(), "image_masks": json.dumps({k: v.tolist() for k, v in obs_obj.image_masks.items()}), "tokenized_prompt": obs_obj.tokenized_prompt.tolist(), "tokenized_prompt_mask": obs_obj.tokenized_prompt_mask.tolist()}) + '\n')
+        with open(self._csv_saver_path + '/obs_obj.jsonl', 'a') as f:
+            f.write(json.dumps({"state": obs_obj.state.tolist(), "image_masks": json.dumps({k: v.tolist() for k, v in obs_obj.image_masks.items()}), "tokenized_prompt": obs_obj.tokenized_prompt.tolist(), "tokenized_prompt_mask": obs_obj.tokenized_prompt_mask.tolist()}) + '\n')
+            
         outputs = {
             "state": inputs["state"],
             "actions": self._model.sample_actions(sample_rng, obs_obj),
         }
-        # with open(self._csv_saver_path + '/actions_raw.jsonl', 'a') as f:
-        #     f.write(json.dumps({"actions": outputs["actions"].tolist()}) + '\n')
+        with open(self._csv_saver_path + '/actions_raw.jsonl', 'a') as f:
+            f.write(json.dumps({"actions": outputs["actions"].tolist()}) + '\n')
 
         outputs = self._output_transform(outputs)
 
-        # with open(self._csv_saver_path + '/actions.jsonl', 'a') as f:
-        #     f.write(json.dumps({k: v.tolist() for k, v in outputs.items()}) + '\n')
+        with open(self._csv_saver_path + '/actions.jsonl', 'a') as f:
+            f.write(json.dumps({k: v.tolist() for k, v in outputs.items()}) + '\n')
 
         self._calls += 1
 

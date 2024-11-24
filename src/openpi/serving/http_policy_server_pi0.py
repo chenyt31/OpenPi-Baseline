@@ -38,7 +38,7 @@ def create_model(mode: Mode) -> tuple[_model.BaseModel, dict]:
 def main(
     port: int = 8000,
     *,
-    record: bool = False,
+    record: bool = True,
     mode: Mode = Mode.REF,
     default_prompt: str = "toast_out_of_toaster",
 ) -> None:

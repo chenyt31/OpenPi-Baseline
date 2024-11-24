@@ -175,6 +175,8 @@ class AlohaInputs(transforms.DataTransformFn):
 
         # Assume that base image always exists.
         base_image = data["cam_high"]
+        # base_image is bgr so we need to convert to rgb
+        # base_image = base_image[..., ::-1]
         batch_size = base_image.shape[:-3]
 
         images = {

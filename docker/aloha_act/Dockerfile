@@ -62,9 +62,5 @@ EOF
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENV MUJOCO_GL=egl
 
-COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/interbotix_xsarm_control/config/vx300s.yaml
-COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/interbotix_xsarm_control/config/aloha_vx300s.yaml  
-COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/examples/interbotix_xsarm_moveit_interface/config/vx300s.yaml
-
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/bin/bash"]

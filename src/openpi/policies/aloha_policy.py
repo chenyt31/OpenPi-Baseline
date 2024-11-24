@@ -169,6 +169,9 @@ class AlohaInputs(transforms.DataTransformFn):
         self._action_dim = action_dim
         self._reorder_dims = reorder_dims
         self._delta_actions = delta_actions
+        # Range closed, open
+        self.left_gripper_range = (0.48, 1.22)
+        self.right_gripper_range = (0.23, 1.36)
 
     def __call__(self, data: dict) -> dict:
         data = _decode_aloha(data, reorder_dims=self._reorder_dims)
@@ -207,10 +210,10 @@ class AlohaInputs(transforms.DataTransformFn):
         # PUPPET_GRIPPER_JOINT_CLOSE = -0.6213
         # PUPPET_GRIPPER_POSITION_OPEN = 0.05800
         # PUPPET_GRIPPER_POSITION_CLOSE = 0.01844
-        OPEN = 1.0
-        CLOSE = 0.6 # TODO figure out what this is actually suspposed because 0.5 doesn't work well
-        data["state"] = data["state"].at[..., 6].set(jnp.clip((data["state"][..., 6] - CLOSE) / (OPEN - CLOSE), 0, 1))
-        data["state"] = data["state"].at[..., 13].set(jnp.clip((data["state"][..., 13] - CLOSE) / (OPEN - CLOSE), 0, 1))
+        # OPEN = 1.0
+        # CLOSE = 0.6 # TODO figure out what this is actually suspposed because 0.5 doesn't work well
+        data["state"] = data["state"].at[..., 6].set(jnp.clip((data["state"][..., 6] - self.left_gripper_range[0]) / (self.left_gripper_range[1] - self.left_gripper_range[0]), 0, 1))
+        data["state"] = data["state"].at[..., 13].set(jnp.clip((data["state"][..., 13] - self.right_gripper_range[0]) / (self.right_gripper_range[1] - self.right_gripper_range[0]), 0, 1))
         print("obs", data["state"][..., 6], data["state"][..., 13])
 
 
@@ -233,6 +236,8 @@ class AlohaOutputs(transforms.DataTransformFn):
     def __init__(self, *, reorder_dims: bool = False, delta_actions: bool = False):
         self._reorder_dims = reorder_dims
         self._delta_actions = delta_actions
+        self.left_gripper_range = (0.48, 1.22)
+        self.right_gripper_range = (0.23, 1.36)
 
     def __call__(self, data: dict) -> dict:
         if self._delta_actions:  # noqa: SIM108
@@ -250,10 +255,10 @@ class AlohaOutputs(transforms.DataTransformFn):
         # PUPPET_GRIPPER_JOINT_CLOSE = -0.6213
         # PUPPET_GRIPPER_POSITION_OPEN = 0.05800
         # PUPPET_GRIPPER_POSITION_CLOSE = 0.01844
-        OPEN = 1.0
-        CLOSE = 0.5
-        actions = actions.at[..., 6].set(actions[..., 6] * (OPEN - CLOSE) + CLOSE)
-        actions = actions.at[..., 13].set(actions[..., 13] * (OPEN - CLOSE) + CLOSE)
+        # OPEN = 1.0
+        # CLOSE = 0.5
+        actions = actions.at[..., 6].set(actions[..., 6] * (self.left_gripper_range[1] - self.left_gripper_range[0]) + self.left_gripper_range[0])
+        actions = actions.at[..., 13].set(actions[..., 13] * (self.right_gripper_range[1] - self.right_gripper_range[0]) + self.right_gripper_range[0])
         print("actions", actions[..., 6], actions[..., 13])
 
         # Only return the first 14 dims.

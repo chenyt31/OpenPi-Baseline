@@ -5,7 +5,7 @@ from flax import struct
 import flax.linen as nn
 import numpy as np
 
-from openpi.base import array_typing as at
+from openpi.shared import array_typing as at
 
 
 @at.typecheck

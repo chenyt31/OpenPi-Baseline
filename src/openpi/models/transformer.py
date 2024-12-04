@@ -10,7 +10,7 @@ from flax.linen import dtypes
 import jax.ad_checkpoint
 import jax.numpy as jnp
 
-import openpi.base.array_typing as at
+import openpi.shared.array_typing as at
 
 logger = logging.getLogger(__name__)
 

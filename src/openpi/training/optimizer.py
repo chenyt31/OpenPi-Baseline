@@ -3,7 +3,7 @@ from typing import Protocol
 import jax
 import optax
 
-import openpi.base.array_typing as at
+import openpi.shared.array_typing as at
 
 
 class ScheduleFactory(Protocol):

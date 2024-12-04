@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-from openpi.base import image_tools
+from openpi.shared import image_tools
 
 
 def test_resize_with_pad_shapes():

@@ -39,7 +39,7 @@ import flax.traverse_util as traverse_util
 import jax
 import jax.numpy as jnp
 
-import openpi.base.array_typing as at
+import openpi.shared.array_typing as at
 
 PALIGEMMA_VOCAB_SIZE = 257_152
 

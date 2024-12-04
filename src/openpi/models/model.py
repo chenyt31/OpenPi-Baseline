@@ -11,9 +11,9 @@ import jax.numpy as jnp
 import orbax.checkpoint as ocp
 from typing_extensions import override
 
-from openpi.base import image_tools
-import openpi.base.array_typing as at
 from openpi.models import common
+from openpi.shared import image_tools
+import openpi.shared.array_typing as at
 
 logger = logging.getLogger("openpi")
 

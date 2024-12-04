@@ -6,9 +6,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from openpi.base import array_typing as at
-from openpi.base import normalize as _normalize
 from openpi.models import tokenizer as _tokenizer
+from openpi.shared import array_typing as at
+from openpi.shared import normalize as _normalize
 
 Batch: TypeAlias = dict[str, Any]
 NormStats: TypeAlias = _normalize.NormStats

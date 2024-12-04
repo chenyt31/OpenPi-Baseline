@@ -1,12 +1,12 @@
-import jax
-import jax.numpy as jnp
-import openpi.base.array_typing as at
-import openpi.models.model as _model
-import openpi.models.common as _common
+from collections.abc import Iterator
 from functools import partial
 
-from flax.training import common_utils
-from typing import Iterator
+import jax
+import jax.numpy as jnp
+
+import openpi.models.common as _common
+import openpi.models.model as _model
+import openpi.shared.array_typing as at
 
 
 def fake_init_data_loader(

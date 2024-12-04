@@ -5,10 +5,10 @@ import jax.numpy as jnp
 import ml_collections
 from typing_extensions import override
 
-from openpi.base import array_typing as at
 from openpi.models import common
 import openpi.models.transformer as _transformer
 import openpi.models.vit as _vit
+from openpi.shared import array_typing as at
 
 
 @at.typecheck

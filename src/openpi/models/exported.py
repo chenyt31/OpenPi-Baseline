@@ -9,11 +9,11 @@ import jax.numpy as jnp
 import orbax.checkpoint as ocp
 from typing_extensions import override
 
-from openpi.base import image_tools
-from openpi.base import normalize as _normalize
-import openpi.base.array_typing as at
 from openpi.models import common
 from openpi.models import model as _model
+from openpi.shared import image_tools
+from openpi.shared import normalize as _normalize
+import openpi.shared.array_typing as at
 
 # TODO(ury): Remove before open sourcing and consider replacing with an official export API.
 

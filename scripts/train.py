@@ -10,10 +10,10 @@ import jax.numpy as jnp
 import optax
 import tqdm
 
-import openpi.base.array_typing as at
 import openpi.models.common as _common
 import openpi.models.model as _model
 import openpi.models.pi0 as pi0
+import openpi.shared.array_typing as at
 import openpi.training.checkpoints as _checkpoints
 import openpi.training.config as _config
 import openpi.training.data_loader as _data_loader

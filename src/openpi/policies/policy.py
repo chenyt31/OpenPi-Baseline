@@ -2,7 +2,6 @@ import abc
 from collections.abc import Sequence
 import logging
 import pathlib
-from typing import Any, TypeAlias
 
 import flax
 import flax.traverse_util
@@ -11,9 +10,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from openpi import transforms as _transforms
-from openpi.base import array_typing as at
 from openpi.models import common
 from openpi.models import model as _model
+from openpi.shared import array_typing as at
 
 
 class BasePolicy(abc.ABC):

@@ -31,9 +31,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && export TZ='America/Los_Angeles' && 
 
 COPY ./third_party/aloha /root/interbotix_ws/src/aloha
 COPY ./docker/aloha_act/arm.py /root/interbotix_ws/src/interbotix_ros_toolboxes/interbotix_xs_toolbox/interbotix_xs_modules/src/interbotix_xs_modules/arm.py
-COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/interbotix_xsarm_control/config/vx300s.yaml
-COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/interbotix_xsarm_control/config/aloha_vx300s.yaml  
-COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/examples/interbotix_xsarm_moveit_interface/config/vx300s.yaml
 RUN cd /root/interbotix_ws && source /opt/ros/noetic/setup.sh && source /root/interbotix_ws/devel/setup.sh && catkin_make
 
 # Install miniconda

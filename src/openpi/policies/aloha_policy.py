@@ -169,6 +169,9 @@ class AlohaInputs(transforms.DataTransformFn):
         self._action_dim = action_dim
         self._reorder_dims = reorder_dims
         self._delta_actions = delta_actions
+        # Range closed, open
+        self.left_gripper_range = (0.48, 1.22)
+        self.right_gripper_range = (0.23, 1.36)
 
     def __call__(self, data: dict) -> dict:
         data = _decode_aloha(data, reorder_dims=self._reorder_dims)
@@ -197,6 +200,9 @@ class AlohaInputs(transforms.DataTransformFn):
                 images[dest] = jnp.zeros_like(base_image)
                 image_masks[dest] = jnp.zeros(batch_size, dtype=jnp.bool_)
 
+        # Update the signs to match monopi
+        data["state"] = np.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1]) * data["state"]
+
         inputs = {
             "image": images,
             "image_mask": image_masks,
@@ -216,15 +222,72 @@ class AlohaOutputs(transforms.DataTransformFn):
     def __init__(self, *, reorder_dims: bool = False, delta_actions: bool = False):
         self._reorder_dims = reorder_dims
         self._delta_actions = delta_actions
+        self.left_gripper_range = (0.48, 1.22)
+        self.right_gripper_range = (0.23, 1.36)
 
     def __call__(self, data: dict) -> dict:
-        if self._delta_actions:  # noqa: SIM108
+        if self._delta_actions:
             # Convert from delta to absolute actions.
-            actions = jnp.expand_dims(data["state"], axis=-2) + data["actions"]
+            actions = (
+                data["actions"]
+                .at[..., :6]
+                .set(jnp.expand_dims(data["state"], axis=-2)[..., :6] + data["actions"][..., :6])
+            )
+            actions = actions.at[..., 7:13].set(
+                jnp.expand_dims(data["state"], axis=-2)[..., 7:13] + data["actions"][..., 7:13]
+            )
         else:
             actions = data["actions"]
+
+        # Update the signs to match monopi
+        actions = actions.at[..., :14].set(
+            jnp.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1]) * actions[..., :14]
+        )
+
         # Only return the first 14 dims.
         return {"qpos": _encode_aloha(actions[..., :14], reorder_dims=self._reorder_dims)}
+
+
+# Left finger position limits (qpos[7]), right_finger = -1 * left_finger
+PUPPET_GRIPPER_POSITION_OPEN = 0.05800
+PUPPET_GRIPPER_POSITION_CLOSE = 0.01844
+
+# Gripper joint limits (qpos[6])
+PUPPET_GRIPPER_JOINT_OPEN = 1.4910
+PUPPET_GRIPPER_JOINT_CLOSE = -0.6213
+
+PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN = (
+    lambda x: x * (PUPPET_GRIPPER_POSITION_OPEN - PUPPET_GRIPPER_POSITION_CLOSE) + PUPPET_GRIPPER_POSITION_CLOSE
+)
+PUPPET_GRIPPER_JOINT_NORMALIZE_FN = lambda x: (x - PUPPET_GRIPPER_JOINT_CLOSE) / (
+    PUPPET_GRIPPER_JOINT_OPEN - PUPPET_GRIPPER_JOINT_CLOSE
+)
+
+
+HORN_RADIUS = 0.022
+ARM_LENGTH = 0.036
+
+# def convert_linear_position_to_radian(linear_position, arm_length, horn_radius):
+#     half_dist = linear_position / 2.0
+#     result = jnp.pi / 2.0 - jnp.arccos(
+#         (horn_radius ** 2 + half_dist ** 2 - arm_length ** 2) / (2 * horn_radius * half_dist)
+#     )
+#     return result
+
+
+def convert_linear_position_to_radian(linear_position, arm_length, horn_radius):
+    return jnp.arcsin((-(arm_length**2) + horn_radius**2 + linear_position**2) / (2 * horn_radius * linear_position))
+
+
+def convert_angular_position_to_linear(angular_position, arm_length, horn_radius):
+    a1 = horn_radius * jnp.sin(angular_position)
+    c = jnp.sqrt(horn_radius**2 - a1**2)
+    a2 = jnp.sqrt(arm_length**2 - c**2)
+    return a1 + a2
+
+
+MAX_GRIPPER_JOINT_POS = convert_linear_position_to_radian(PUPPET_GRIPPER_POSITION_OPEN, ARM_LENGTH, HORN_RADIUS)
+MIN_GRIPPER_JOINT_POS = convert_linear_position_to_radian(PUPPET_GRIPPER_POSITION_CLOSE, ARM_LENGTH, HORN_RADIUS)
 
 
 def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
@@ -234,6 +297,24 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
     # 7-12: right arm joint angles
     # 13: right arm gripper
     qpos = jnp.asarray(data["qpos"])
+
+    # unnormalize the gripper position applied by aloha
+    qpos = qpos.at[..., 6].set(PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(qpos[..., 6]))
+    qpos = qpos.at[..., 13].set(PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(qpos[..., 13]))
+
+    # Convert gripper from linear to angular
+    qpos = qpos.at[..., 6].set(convert_linear_position_to_radian(qpos[..., 6], ARM_LENGTH, HORN_RADIUS))
+    qpos = qpos.at[..., 13].set(convert_linear_position_to_radian(qpos[..., 13], ARM_LENGTH, HORN_RADIUS))
+
+    # print("qpos after inversion", qpos[..., 6], qpos[..., 13])
+
+    # Get the observer's gripper position in the range [-1, 1]
+    max_gripper_qpos = 1.5
+    min_gripper_qpos = 0.4
+    # print("MAX/MIN GRIPPER JOINT POS", MAX_GRIPPER_JOINT_POS, MIN_GRIPPER_JOINT_POS)
+    gripper_qpos_normalize_fn = lambda x: (x - min_gripper_qpos) / (max_gripper_qpos - min_gripper_qpos)
+    qpos = qpos.at[..., 6].set(gripper_qpos_normalize_fn(qpos[..., 6]))
+    qpos = qpos.at[..., 13].set(gripper_qpos_normalize_fn(qpos[..., 13]))
 
     # Convert to [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
     state = qpos[..., jnp.array([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 6, 13])] if reorder_dims else qpos
@@ -265,4 +346,25 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
 
 def _encode_aloha(actions: jax.Array, *, reorder_dims: bool = False) -> jax.Array:
     # Convert to [left_arm_joint_angles, left_arm_gripper, right_arm_joint_angles, right_arm_gripper]
+    # TODO (michael): The following code assumes that the gripper position is in the range [0, 1]
+    # out model produces outputs that look more like 0-1.05 so we should normalize to account for this.
+    # We should verify if this is actually necessary.
+    model_output_max = 1.05
+    model_output_min = 0.0
+    gripper_qpos_normalize_fn = lambda x: (x - model_output_min) / (model_output_max - model_output_min)
+    actions = actions.at[..., 6].set(gripper_qpos_normalize_fn(actions[..., 6]))
+    actions = actions.at[..., 13].set(gripper_qpos_normalize_fn(actions[..., 13]))
+
+    # Denormalize the gripper position applied by the observer
+    # TODO (michael): THESE ARE MIN/MAX QPOS of the station. There may be some different station to station so we need to make these more easily configurable
+    max_gripper_pos = 1.5
+    min_gripper_pos = 0.4
+    gripper_qpos_unnormalize_fn = lambda x: x * (max_gripper_pos - min_gripper_pos) + min_gripper_pos
+    actions = actions.at[..., 6].set(gripper_qpos_unnormalize_fn(actions[..., 6]))
+    actions = actions.at[..., 13].set(gripper_qpos_unnormalize_fn(actions[..., 13]))
+
+    # normalize the gripper joint applied by aloha
+    actions = actions.at[..., 6].set(PUPPET_GRIPPER_JOINT_NORMALIZE_FN(actions[..., 6]))
+    actions = actions.at[..., 13].set(PUPPET_GRIPPER_JOINT_NORMALIZE_FN(actions[..., 13]))
+
     return actions[..., jnp.array([0, 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 10, 11, 13])] if reorder_dims else actions

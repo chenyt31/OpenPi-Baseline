@@ -40,7 +40,7 @@ def main(
     *,
     record: bool = False,
     mode: Mode = Mode.REF,
-    default_prompt: str = "pick up a cube",
+    default_prompt: str = "toast_out_of_toaster",
 ) -> None:
     logging.info("Loading model...")
     model, norm_stats = create_model(mode)

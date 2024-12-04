@@ -30,11 +30,10 @@ RUN chmod +x xsarm_amd64_install.sh
 RUN export DEBIAN_FRONTEND=noninteractive && export TZ='America/Los_Angeles' && ./xsarm_amd64_install.sh -d noetic -n
 
 COPY ./third_party/aloha /root/interbotix_ws/src/aloha
-RUN sed -i 's/<put your data dir here>/\/data/g' /root/interbotix_ws/src/aloha/aloha_scripts/constants.py
 COPY ./docker/aloha_act/arm.py /root/interbotix_ws/src/interbotix_ros_toolboxes/interbotix_xs_toolbox/interbotix_xs_modules/src/interbotix_xs_modules/arm.py
-COPY ./docker/aloha_act/rospkg/realsense_publisher.py /root/interbotix_ws/src/aloha/aloha_scripts/realsense_publisher.py
-COPY ./docker/aloha_act/rospkg/msg /root/interbotix_ws/src/aloha/msg
-COPY ./docker/aloha_act/rospkg/CMakeLists.txt /root/interbotix_ws/src/aloha/CMakeLists.txt
+COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/interbotix_xsarm_control/config/vx300s.yaml
+COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/interbotix_xsarm_control/config/aloha_vx300s.yaml  
+COPY ./vx300s.yaml /root/interbotix_ws/src/interbotix_ros_manipulators/interbotix_ros_xsarms/examples/interbotix_xsarm_moveit_interface/config/vx300s.yaml
 RUN cd /root/interbotix_ws && source /opt/ros/noetic/setup.sh && source /root/interbotix_ws/devel/setup.sh && catkin_make
 
 # Install miniconda
@@ -45,12 +44,10 @@ ENV PATH=$CONDA_DIR/bin:$PATH
 
 COPY ./third_party/act/conda_env.yaml /root/act/conda_env.yaml
 RUN conda env create -n aloha -f /root/act/conda_env.yaml python=3.8.10
-RUN source /opt/conda/bin/activate aloha && conda install -y mkl==2024.0 && pip install modern_robotics pyrealsense2
+RUN source /opt/conda/bin/activate aloha && conda install -y mkl==2024.0 && pip install modern_robotics==1.1.1 pyrealsense2==2.54.2.5684 Pillow
 
 COPY ./third_party/act /root/act
 
-COPY ./docker/aloha_act/rospkg/launch/ros_nodes.launch /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
-COPY ./docker/aloha_act/rospkg/robot_utils.py /root/interbotix_ws/src/aloha/aloha_scripts/robot_utils.py
 ENV PYTHONPATH=$PYTHONPATH:/root/interbotix_ws/src/aloha/aloha_scripts:/root/interbotix_ws/src/aloha:/root/act/detr
 WORKDIR /root/act
 

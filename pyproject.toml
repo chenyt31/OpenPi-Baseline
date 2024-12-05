@@ -25,6 +25,8 @@ dependencies = [
     "tqdm",
     "pillow>=11.0.0",
     "opencv-python>=4.10.0.84",
+    "gym-aloha>=0.1.1",
+    "imageio>=2.36.1",
 ]
 
 [project.urls]

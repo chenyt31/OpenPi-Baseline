@@ -1,4 +1,5 @@
 import pickle
+import time
 
 import requests
 from typing_extensions import override
@@ -14,6 +15,16 @@ class HttpClientPolicy(_policy.Policy):
 
     def __init__(self, host: str = "0.0.0.0", port: int = 8000) -> None:
         self._uri = f"http://{host}:{port}"
+        self._wait_for_server()
+
+    def _wait_for_server(self) -> None:
+        print(f"Waiting for server at {self._uri}...")
+        while True:
+            try:
+                return requests.head(self._uri)
+            except requests.exceptions.ConnectionError:
+                print("Still waiting for server...")
+                time.sleep(5)
 
     @override
     def infer(self, obs: dict) -> dict:

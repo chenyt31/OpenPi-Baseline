@@ -299,12 +299,12 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
     qpos = jnp.asarray(data["qpos"])
 
     # unnormalize the gripper position applied by aloha
-    qpos = qpos.at[..., 6].set(PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(qpos[..., 6]))
-    qpos = qpos.at[..., 13].set(PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(qpos[..., 13]))
+    # qpos = qpos.at[..., 6].set(PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(qpos[..., 6]))
+    # qpos = qpos.at[..., 13].set(PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(qpos[..., 13]))
 
     # Convert gripper from linear to angular
-    qpos = qpos.at[..., 6].set(convert_linear_position_to_radian(qpos[..., 6], ARM_LENGTH, HORN_RADIUS))
-    qpos = qpos.at[..., 13].set(convert_linear_position_to_radian(qpos[..., 13], ARM_LENGTH, HORN_RADIUS))
+    # qpos = qpos.at[..., 6].set(convert_linear_position_to_radian(qpos[..., 6], ARM_LENGTH, HORN_RADIUS))
+    # qpos = qpos.at[..., 13].set(convert_linear_position_to_radian(qpos[..., 13], ARM_LENGTH, HORN_RADIUS))
 
     # print("qpos after inversion", qpos[..., 6], qpos[..., 13])
 
@@ -357,14 +357,14 @@ def _encode_aloha(actions: jax.Array, *, reorder_dims: bool = False) -> jax.Arra
 
     # Denormalize the gripper position applied by the observer
     # TODO (michael): THESE ARE MIN/MAX QPOS of the station. There may be some different station to station so we need to make these more easily configurable
-    max_gripper_pos = 1.5
-    min_gripper_pos = 0.4
-    gripper_qpos_unnormalize_fn = lambda x: x * (max_gripper_pos - min_gripper_pos) + min_gripper_pos
-    actions = actions.at[..., 6].set(gripper_qpos_unnormalize_fn(actions[..., 6]))
-    actions = actions.at[..., 13].set(gripper_qpos_unnormalize_fn(actions[..., 13]))
+    # max_gripper_pos = 1.5
+    # min_gripper_pos = 0.4
+    # gripper_qpos_unnormalize_fn = lambda x: x * (max_gripper_pos - min_gripper_pos) + min_gripper_pos
+    # actions = actions.at[..., 6].set(gripper_qpos_unnormalize_fn(actions[..., 6]))
+    # actions = actions.at[..., 13].set(gripper_qpos_unnormalize_fn(actions[..., 13]))
 
     # normalize the gripper joint applied by aloha
-    actions = actions.at[..., 6].set(PUPPET_GRIPPER_JOINT_NORMALIZE_FN(actions[..., 6]))
-    actions = actions.at[..., 13].set(PUPPET_GRIPPER_JOINT_NORMALIZE_FN(actions[..., 13]))
+    # actions = actions.at[..., 6].set(PUPPET_GRIPPER_JOINT_NORMALIZE_FN(actions[..., 6]))
+    # actions = actions.at[..., 13].set(PUPPET_GRIPPER_JOINT_NORMALIZE_FN(actions[..., 13]))
 
     return actions[..., jnp.array([0, 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 10, 11, 13])] if reorder_dims else actions

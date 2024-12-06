@@ -132,7 +132,7 @@ class Model(BaseModel):
         loss_args = (obs, actions)
         return dataclasses.replace(
             self,
-            params=self.module.init(init_rng, *loss_args, method=self.module.compute_loss),
+            params=self.module.init(init_rng, *loss_args, method=self.module.compute_loss)["params"],
         )
 
     @at.typecheck
@@ -154,7 +154,9 @@ class Model(BaseModel):
         obs = preprocess_observation(preprocess_rng, observation, train=train)
         loss_args = (obs, actions)
 
-        return jnp.mean(self.module.apply(params, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss))
+        return jnp.mean(
+            self.module.apply({"params": params}, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss)
+        )
 
     @jax.jit
     @at.typecheck
@@ -174,7 +176,7 @@ class Model(BaseModel):
         sample_args = (self.action_horizon, self.action_dim, obs)
 
         actions, _ = self.module.apply(
-            self.params,
+            {"params": self.params},
             *sample_args,
             rngs={"sample": sample_rng},
             method=self.module.sample_actions,

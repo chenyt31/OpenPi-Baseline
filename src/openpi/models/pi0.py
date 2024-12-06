@@ -97,7 +97,7 @@ class Module(common.BaseModule):
         obs: common.Observation,
         *,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
-        num_steps: int = 10,
+        num_steps: int | at.Int[at.Array, ""] = 10,
     ) -> at.Float[at.Array, "b ah ad"]:
         dt = -1.0 / num_steps
         batch_size = obs.state.shape[0]

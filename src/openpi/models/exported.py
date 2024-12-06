@@ -53,7 +53,9 @@ class PiModel(_model.BaseModel):
 
     @jax.jit
     @override
-    def sample_actions(self, rng: at.KeyArrayLike, obs: common.Observation) -> at.Float[at.Array, "b ah ad"]:
+    def sample_actions(
+        self, rng: at.KeyArrayLike, obs: common.Observation, **sample_kwargs
+    ) -> at.Float[at.Array, "b ah ad"]:
         if obs.state.ndim == 2 and obs.state.shape[0] != 1:
             raise ValueError("Only batch_size=1 is supported.")
 
@@ -71,7 +73,7 @@ class PiModel(_model.BaseModel):
         example["image"] = {key: resize_if_needed(key, value) for key, value in example["image"].items()}
 
         rng_data = jax.random.key_data(rng)
-        result = self.exported.call(self.params, rng_data, example, {"num_steps": 10})
+        result = self.exported.call(self.params, rng_data, example, sample_kwargs)
 
         return _make_batch(result)["actions"]
 

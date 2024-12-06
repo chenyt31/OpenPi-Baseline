@@ -1,4 +1,3 @@
-import abc
 from collections.abc import Sequence
 import logging
 import pathlib
@@ -12,16 +11,11 @@ import numpy as np
 from openpi import transforms as _transforms
 from openpi.models import common
 from openpi.models import model as _model
+from openpi.policies import base_policy as _base_policy
 from openpi.shared import array_typing as at
 
 
-class BasePolicy(abc.ABC):
-    @abc.abstractmethod
-    def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
-        """Infer actions from observations."""
-
-
-class Policy(BasePolicy):
+class Policy(_base_policy.BasePolicy):
     def __init__(
         self,
         model: _model.BaseModel,
@@ -48,7 +42,7 @@ class Policy(BasePolicy):
         return _unbatch(jax.device_get(outputs))
 
 
-class ActionChunkBroker(BasePolicy):
+class ActionChunkBroker(_base_policy.BasePolicy):
     """Wraps a policy to return action chunks one-at-a-time.
 
     Assumes that the first dimension of all action fields is the chunk size.
@@ -57,7 +51,7 @@ class ActionChunkBroker(BasePolicy):
     list of chunks is exhausted.
     """
 
-    def __init__(self, policy: BasePolicy, action_horizon: int):
+    def __init__(self, policy: _base_policy.BasePolicy, action_horizon: int):
         self._policy = policy
 
         self._action_horizon = action_horizon
@@ -79,10 +73,10 @@ class ActionChunkBroker(BasePolicy):
         return results
 
 
-class PolicyRecorder(BasePolicy):
+class PolicyRecorder(_base_policy.BasePolicy):
     """Records the policy's behavior to disk."""
 
-    def __init__(self, policy: BasePolicy, record_dir: str):
+    def __init__(self, policy: _base_policy.BasePolicy, record_dir: str):
         self._policy = policy
 
         logging.info(f"Dumping policy records to: {record_dir}")

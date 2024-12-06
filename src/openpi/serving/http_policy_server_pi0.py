@@ -7,6 +7,7 @@ import tyro
 from openpi.models import exported as _exported
 from openpi.models import model as _model
 from openpi.policies import aloha_policy
+from openpi.policies import base_policy as _base_policy
 from openpi.policies import policy as _policy
 from openpi.serving import http_policy_server
 
@@ -46,7 +47,7 @@ def main(
     model, norm_stats = create_model(mode)
 
     logging.info("Creating policy...")
-    policy: _policy.BasePolicy = _policy.ActionChunkBroker(
+    policy: _base_policy.BasePolicy = _policy.ActionChunkBroker(
         aloha_policy.create_aloha_policy(model, norm_stats, default_prompt=default_prompt),
         # Only execute the first half of the chunk.
         action_horizon=model.action_horizon // 2,

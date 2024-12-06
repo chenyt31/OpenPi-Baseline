@@ -1,6 +1,6 @@
 from typing_extensions import override
 
-from openpi.policies import policy as _policy
+from openpi.policies import base_policy as _base_policy
 from openpi.runtime import agent as _agent
 
 
@@ -8,7 +8,7 @@ from openpi.runtime import agent as _agent
 class PolicyAgent(_agent.Agent):
     """An agent that uses a policy to determine actions."""
 
-    def __init__(self, policy: _policy.Policy) -> None:
+    def __init__(self, policy: _base_policy.BasePolicy) -> None:
         self._policy = policy
 
     @override

@@ -1,0 +1,19 @@
+# Requirements file used for examples with ROS1.
+# Note that ROS1 requires Python < 3.11.
+
+Pillow
+dm_control
+einops
+h5py
+matplotlib
+modern_robotics
+numpy
+opencv-python
+packaging
+pexpect
+pyquaternion
+pyrealsense2
+pyyaml
+requests
+rospkg
+tyro

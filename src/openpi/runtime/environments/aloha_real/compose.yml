@@ -1,0 +1,98 @@
+# Run with:
+# docker compose -f src/openpi/runtime/environments/aloha_real/compose.yml up --build
+services:
+  runtime:
+    image: aloha_real
+    depends_on:
+      - aloha_ros_nodes
+      - ros_master
+      - pi0_server
+    build:
+      context: ../../../..
+      dockerfile: src/openpi/runtime/environments/aloha_real/Dockerfile
+    init: true
+    tty: true
+    network_mode: host
+    privileged: true
+    volumes:
+      - .:/root/app
+    command:
+      - python
+      - imitate_episodes.py
+      - --task_name
+      - aloha_wear_shoe
+      - --ckpt_dir
+      - /ckpts
+      - --eval
+      - --policy_class
+      - PI
+      - --kl_weight
+      - "10"
+      - --chunk_size
+      - "100"
+      - --hidden_dim
+      - "512"
+      - --batch_size
+      - "8"
+      - --dim_feedforward
+      - "3200"
+      - --num_epochs
+      - "2000"
+      - --lr
+      - "1e-5"
+      - --seed
+      - "0"
+      - --render_height
+      - "224"
+      - --render_width
+      - "224"
+
+  aloha_ros_nodes:
+    image: aloha_real
+    depends_on:
+      - ros_master
+    build:
+      context: ../../../..
+      dockerfile: src/openpi/runtime/environments/aloha_real/Dockerfile
+    init: true
+    tty: true
+    network_mode: host
+    privileged: true
+    volumes:
+      - /dev:/dev
+    command:
+      - /bin/bash
+      - -c
+      - |
+        sed -i 's/CAM_HIGH_SERIAL/128422271950/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        sed -i 's/CAM_LOW_SERIAL/218622272463/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        sed -i 's/CAM_LEFT_WRIST_SERIAL/218622277019/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        sed -i 's/CAM_RIGHT_WRIST_SERIAL/218622277645/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        roslaunch --wait aloha ros_nodes.launch
+
+  ros_master:
+    image: ros:noetic-robot
+    network_mode: host
+    privileged: true
+    command:
+      - roscore
+
+  pi0_server:
+    image: pi0_server
+    build:
+      context: ../..
+      dockerfile: docker/pi0/Dockerfile
+    init: true
+    tty: true
+    network_mode: host
+    volumes:
+      - $PWD:/app
+
+    # Comment out this block if not running on a machine with GPUs.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

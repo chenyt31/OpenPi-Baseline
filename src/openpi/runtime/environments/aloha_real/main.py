@@ -26,7 +26,7 @@ def main(args: Args) -> None:
             )
         ),
         subscribers=[
-            _video_display.VideoDisplay(),
+            # _video_display.VideoDisplay(),
         ],
         max_hz=50,
     )

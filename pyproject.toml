@@ -15,7 +15,8 @@ dependencies = [
     "ipykernel>=6.29.5",
     "jax[cuda12]==0.4.34",
     "jaxtyping==0.2.34",
-    "numpy>=2.1.2",
+    # TODO: Upgrade to 2.1.2 once we have an alternative to pickle for data serialization.
+    "numpy==1.26.4",
     "orbax-checkpoint==0.7.0",
     "pytest>=8.3.3",
     "ruff>=0.7.1",

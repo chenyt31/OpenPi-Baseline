@@ -48,7 +48,7 @@ RUN mkdir /python && \
 COPY --from=ghcr.io/astral-sh/uv:0.5.6 /uv /bin/uv
 ENV UV_HTTP_TIMEOUT=120
 ENV UV_LINK_MODE=copy
-COPY ./requirements_ros1.txt /tmp/requirements.txt
+COPY ./src/openpi/runtime/environments/requirements_ros1.txt /tmp/requirements.txt
 RUN uv pip sync --python 3.10 --system /tmp/requirements.txt
 
 ENV PYTHONPATH=$PYTHONPATH:/root/interbotix_ws/src/aloha/aloha_scripts:/root/interbotix_ws/src/aloha:/root/app/src
@@ -62,4 +62,4 @@ EOF
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["python", "src/openpi/runtime/environments/aloha_real/main.py"]
+CMD ["python3", "/root/app/src/openpi/runtime/environments/aloha_real/main.py"]

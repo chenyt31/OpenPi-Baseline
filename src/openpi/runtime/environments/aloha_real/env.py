@@ -29,12 +29,15 @@ class AlohaRealEnvironment(_environment.Environment):
             raise RuntimeError("Timestep is not set. Call reset() first.")
 
         obs = self._ts.observation
+        for k in list(obs["images"].keys()):
+            if "_depth" in k:
+                del obs["images"][k]
 
         # TODO: Consider removing these transformations.
         return {
             "qpos": obs["qpos"],
             # Convert axis order from [H, W, C] --> [C, H, W], normalize to [0, 1], and stack to [N, C, H, W].
-            "image": np.stack([np.transpose(img, (2, 0, 1)) for img in obs["images"].values()], axis=0) / 255.0,
+            "image": np.stack([np.transpose(img, (2, 0, 1)) for img in obs["images"].values()], axis=0),
         }
 
     @override

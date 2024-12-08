@@ -4,10 +4,10 @@ import time
 import requests
 from typing_extensions import override
 
-from openpi.policies import policy as _policy
+from openpi.policies import base_policy as _base_policy
 
 
-class HttpClientPolicy(_policy.Policy):
+class HttpClientPolicy(_base_policy.BasePolicy):
     """Implements the Policy interface by communicating with a server over HTTP.
 
     See HttpPolicyServer for a corresponding server implementation.

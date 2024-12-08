@@ -4,7 +4,7 @@ import pickle
 import threading
 import traceback
 
-from openpi.policies import policy as _policy
+from openpi.policies import base_policy as _base_policy
 
 
 class HttpPolicyServer:
@@ -13,7 +13,7 @@ class HttpPolicyServer:
     See HttpClientPolicy for a corresponding client implementation.
     """
 
-    def __init__(self, policy: _policy.BasePolicy, host: str = "0.0.0.0", port: int = 8000) -> None:
+    def __init__(self, policy: _base_policy.BasePolicy, host: str = "0.0.0.0", port: int = 8000) -> None:
         self._policy = policy
         self._host = host
         self._port = port

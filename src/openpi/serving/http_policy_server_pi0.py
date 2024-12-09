@@ -12,44 +12,56 @@ from openpi.policies import policy as _policy
 from openpi.serving import http_policy_server
 
 
-class Mode(enum.Enum):
+class ModelMode(enum.Enum):
     LIVE = "live"
     REF = "ref"
     SIM = "sim"
 
 
-def create_model(mode: Mode) -> tuple[_model.BaseModel, dict]:
+def create_model(mode: ModelMode) -> tuple[_model.BaseModel, aloha_policy.PolicyConfig]:
     model: _model.BaseModel
+    config: aloha_policy.PolicyConfig
+
     match mode:
-        case Mode.LIVE:
+        case ModelMode.LIVE:
             model = aloha_policy.load_pi0_model()
-            norm_stats = aloha_policy.make_aloha_norm_stats()
-        case Mode.REF:
+            config = aloha_policy.PolicyConfig(
+                norm_stats=aloha_policy.make_aloha_norm_stats(),
+                delta_action_mask=aloha_policy.make_bool_mask(6, -1, 6, -1),
+            )
+        case ModelMode.REF:
             ckpt_path = epath.Path("checkpoints/pi0_real/model").resolve()
             model = _exported.PiModel.from_checkpoint(ckpt_path)
-            norm_stats = _exported.import_norm_stats(ckpt_path, "trossen_biarm_single_base_cam_24dim")
-        case Mode.SIM:
+            config = aloha_policy.PolicyConfig(
+                norm_stats=_exported.import_norm_stats(ckpt_path, "trossen_biarm_single_base_cam_24dim"),
+                delta_action_mask=aloha_policy.make_bool_mask(6, -1, 6, -1),
+            )
+        case ModelMode.SIM:
             ckpt_path = epath.Path("checkpoints/pi0_sim/model").resolve()
             model = _exported.PiModel.from_checkpoint(ckpt_path)
-            norm_stats = _exported.import_norm_stats(ckpt_path, "huggingface_aloha_sim_transfer_cube")
+            config = aloha_policy.PolicyConfig(
+                norm_stats=_exported.import_norm_stats(ckpt_path, "huggingface_aloha_sim_transfer_cube"),
+                # The model was fine-tuned on the original aloha data.
+                adapt_to_pi=False,
+            )
 
-    return model, norm_stats
+    return model, config
 
 
 def main(
     port: int = 8000,
     *,
     record: bool = False,
-    mode: Mode = Mode.REF,
-    default_prompt: str = "toast_out_of_toaster",
+    mode: ModelMode = ModelMode.SIM,
+    default_prompt: str = "transfer cube",
 ) -> None:
     logging.info("Loading model...")
-    model, norm_stats = create_model(mode)
+    model, config = create_model(mode)
+    config.default_prompt = default_prompt
 
     logging.info("Creating policy...")
     policy: _base_policy.BasePolicy = _policy.ActionChunkBroker(
-        aloha_policy.create_aloha_policy(model, norm_stats, default_prompt=default_prompt),
-        # Only execute the first half of the chunk.
+        aloha_policy.create_aloha_policy(model, config),
         action_horizon=model.action_horizon // 2,
     )
 

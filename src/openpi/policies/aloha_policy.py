@@ -1,3 +1,6 @@
+from collections.abc import Sequence
+import dataclasses
+import functools
 import pathlib
 
 import jax
@@ -16,22 +19,60 @@ def load_pi0_model() -> _model.Model:
     return _model.restore_params(model, pathlib.Path("checkpoints/pi0_base/model").absolute())
 
 
-def create_aloha_policy(
-    model: _model.BaseModel, norm_stats: dict[str, transforms.NormStats], *, default_prompt: str | None = None
-) -> _policy.Policy:
-    reorder_dims = False
-    delta_actions = True
+@dataclasses.dataclass
+class PolicyConfig:
+    norm_stats: dict[str, transforms.NormStats]
 
+    default_prompt: str | None = None
+    # Boolean mask for the action dimensions. If True, the action is a delta action.
+    delta_action_mask: Sequence[bool] | None = None
+    # If true, will adapt the joint and gripper values to match the pi runtime.
+    adapt_to_pi: bool = True
+
+
+def make_bool_mask(*dims: int) -> tuple[bool, ...]:
+    """Make a boolean mask for the given dimensions.
+
+    Example:
+        make_bool_mask(2, -2, 2) == (True, True, False, False, True, True)
+        make_bool_mask(2, 0, 2) == (True, True, True, True)
+
+    Args:
+        dims: The dimensions to make the mask for.
+
+    Returns:
+        A tuple of booleans.
+    """
+    result = []
+    for dim in dims:
+        if dim > 0:
+            result.extend([True] * (dim))
+        else:
+            result.extend([False] * (-dim))
+    return tuple(result)
+
+
+def create_aloha_policy(model: _model.BaseModel, config: PolicyConfig) -> _policy.Policy:
     return _policy.Policy(
         model,
         transforms=[
-            AlohaInputs(action_dim=model.action_dim, reorder_dims=reorder_dims, delta_actions=delta_actions),
-            transforms.Normalize(norm_stats),
-            transforms.TokenizePrompt(tokenizer.PaligemmaTokenizer(model.max_token_len), default_prompt=default_prompt),
+            AlohaInputs(
+                action_dim=model.action_dim,
+                delta_action_mask=config.delta_action_mask,
+                adapt_to_pi=config.adapt_to_pi,
+            ),
+            transforms.Normalize(config.norm_stats),
+            transforms.TokenizePrompt(
+                tokenizer.PaligemmaTokenizer(model.max_token_len),
+                default_prompt=config.default_prompt,
+            ),
         ],
         output_transforms=[
-            transforms.Unnormalize(norm_stats),
-            AlohaOutputs(reorder_dims=reorder_dims, delta_actions=delta_actions),
+            transforms.Unnormalize(config.norm_stats),
+            AlohaOutputs(
+                delta_action_mask=config.delta_action_mask,
+                adapt_to_pi=config.adapt_to_pi,
+            ),
         ],
     )
 
@@ -165,16 +206,16 @@ def make_aloha_norm_stats():
 
 
 class AlohaInputs(transforms.DataTransformFn):
-    def __init__(self, action_dim: int, *, reorder_dims: bool = False, delta_actions: bool = False):
+    def __init__(self, action_dim: int, *, delta_action_mask: Sequence[bool] | None = None, adapt_to_pi: bool = False):
         self._action_dim = action_dim
-        self._reorder_dims = reorder_dims
-        self._delta_actions = delta_actions
-        # Range closed, open
-        self.left_gripper_range = (0.48, 1.22)
-        self.right_gripper_range = (0.23, 1.36)
+        self._delta_action_mask = delta_action_mask
+        self._adapt_to_pi = adapt_to_pi
 
     def __call__(self, data: dict) -> dict:
-        data = _decode_aloha(data, reorder_dims=self._reorder_dims)
+        data = _decode_aloha(data, adapt_to_pi=self._adapt_to_pi)
+
+        # Get the state. We are padding from 14 to the model action dim.
+        state = transforms.pad_to_dim(data["state"], self._action_dim)
 
         # Assume that base image always exists.
         base_image = data["cam_high"]
@@ -200,13 +241,10 @@ class AlohaInputs(transforms.DataTransformFn):
                 images[dest] = jnp.zeros_like(base_image)
                 image_masks[dest] = jnp.zeros(batch_size, dtype=jnp.bool_)
 
-        # Update the signs to match monopi
-        data["state"] = np.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1]) * data["state"]
-
         inputs = {
             "image": images,
             "image_mask": image_masks,
-            "state": transforms.pad_to_dim(data["state"], self._action_dim),
+            "state": state,
         }
 
         # Actions are only available during training.
@@ -219,78 +257,60 @@ class AlohaInputs(transforms.DataTransformFn):
 
 
 class AlohaOutputs(transforms.DataTransformFn):
-    def __init__(self, *, reorder_dims: bool = False, delta_actions: bool = False):
-        self._reorder_dims = reorder_dims
-        self._delta_actions = delta_actions
-        self.left_gripper_range = (0.48, 1.22)
-        self.right_gripper_range = (0.23, 1.36)
+    def __init__(self, *, delta_action_mask: Sequence[bool] | None = None, adapt_to_pi: bool = False):
+        self._delta_action_mask = delta_action_mask
+        self._adapt_to_pi = adapt_to_pi
 
     def __call__(self, data: dict) -> dict:
-        if self._delta_actions:
-            # Convert from delta to absolute actions.
-            actions = (
-                data["actions"]
-                .at[..., :6]
-                .set(jnp.expand_dims(data["state"], axis=-2)[..., :6] + data["actions"][..., :6])
-            )
-            actions = actions.at[..., 7:13].set(
-                jnp.expand_dims(data["state"], axis=-2)[..., 7:13] + data["actions"][..., 7:13]
-            )
-        else:
-            actions = data["actions"]
+        # Only return the first 14 dims.
+        actions = jnp.asarray(data["actions"][..., :14])
 
-        # Update the signs to match monopi
-        actions = actions.at[..., :14].set(
-            jnp.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1]) * actions[..., :14]
+        # Apply the delta action mask.
+        if self._delta_action_mask is not None:
+            state = jnp.asarray(data["state"][..., :14])
+            mask = jnp.asarray(self._delta_action_mask[:14])
+            actions = actions + jnp.expand_dims(jnp.where(mask, state, 0), axis=-2)
+
+        return {"qpos": _encode_aloha(actions, adapt_to_pi=self._adapt_to_pi)}
+
+
+def joint_flip_mask() -> jax.Array:
+    """Used to convert between aloha and pi joint angles."""
+    return jnp.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1])
+
+
+def normalize(x, min_val, max_val):
+    return (x - min_val) / (max_val - min_val)
+
+
+def unnormalize(x, min_val, max_val):
+    return x * (max_val - min_val) + min_val
+
+
+def gripper_to_angular(value):
+    # Aloha transforms the gripper positions into a linear space. The following code
+    # reverses this transformation to be consistent with pi0 which is pretrained in
+    # angular space.
+    #
+    # These values are coming from the Aloha code:
+    # PUPPET_GRIPPER_POSITION_OPEN, PUPPET_GRIPPER_POSITION_CLOSED
+    value = unnormalize(value, min_val=0.01844, max_val=0.05800)
+
+    # This is the inverse of the angular to linear transformation inside the Interbotix code.
+    def linear_to_radian(linear_position, arm_length, horn_radius):
+        return jnp.arcsin(
+            (-(arm_length**2) + horn_radius**2 + linear_position**2) / (2 * horn_radius * linear_position)
         )
 
-        # Only return the first 14 dims.
-        return {"qpos": _encode_aloha(actions[..., :14], reorder_dims=self._reorder_dims)}
+    # The constants are taken from the Interbotix code.
+    value = linear_to_radian(value, arm_length=0.036, horn_radius=0.022)
+
+    # Normalize to [0, 1].
+    # The values 0.4 and 1.5 were measured on an actual Trossen robot.
+    return normalize(value, min_val=0.4, max_val=1.5)
 
 
-# Left finger position limits (qpos[7]), right_finger = -1 * left_finger
-PUPPET_GRIPPER_POSITION_OPEN = 0.05800
-PUPPET_GRIPPER_POSITION_CLOSE = 0.01844
-
-# Gripper joint limits (qpos[6])
-PUPPET_GRIPPER_JOINT_OPEN = 1.4910
-PUPPET_GRIPPER_JOINT_CLOSE = -0.6213
-
-PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN = (
-    lambda x: x * (PUPPET_GRIPPER_POSITION_OPEN - PUPPET_GRIPPER_POSITION_CLOSE) + PUPPET_GRIPPER_POSITION_CLOSE
-)
-PUPPET_GRIPPER_JOINT_NORMALIZE_FN = lambda x: (x - PUPPET_GRIPPER_JOINT_CLOSE) / (
-    PUPPET_GRIPPER_JOINT_OPEN - PUPPET_GRIPPER_JOINT_CLOSE
-)
-
-
-HORN_RADIUS = 0.022
-ARM_LENGTH = 0.036
-
-# def convert_linear_position_to_radian(linear_position, arm_length, horn_radius):
-#     half_dist = linear_position / 2.0
-#     result = jnp.pi / 2.0 - jnp.arccos(
-#         (horn_radius ** 2 + half_dist ** 2 - arm_length ** 2) / (2 * horn_radius * half_dist)
-#     )
-#     return result
-
-
-def convert_linear_position_to_radian(linear_position, arm_length, horn_radius):
-    return jnp.arcsin((-(arm_length**2) + horn_radius**2 + linear_position**2) / (2 * horn_radius * linear_position))
-
-
-def convert_angular_position_to_linear(angular_position, arm_length, horn_radius):
-    a1 = horn_radius * jnp.sin(angular_position)
-    c = jnp.sqrt(horn_radius**2 - a1**2)
-    a2 = jnp.sqrt(arm_length**2 - c**2)
-    return a1 + a2
-
-
-MAX_GRIPPER_JOINT_POS = convert_linear_position_to_radian(PUPPET_GRIPPER_POSITION_OPEN, ARM_LENGTH, HORN_RADIUS)
-MIN_GRIPPER_JOINT_POS = convert_linear_position_to_radian(PUPPET_GRIPPER_POSITION_CLOSE, ARM_LENGTH, HORN_RADIUS)
-
-
-def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
+def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
     # qpos is [..., 14] of type float:
     # 0-5: left arm joint angles
     # 6: left arm gripper
@@ -298,26 +318,18 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
     # 13: right arm gripper
     qpos = jnp.asarray(data["qpos"])
 
-    # unnormalize the gripper position applied by aloha
-    # qpos = qpos.at[..., 6].set(PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(qpos[..., 6]))
-    # qpos = qpos.at[..., 13].set(PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(qpos[..., 13]))
+    # State is:
+    # [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
+    # [6, 1, 6, 1]
+    state = qpos
 
-    # Convert gripper from linear to angular
-    # qpos = qpos.at[..., 6].set(convert_linear_position_to_radian(qpos[..., 6], ARM_LENGTH, HORN_RADIUS))
-    # qpos = qpos.at[..., 13].set(convert_linear_position_to_radian(qpos[..., 13], ARM_LENGTH, HORN_RADIUS))
+    if adapt_to_pi:
+        # Flip the joints.
+        state = joint_flip_mask() * state
 
-    # print("qpos after inversion", qpos[..., 6], qpos[..., 13])
-
-    # Get the observer's gripper position in the range [-1, 1]
-    max_gripper_qpos = 1.5
-    min_gripper_qpos = 0.4
-    # print("MAX/MIN GRIPPER JOINT POS", MAX_GRIPPER_JOINT_POS, MIN_GRIPPER_JOINT_POS)
-    gripper_qpos_normalize_fn = lambda x: (x - min_gripper_qpos) / (max_gripper_qpos - min_gripper_qpos)
-    qpos = qpos.at[..., 6].set(gripper_qpos_normalize_fn(qpos[..., 6]))
-    qpos = qpos.at[..., 13].set(gripper_qpos_normalize_fn(qpos[..., 13]))
-
-    # Convert to [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
-    state = qpos[..., jnp.array([0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 6, 13])] if reorder_dims else qpos
+        # Reverse the gripper transformation that is being applied by the Aloha runtime.
+        state = state.at[..., 6].set(gripper_to_angular(state[..., 6]))
+        state = state.at[..., 13].set(gripper_to_angular(state[..., 13]))
 
     # images is [..., num_cams, channel, height, width] of type uint8.
     # number of cameras (num_cams) depends on the environment.
@@ -344,27 +356,15 @@ def _decode_aloha(data: dict, *, reorder_dims: bool = False) -> dict:
     return {**images_dict, "state": state}
 
 
-def _encode_aloha(actions: jax.Array, *, reorder_dims: bool = False) -> jax.Array:
-    # Convert to [left_arm_joint_angles, left_arm_gripper, right_arm_joint_angles, right_arm_gripper]
-    # TODO (michael): The following code assumes that the gripper position is in the range [0, 1]
-    # out model produces outputs that look more like 0-1.05 so we should normalize to account for this.
-    # We should verify if this is actually necessary.
-    model_output_max = 1.05
-    model_output_min = 0.0
-    gripper_qpos_normalize_fn = lambda x: (x - model_output_min) / (model_output_max - model_output_min)
-    actions = actions.at[..., 6].set(gripper_qpos_normalize_fn(actions[..., 6]))
-    actions = actions.at[..., 13].set(gripper_qpos_normalize_fn(actions[..., 13]))
+def _encode_aloha(actions: jax.Array, *, adapt_to_pi: bool = False) -> jax.Array:
+    if adapt_to_pi:
+        # Flip the joints.
+        actions = joint_flip_mask() * actions
 
-    # Denormalize the gripper position applied by the observer
-    # TODO (michael): THESE ARE MIN/MAX QPOS of the station. There may be some different station to station so we need to make these more easily configurable
-    # max_gripper_pos = 1.5
-    # min_gripper_pos = 0.4
-    # gripper_qpos_unnormalize_fn = lambda x: x * (max_gripper_pos - min_gripper_pos) + min_gripper_pos
-    # actions = actions.at[..., 6].set(gripper_qpos_unnormalize_fn(actions[..., 6]))
-    # actions = actions.at[..., 13].set(gripper_qpos_unnormalize_fn(actions[..., 13]))
+        # This was done since pi0 is outputting values in the [0, 1.05] range.
+        gripper_fn = functools.partial(normalize, min_val=0.0, max_val=1.05)
 
-    # normalize the gripper joint applied by aloha
-    # actions = actions.at[..., 6].set(PUPPET_GRIPPER_JOINT_NORMALIZE_FN(actions[..., 6]))
-    # actions = actions.at[..., 13].set(PUPPET_GRIPPER_JOINT_NORMALIZE_FN(actions[..., 13]))
+        actions = actions.at[..., 6].set(gripper_fn(actions[..., 6]))
+        actions = actions.at[..., 13].set(gripper_fn(actions[..., 13]))
 
-    return actions[..., jnp.array([0, 1, 2, 3, 4, 5, 12, 6, 7, 8, 9, 10, 11, 13])] if reorder_dims else actions
+    return actions

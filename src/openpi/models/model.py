@@ -207,7 +207,7 @@ def restore_params(model: Model, ckpt_path: epath.Path, *, sharding: jax.shardin
                 item=item,
                 restore_args=to_restore_args(item),
             ),
-        )
+        )["params"]
         return dataclasses.replace(model, params=params)
 
 

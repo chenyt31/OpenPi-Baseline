@@ -72,6 +72,10 @@ class PiModel(_model.BaseModel):
 
         example["image"] = {key: resize_if_needed(key, value) for key, value in example["image"].items()}
 
+        # This is required by the exported model.
+        if "num_steps" not in sample_kwargs:
+            sample_kwargs["num_steps"] = 10
+
         rng_data = jax.random.key_data(rng)
         result = self.exported.call(self.params, rng_data, example, sample_kwargs)
 

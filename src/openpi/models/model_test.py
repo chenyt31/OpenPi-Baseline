@@ -22,7 +22,7 @@ def test_model():
     model = model.init_params(rng, observation, actions)
 
     loss = model.compute_loss(rng, observation, actions)
-    assert loss.shape == (batch_size, 50)
+    assert loss.shape == ()
 
     actions = model.sample_actions(rng, observation)
     assert actions.shape == (batch_size, 50, 24)

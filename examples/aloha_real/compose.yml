@@ -1,5 +1,5 @@
 # Run with:
-# docker compose -f src/openpi/runtime/environments/aloha_real/compose.yml up --build
+# docker compose -f examples/aloha_real/compose.yml up --build
 services:
   runtime:
     image: aloha_real
@@ -8,23 +8,23 @@ services:
       - ros_master
       - pi0_server
     build:
-      context: ../../../../..
-      dockerfile: src/openpi/runtime/environments/aloha_real/Dockerfile
+      context: ../..
+      dockerfile: examples/aloha_real/Dockerfile
     init: true
     tty: true
     network_mode: host
     privileged: true
     volumes:
-      - ../../../../..:/root/app
-      - ../../../../../data:/data
+      - $PWD:/root/app
+      - ../../data:/data
 
   aloha_ros_nodes:
     image: aloha_real
     depends_on:
       - ros_master
     build:
-      context: ../../../../..
-      dockerfile: src/openpi/runtime/environments/aloha_real/Dockerfile
+      context: ../..
+      dockerfile: examples/aloha_real/Dockerfile
     init: true
     tty: true
     network_mode: host
@@ -51,8 +51,8 @@ services:
   pi0_server:
     image: pi0_server
     build:
-      context: ../../../../..
-      dockerfile: docker/pi0/Dockerfile
+      context: ../..
+      dockerfile: src/openpi/serving/Dockerfile
     init: true
     tty: true
     network_mode: host

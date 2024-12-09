@@ -1,33 +1,25 @@
 import dataclasses
 import logging
-import pathlib
 
 import tyro
 
+from examples.aloha_real import env as _env
+
+# from examples.aloha_real import video_display as _video_display
 from openpi.runtime import runtime as _runtime
 from openpi.runtime.agents import policy_agent as _policy_agent
-from openpi.runtime.environments.aloha_sim import env as _env
-from openpi.runtime.environments.aloha_sim import saver as _saver
 from openpi.serving import http_policy_client as _http_policy_client
 
 
 @dataclasses.dataclass
 class Args:
-    out_path: pathlib.Path = pathlib.Path("out.mp4")
-
-    task: str = "gym_aloha/AlohaInsertion-v0"
-    seed: int = 0
-
     host: str = "0.0.0.0"
     port: int = 8000
 
 
 def main(args: Args) -> None:
     runtime = _runtime.Runtime(
-        environment=_env.AlohaSimEnvironment(
-            task=args.task,
-            seed=args.seed,
-        ),
+        environment=_env.AlohaRealEnvironment(),
         agent=_policy_agent.PolicyAgent(
             policy=_http_policy_client.HttpClientPolicy(
                 host=args.host,
@@ -35,7 +27,7 @@ def main(args: Args) -> None:
             )
         ),
         subscribers=[
-            _saver.VideoSaver(args.out_path),
+            # _video_display.VideoDisplay(),
         ],
         max_hz=50,
     )

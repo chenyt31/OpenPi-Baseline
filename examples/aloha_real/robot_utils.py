@@ -11,7 +11,7 @@ import numpy as np
 import rospy
 from sensor_msgs.msg import JointState
 
-from openpi.runtime.environments.aloha_real import constants
+from examples.aloha_real import constants
 
 
 class ImageRecorder:

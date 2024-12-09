@@ -7,6 +7,7 @@ import flax.traverse_util
 import jax
 import jax.numpy as jnp
 import numpy as np
+from typing_extensions import override
 
 from openpi import transforms as _transforms
 from openpi.models import common
@@ -29,7 +30,8 @@ class Policy(_base_policy.BasePolicy):
         self._output_transform = _transforms.CompositeTransform(output_transforms)
         self._rng = rng or jax.random.key(0)
 
-    def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
+    @override
+    def infer(self, obs: dict) -> dict:
         inputs = _make_batch(obs)
         inputs = self._input_transform(inputs)
 
@@ -57,9 +59,10 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         self._action_horizon = action_horizon
         self._cur_step: int = 0
 
-        self._last_results: np.ndarray | None = None
+        self._last_results: dict[str, np.ndarray] | None = None
 
-    def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
+    @override
+    def infer(self, obs: dict) -> dict:
         if self._last_results is None:
             self._last_results = self._policy.infer(obs)
             self._cur_step = 0
@@ -84,7 +87,8 @@ class PolicyRecorder(_base_policy.BasePolicy):
         self._record_dir.mkdir(parents=True, exist_ok=True)
         self._record_step = 0
 
-    def infer(self, obs: dict) -> at.PyTree[np.ndarray]:
+    @override
+    def infer(self, obs: dict) -> dict:
         results = self._policy.infer(obs)
 
         data = {"inputs": obs, "outputs": results}

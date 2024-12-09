@@ -7,9 +7,11 @@ from openpi.policies import policy as _policy
 
 def test_infer():
     model = aloha_policy.load_pi0_model()
-    norm_stats = aloha_policy.make_aloha_norm_stats()
 
-    policy = aloha_policy.create_aloha_policy(model, norm_stats)
+    policy = aloha_policy.create_aloha_policy(
+        model,
+        aloha_policy.PolicyConfig(norm_stats=aloha_policy.make_aloha_norm_stats()),
+    )
 
     example = aloha_policy.make_aloha_example()
     outputs = policy.infer(example)
@@ -20,9 +22,14 @@ def test_infer():
 def test_exported():
     ckpt_path = epath.Path("checkpoints/pi0_sim/model").resolve()
     model = _exported.PiModel.from_checkpoint(ckpt_path)
-    norm_stats = _exported.import_norm_stats(ckpt_path, "huggingface_aloha_sim_transfer_cube")
 
-    policy = aloha_policy.create_aloha_policy(model, norm_stats)
+    policy = aloha_policy.create_aloha_policy(
+        model,
+        aloha_policy.PolicyConfig(
+            norm_stats=_exported.import_norm_stats(ckpt_path, "huggingface_aloha_sim_transfer_cube"),
+            adapt_to_pi=False,
+        ),
+    )
 
     example = aloha_policy.make_aloha_example()
     outputs = policy.infer(example)
@@ -32,10 +39,12 @@ def test_exported():
 
 def test_broker():
     model = aloha_policy.load_pi0_model()
-    norm_stats = aloha_policy.make_aloha_norm_stats()
 
     policy = _policy.ActionChunkBroker(
-        aloha_policy.create_aloha_policy(model, norm_stats),
+        aloha_policy.create_aloha_policy(
+            model,
+            aloha_policy.PolicyConfig(norm_stats=aloha_policy.make_aloha_norm_stats()),
+        ),
         # Only execute the first half of the chunk.
         action_horizon=model.action_horizon // 2,
     )

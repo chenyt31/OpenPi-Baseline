@@ -310,6 +310,21 @@ def gripper_to_angular(value):
     return normalize(value, min_val=0.4, max_val=1.5)
 
 
+def gripper_from_angular(value):
+    # Convert from the gripper position used by pi0 to the gripper position that is used by Aloha.
+    # Note that the units are still angular but the range is different.
+
+    # The values 0.4 and 1.5 were measured on an actual Trossen robot.
+    value = unnormalize(value, min_val=0.4, max_val=1.5)
+
+    # These values are coming from the Aloha code:
+    # PUPPET_GRIPPER_JOINT_OPEN, PUPPET_GRIPPER_JOINT_CLOSE
+    value = normalize(value, min_val=-0.6213, max_val=1.4910)
+
+    # Addition adjustment to match the range that was produced by the pi0 model.
+    return normalize(value, 0.0, 1.05)
+
+
 def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
     # qpos is [..., 14] of type float:
     # 0-5: left arm joint angles
@@ -361,10 +376,7 @@ def _encode_aloha(actions: jax.Array, *, adapt_to_pi: bool = False) -> jax.Array
         # Flip the joints.
         actions = joint_flip_mask() * actions
 
-        # This was done since pi0 is outputting values in the [0, 1.05] range.
-        gripper_fn = functools.partial(normalize, min_val=0.0, max_val=1.05)
-
-        actions = actions.at[..., 6].set(gripper_fn(actions[..., 6]))
-        actions = actions.at[..., 13].set(gripper_fn(actions[..., 13]))
+        actions = actions.at[..., 6].set(gripper_from_angular(actions[..., 6]))
+        actions = actions.at[..., 13].set(gripper_from_angular(actions[..., 13]))
 
     return actions

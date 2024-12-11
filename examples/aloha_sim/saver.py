@@ -1,3 +1,4 @@
+import logging
 import pathlib
 
 import imageio
@@ -27,9 +28,9 @@ class VideoSaver(_subscriber.Subscriber):
 
     @override
     def on_episode_end(self) -> None:
+        logging.info(f"Saving video to {self._out_path}")
         imageio.mimwrite(
             self._out_path,
-            np.array(self._images[:: self._subsample]),
-            duration=0.2,
-            loop=0,
+            [np.asarray(x) for x in self._images[:: self._subsample]],
+            fps=50 // max(1, self._subsample),
         )

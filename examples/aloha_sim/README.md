@@ -31,5 +31,5 @@ uv pip sync requirements.txt
 uv pip install -e .
 
 # Run the server
-python src/openpi/serving/http_policy_server_pi0.py --mode SIM
+python src/openpi/serving/serve_policy.py --mode SIM
 ```

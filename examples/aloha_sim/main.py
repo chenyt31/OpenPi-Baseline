@@ -8,7 +8,7 @@ from examples.aloha_sim import env as _env
 from examples.aloha_sim import saver as _saver
 from openpi.runtime import runtime as _runtime
 from openpi.runtime.agents import policy_agent as _policy_agent
-from openpi.serving import http_policy_client as _http_policy_client
+from openpi.serving import websocket_policy_client as _websocket_policy_client
 
 
 @dataclasses.dataclass
@@ -31,7 +31,7 @@ def main(args: Args) -> None:
             seed=args.seed,
         ),
         agent=_policy_agent.PolicyAgent(
-            policy=_http_policy_client.HttpClientPolicy(
+            policy=_websocket_policy_client.WebsocketClientPolicy(
                 host=args.host,
                 port=args.port,
             )

@@ -1,12 +1,10 @@
-# Requirements file used for examples with ROS1.
-# Note that ROS1 requires Python < 3.11.
-
 Pillow
 dm_control
 einops
 h5py
 matplotlib
 modern_robotics
+msgpack
 numpy
 opencv-python
 packaging
@@ -17,3 +15,4 @@ pyyaml
 requests
 rospkg
 tyro
+websockets

@@ -1,6 +1,8 @@
 gym-aloha
 imageio
 matplotlib
-numpy==1.26.4
+msgpack
+numpy
 typing-extensions
 tyro
+websockets

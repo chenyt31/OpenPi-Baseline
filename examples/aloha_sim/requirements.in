@@ -1,0 +1,6 @@
+gym-aloha
+imageio
+matplotlib
+numpy==1.26.4
+typing-extensions
+tyro

@@ -1,8 +1,10 @@
 import numpy as np
 from typing_extensions import override
 
+import einops
+
+from examples.aloha_real import real_env as _real_env
 from openpi.runtime import environment as _environment
-from openpi.runtime.environments.aloha_real import real_env as _real_env
 
 
 class AlohaRealEnvironment(_environment.Environment):
@@ -33,11 +35,18 @@ class AlohaRealEnvironment(_environment.Environment):
             if "_depth" in k:
                 del obs["images"][k]
 
+        images = []
+        for cam_name in obs["images"].keys():
+            curr_image = obs["images"][cam_name]
+            curr_image = einops.rearrange(curr_image, "h w c -> c h w")
+            images.append(curr_image)
+        stacked_images = np.stack(images, axis=0).astype(np.uint8)
+        print(stacked_images.shape)
+
         # TODO: Consider removing these transformations.
         return {
             "qpos": obs["qpos"],
-            # Convert axis order from [H, W, C] --> [C, H, W], normalize to [0, 1], and stack to [N, C, H, W].
-            "image": np.stack([np.transpose(img, (2, 0, 1)) for img in obs["images"].values()], axis=0),
+            "image": stacked_images,
         }
 
     @override

@@ -15,21 +15,15 @@ Terminal window 1:
 uv venv --python 3.10 examples/aloha_sim/.venv
 source examples/aloha_sim/.venv/bin/activate
 uv pip sync examples/aloha_sim/requirements.txt
-uv pip install -e .
+uv pip install -e packages/openpi-client
 
 # Run the simulation
-python examples/aloha_sim/main.py
+MUJOCO_GL=egl python examples/aloha_sim/main.py
 ```
 
 Terminal window 2:
 
 ```
-# Create virtual environment
-uv venv --python 3.11
-source .venv/bin/activate
-uv pip sync requirements.txt
-uv pip install -e .
-
 # Run the server
-python src/openpi/serving/serve_policy.py --mode SIM
+uv run src/openpi/serving/serve_policy.py --mode SIM
 ```

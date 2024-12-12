@@ -3,15 +3,47 @@ name = "openpi"
 version = "0.1.0"
 description = "Physical Intelligence open source repo"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
+dependencies = [
+    "augmax>=0.3.4",
+    "dm-tree>=0.1.8",
+    "einops>=0.8.0",
+    "equinox>=0.11.8",
+    "flatbuffers>=24.3.25",
+    "flax==0.9.0",
+    "gym-aloha>=0.1.1",
+    "imageio>=2.36.1",
+    "ipykernel>=6.29.5",
+    "jax[cuda12]==0.4.34",
+    "jaxtyping==0.2.34",
+    # TODO: Upgrade to 2.1.2 once we have an alternative to pickle for data serialization.
+    "numpy==1.26.4",
+    "opencv-python>=4.10.0.84",
+    "openpi-client",
+    "orbax-checkpoint==0.7.0",
+    "pillow>=11.0.0",
+    "ruff>=0.7.1",
+    "sentencepiece>=0.2.0",
+    "tqdm>=4.67.1",
+    "typing-extensions>=4.12.2",
+    "tyro>=0.8.14",
+]
+
 
 [project.urls]
 Repository = "https://github.com/Physical-Intelligence/openpi"
 
+[tool.uv.sources]
+openpi-client = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
 [tool.uv]
 dev-dependencies = [
     "ruff>=0.8.2",
+    "pytest>=8.3.3",
 ]
 
 [build-system]

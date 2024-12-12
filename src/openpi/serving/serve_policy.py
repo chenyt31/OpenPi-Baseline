@@ -7,7 +7,6 @@ import tyro
 from openpi.models import exported as _exported
 from openpi.models import model as _model
 from openpi.policies import aloha_policy
-from openpi.policies import base_policy as _base_policy
 from openpi.policies import policy as _policy
 from openpi.serving import websocket_policy_server
 
@@ -60,7 +59,7 @@ def main(
     config.default_prompt = default_prompt
 
     logging.info("Creating policy...")
-    policy: _base_policy.BasePolicy = _policy.ActionChunkBroker(
+    policy: _policy.BasePolicy = _policy.ActionChunkBroker(
         aloha_policy.create_aloha_policy(model, config),
         action_horizon=model.action_horizon // 2,
     )

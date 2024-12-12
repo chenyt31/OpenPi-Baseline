@@ -1,22 +1,24 @@
 from collections.abc import Sequence
 import logging
 import pathlib
+from typing import TypeAlias
 
 import flax
 import flax.traverse_util
 import jax
 import jax.numpy as jnp
 import numpy as np
+from openpi_client import base_policy as _base_policy
 from typing_extensions import override
 
 from openpi import transforms as _transforms
 from openpi.models import common
 from openpi.models import model as _model
-from openpi.policies import base_policy as _base_policy
 from openpi.shared import array_typing as at
 
+BasePolicy: TypeAlias = _base_policy.BasePolicy
 
-class Policy(_base_policy.BasePolicy):
+class Policy(BasePolicy):
     def __init__(
         self,
         model: _model.BaseModel,

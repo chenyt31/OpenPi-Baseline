@@ -2,11 +2,10 @@ import asyncio
 import logging
 import traceback
 
+from openpi_client import base_policy as _base_policy
+from openpi_client import msgpack_numpy
 import websockets.asyncio.server
 import websockets.frames
-
-from openpi.policies import base_policy as _base_policy
-from openpi.shared import msgpack_numpy
 
 
 class WebsocketPolicyServer:

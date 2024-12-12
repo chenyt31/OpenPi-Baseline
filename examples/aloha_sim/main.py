@@ -2,13 +2,12 @@ import dataclasses
 import logging
 import pathlib
 
+import env as _env
+from openpi_client import websocket_client_policy as _websocket_client_policy
+from openpi_client.runtime import runtime as _runtime
+from openpi_client.runtime.agents import policy_agent as _policy_agent
+import saver as _saver
 import tyro
-
-from examples.aloha_sim import env as _env
-from examples.aloha_sim import saver as _saver
-from openpi.runtime import runtime as _runtime
-from openpi.runtime.agents import policy_agent as _policy_agent
-from openpi.serving import websocket_policy_client as _websocket_policy_client
 
 
 @dataclasses.dataclass
@@ -31,7 +30,7 @@ def main(args: Args) -> None:
             seed=args.seed,
         ),
         agent=_policy_agent.PolicyAgent(
-            policy=_websocket_policy_client.WebsocketClientPolicy(
+            policy=_websocket_client_policy.WebsocketClientPolicy(
                 host=args.host,
                 port=args.port,
             )

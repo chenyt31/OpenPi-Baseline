@@ -96,13 +96,14 @@ ml-dtypes==0.5.0
     #   tensorstore
 msgpack==1.1.0
     # via
+    #   -r requirements.in
     #   flax
     #   orbax-checkpoint
 nest-asyncio==1.6.0
     # via
     #   ipykernel
     #   orbax-checkpoint
-numpy==1.26.4
+numpy==2.1.2
     # via
     #   -r requirements.in
     #   augmax
@@ -252,5 +253,7 @@ tyro==0.9.1
     # via -r requirements.in
 wcwidth==0.2.13
     # via prompt-toolkit
+websockets==14.1
+    # via -r requirements.in
 zipp==3.21.0
     # via etils

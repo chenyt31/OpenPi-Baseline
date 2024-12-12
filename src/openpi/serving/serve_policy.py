@@ -9,7 +9,7 @@ from openpi.models import model as _model
 from openpi.policies import aloha_policy
 from openpi.policies import base_policy as _base_policy
 from openpi.policies import policy as _policy
-from openpi.serving import http_policy_server
+from openpi.serving import websocket_policy_server
 
 
 class ModelMode(enum.Enum):
@@ -70,7 +70,7 @@ def main(
         policy = _policy.PolicyRecorder(policy, "policy_records")
 
     logging.info("Creating server...")
-    server = http_policy_server.HttpPolicyServer(policy=policy, host="0.0.0.0", port=port)
+    server = websocket_policy_server.WebsocketPolicyServer(policy=policy, host="0.0.0.0", port=port)
 
     logging.info("Serving...")
     server.serve_forever()

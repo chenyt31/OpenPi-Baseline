@@ -58,6 +58,8 @@ matplotlib==3.9.3
     # via -r examples/aloha_sim/requirements.in
 mdurl==0.1.2
     # via markdown-it-py
+msgpack==1.1.0
+    # via -r examples/aloha_sim/requirements.in
 mujoco==2.3.7
     # via
     #   dm-control
@@ -126,3 +128,5 @@ tyro==0.9.2
     # via -r examples/aloha_sim/requirements.in
 urllib3==2.2.3
     # via requests
+websockets==14.1
+    # via -r examples/aloha_sim/requirements.in

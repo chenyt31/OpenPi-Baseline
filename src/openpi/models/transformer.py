@@ -2,6 +2,7 @@ from collections.abc import Callable
 import enum
 import functools as ft
 import logging
+from typing import Literal
 
 import einops
 from flax import struct
@@ -387,74 +388,53 @@ class Transformer(nn.Module):
         return x.replace(pos=orig_pos)
 
 
-TRANSFORMER_PRESETS = {
-    "dummy": lambda **kwargs: Transformer(
-        num_layers=2,
-        transformer_block=TransformerBlock(
-            attn=AttentionBlock(num_heads=2),
-            mlp=MLPBlock(dim=4),
-        ),
-        **kwargs,
-    ),
-    # Parameter counts are for base models with no xattn or adaln conditioning. adaln adds ~50% params (but
-    # negligible FLOPs), and xattn adds ~25% params (but significantly more FLOPs).
-    "tiny": lambda **kwargs: Transformer(  # 800k params
-        num_layers=4,
-        transformer_block=TransformerBlock(
-            attn=AttentionBlock(num_heads=2),
-            mlp=MLPBlock(dim=512),
-        ),
-        **kwargs,
-    ),
-    "small": lambda **kwargs: Transformer(  # 21M params
-        num_layers=12,
-        transformer_block=TransformerBlock(
-            attn=AttentionBlock(num_heads=6),
-            mlp=MLPBlock(dim=1536),
-        ),
-        **kwargs,
-    ),
-    "base": lambda **kwargs: Transformer(  # 85M params
-        num_layers=12,
-        transformer_block=TransformerBlock(
-            attn=AttentionBlock(num_heads=12),
-            mlp=MLPBlock(dim=3072),
-        ),
-        **kwargs,
-    ),
-    "14layer_12heads_mlp4096": lambda **kwargs: Transformer(
-        num_layers=14,
-        transformer_block=TransformerBlock(
-            attn=AttentionBlock(num_heads=12),
-            mlp=MLPBlock(dim=4096),
-        ),
-        **kwargs,
-    ),
-    "large": lambda **kwargs: Transformer(  # 300M params
-        num_layers=24,
-        transformer_block=TransformerBlock(
-            attn=AttentionBlock(num_heads=16),
-            mlp=MLPBlock(dim=4096),
-        ),
-        **kwargs,
-    ),
-    "roughly_match_gemma_2b": lambda **kwargs: Transformer(
-        num_layers=18,
-        transformer_block=TransformerBlock(
-            attn=AttentionBlock(num_heads=8),
-            # the feedforward dimension in gemma is 32768
-            # but we reduce it to match the 2B parameter count
-            mlp=MLPBlock(dim=23552),
-        ),
-        **kwargs,
-    ),
-}
+Variant = Literal["dummy", "tiny", "small", "base", "large"]
 
-EMBED_DIM_PRESETS = {
-    "dummy": 4,
-    "tiny": 128,
-    "small": 384,
-    "base": 768,
-    "large": 1024,
-    "roughly_match_gemma_2b": 2048,
-}
+
+def get_variant(variant: Variant, **kwargs) -> tuple[Transformer, int]:
+    if variant == "dummy":
+        return Transformer(
+            num_layers=2,
+            transformer_block=TransformerBlock(
+                attn=AttentionBlock(num_heads=2),
+                mlp=MLPBlock(dim=4),
+            ),
+            **kwargs,
+        ), 4
+    if variant == "tiny":
+        return Transformer(
+            num_layers=4,
+            transformer_block=TransformerBlock(
+                attn=AttentionBlock(num_heads=2),
+                mlp=MLPBlock(dim=512),
+            ),
+            **kwargs,
+        ), 128
+    if variant == "small":
+        return Transformer(
+            num_layers=12,
+            transformer_block=TransformerBlock(
+                attn=AttentionBlock(num_heads=6),
+                mlp=MLPBlock(dim=1536),
+            ),
+            **kwargs,
+        ), 384
+    if variant == "base":
+        return Transformer(
+            num_layers=12,
+            transformer_block=TransformerBlock(
+                attn=AttentionBlock(num_heads=12),
+                mlp=MLPBlock(dim=3072),
+            ),
+            **kwargs,
+        ), 768
+    if variant == "large":
+        return Transformer(
+            num_layers=24,
+            transformer_block=TransformerBlock(
+                attn=AttentionBlock(num_heads=16),
+                mlp=MLPBlock(dim=4096),
+            ),
+            **kwargs,
+        ), 1024
+    raise ValueError(f"Invalid transformer variant: {variant}")

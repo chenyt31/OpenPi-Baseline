@@ -66,6 +66,8 @@ class Module(common.BaseModule):
     """Pi-0 module (transfusion-style decoder-only diffusion)."""
 
     dtype: str = "bfloat16"
+    paligemma_variant: _gemma.Variant = "gemma_2b"
+    action_expert_variant: _gemma.Variant = "gemma_300m"
 
     @at.typecheck
     @override
@@ -152,8 +154,8 @@ class Module(common.BaseModule):
         llm_scope = paligemma_scope.push("llm")
         img_scope = paligemma_scope.push("img")
 
-        paligemma_config = _gemma.get_config("gemma_2b")
-        action_expert_config = _gemma.get_config("gemma_300m")
+        paligemma_config = _gemma.get_config(self.paligemma_variant)
+        action_expert_config = _gemma.get_config(self.action_expert_variant)
         gemma = _gemma.Module(
             configs=[paligemma_config, action_expert_config],
             embed_dtype=self.dtype,

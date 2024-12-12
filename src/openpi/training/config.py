@@ -3,12 +3,16 @@ from typing import Annotated, Union
 
 import tyro
 
+from openpi.models import common
+import openpi.models.pi0 as pi0
+import openpi.models.pi0_small as pi0_small
 import openpi.training.optimizer as _optimizer
 
 
 @dataclasses.dataclass(frozen=True)
 class TrainConfig:
     keep_interval: int = 5000
+    module: common.BaseModule = dataclasses.field(default_factory=pi0.Module)
     lr_schedule: _optimizer.LRScheduleConfig = dataclasses.field(default_factory=_optimizer.CosineDecaySchedule)
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
     ema_decay: float | None = None
@@ -26,7 +30,8 @@ class TrainConfig:
 
 _CONFIGS = {
     "default": TrainConfig(),
-    "large": TrainConfig(batch_size=128),
+    "debug": TrainConfig(batch_size=2, module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy")),
+    "pi0_small": TrainConfig(module=pi0_small.Module()),
 }
 
 

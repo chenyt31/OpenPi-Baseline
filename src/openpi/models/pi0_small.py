@@ -59,38 +59,39 @@ class ViTEncoder(nn.Module):
 class Encoder(nn.Module):
     """Transformer encoder that combines ViTEncoders for each image, plus state information."""
 
-    embed_dim: int = _transformer.EMBED_DIM_PRESETS["small"]
+    variant: _transformer.Variant = "small"
     dtype: str = "bfloat16"
 
     @nn.compact
     @at.typecheck
     def __call__(self, obs: common.Observation) -> _transformer.TokenSequence:
+        transformer, embed_dim = _transformer.get_variant(self.variant, dtype=self.dtype)
+
         image_tokens: list[_transformer.TokenSequence] = []
         for name in obs.images:
             zimg = ViTEncoder(name=f"backbone_{name}", dtype=self.dtype)(obs.images[name])
-            zimg = nn.Dense(self.embed_dim, name=f"proj_{name}")(zimg)
-            posemb = self.param(f"posemb_image_{name}", nn.initializers.normal(0.02), (self.embed_dim,))
+            zimg = nn.Dense(embed_dim, name=f"proj_{name}")(zimg)
+            posemb = self.param(f"posemb_image_{name}", nn.initializers.normal(0.02), (embed_dim,))
             image_tokens.append(
                 _transformer.TokenSequence(
                     tokens=zimg,
                     pos=jnp.broadcast_to(posemb, zimg.shape),
-                    mask=jnp.broadcast_to(obs.image_masks[name], zimg.shape[:-1]),
+                    mask=jnp.broadcast_to(obs.image_masks[name][:, None], zimg.shape[:-1]),
                 )
             )
 
         state_token = _transformer.TokenSequence(
-            tokens=nn.Dense(self.embed_dim, name="state_proj")(obs.state)[:, None],
-            pos=self.param("posemb_state", nn.initializers.normal(0.02), (self.embed_dim,))[None],
+            tokens=nn.Dense(embed_dim, name="state_proj")(obs.state)[:, None],
+            pos=self.param("posemb_state", nn.initializers.normal(0.02), (embed_dim,))[None],
         )
 
         input_tokens = _transformer.TokenSequence.concatenate(*image_tokens, state_token)
 
-        transformer = _transformer.TRANSFORMER_PRESETS["small"](dtype=self.dtype)
         return transformer(input_tokens)
 
 
 class Decoder(nn.Module):
-    embed_dim: int = _transformer.EMBED_DIM_PRESETS["small"]
+    variant: _transformer.Variant = "small"
     dtype: str = "bfloat16"
 
     @nn.compact
@@ -101,31 +102,29 @@ class Decoder(nn.Module):
         timestep: at.Float[at.Array, " b"],
         cond_tokens: _transformer.TokenSequence,
     ) -> at.Float[at.Array, "b ah ad"]:
+        transformer, embed_dim = _transformer.get_variant(self.variant, dtype=self.dtype)
+
         tokens = _transformer.TokenSequence(
             # project actions to embedding dimension
-            tokens=nn.Dense(self.embed_dim, name="in_proj")(noisy_actions),
+            tokens=nn.Dense(embed_dim, name="in_proj")(noisy_actions),
             # use learned positional embedding for actions
-            pos=self.param("posemb_actions", nn.initializers.normal(0.02), (noisy_actions.shape[1], self.embed_dim)),
+            pos=self.param("posemb_actions", nn.initializers.normal(0.02), (noisy_actions.shape[1], embed_dim)),
         )
 
         # embed timestep using sine-cosine positional encoding with sensitivity in the range [0, 1]
-        time_emb = posemb_sincos(timestep, self.embed_dim, min_period=4e-3, max_period=4.0)
+        time_emb = posemb_sincos(timestep, embed_dim, min_period=4e-3, max_period=4.0)
         # time MLP
-        time_emb = nn.Dense(self.embed_dim, name="time_mlp_in")(time_emb)
+        time_emb = nn.Dense(embed_dim, name="time_mlp_in")(time_emb)
         time_emb = nn.swish(time_emb)
-        time_emb = nn.Dense(self.embed_dim, name="time_mlp_out")(time_emb)
+        time_emb = nn.Dense(embed_dim, name="time_mlp_out")(time_emb)
 
-        transformer = _transformer.TRANSFORMER_PRESETS["small"](dtype=self.dtype)
         output_tokens = transformer(tokens, xattn_cond=cond_tokens, adaln_cond=time_emb)
         return nn.Dense(noisy_actions.shape[-1], name="out_proj")(output_tokens.tokens)
 
 
 class Module(common.BaseModule):
-    dtype: str = "bfloat16"
-
-    def setup(self):
-        self.encoder = Encoder()
-        self.decoder = Decoder()
+    encoder: Encoder = Encoder()
+    decoder: Decoder = Decoder()
 
     @at.typecheck
     @override

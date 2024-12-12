@@ -73,7 +73,10 @@ class Config:
     output_lora: LoRAConfig | None = None
 
 
-def get_config(variant: Literal["dummy", "gemma_300m", "gemma_2b", "gemma_2b_lora"]) -> Config:
+Variant = Literal["dummy", "gemma_300m", "gemma_2b", "gemma_2b_lora"]
+
+
+def get_config(variant: Variant) -> Config:
     """Returns config for specified gemma variant."""
     if variant == "dummy":
         return Config(
@@ -146,7 +149,7 @@ class LoRAEinsum(nn.Module):
         nn.share_scope(self, self.base)
 
     @nn.compact
-    def __call__(self, eqn, x, deterministic=True):
+    def __call__(self, eqn, x, *, deterministic=True):
         orig_x = x
         eqn_lora_a, eqn_lora_b = self._get_lora_eqn(eqn, self.merge_eqn)
         if self.lora_config.dropout > 0.0:

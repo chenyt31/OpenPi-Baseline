@@ -143,6 +143,8 @@ class Model(BaseModel):
         train: bool = False,
     ) -> at.Float[at.Array, ""]:
         if params is None:
+            if self.params is None:
+                raise ValueError("Model is missing parameters.")
             params = self.params
 
         loss_rng, preprocess_rng = jax.random.split(rng)
@@ -164,7 +166,7 @@ class Model(BaseModel):
         **sample_kwargs,
     ) -> common.Actions:
         if self.params is None:
-            raise ValueError("Model parameters not initialized.")
+            raise ValueError("Model is missing parameters.")
 
         preprocess_rng, sample_rng = jax.random.split(rng)
 

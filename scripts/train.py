@@ -9,7 +9,6 @@ import tqdm
 
 import openpi.models.common as _common
 import openpi.models.model as _model
-import openpi.models.pi0 as pi0
 import openpi.shared.array_typing as at
 import openpi.training.checkpoints as _checkpoints
 import openpi.training.config as _config
@@ -139,7 +138,7 @@ def main(config: _config.TrainConfig):
         config.checkpoint_dir, keep_interval=config.keep_interval, overwrite=config.overwrite, resume=config.resume
     )
 
-    model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
+    model = _model.Model(module=config.module, action_dim=24, action_horizon=50, max_token_len=48)
     data_loader = _data_loader.fake_init_data_loader(
         model, local_batch_size=config.batch_size // jax.process_count(), dp_sharding=data_parallel_sharding
     )

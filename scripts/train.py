@@ -3,7 +3,6 @@ import logging
 from flax.training import common_utils
 import jax
 from jax.experimental import mesh_utils
-from jax.experimental import multihost_utils
 import jax.numpy as jnp
 import optax
 import tqdm
@@ -139,7 +138,6 @@ def main(config: _config.TrainConfig):
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint(
         config.checkpoint_dir, keep_interval=config.keep_interval, overwrite=config.overwrite, resume=config.resume
     )
-    multihost_utils.sync_global_devices("init_checkpoint")
 
     model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
     data_loader = _data_loader.fake_init_data_loader(
@@ -147,15 +145,12 @@ def main(config: _config.TrainConfig):
     )
     batch = next(data_loader)
     logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")
-    multihost_utils.sync_global_devices("init_dataloader")
 
     train_state, train_state_sharding = init_train_state(config, model, init_rng, batch, mesh, resume=resuming)
     logging.info(f"Initialized train state:\n{training_utils.to_tree_info(train_state.params)}")
-    multihost_utils.sync_global_devices("init_train_state")
 
     if resuming:
         train_state = _checkpoints.restore_state(checkpoint_manager, train_state)
-        multihost_utils.sync_global_devices("resume_training")
 
     ptrain_step = jax.jit(
         train_step,
@@ -171,7 +166,6 @@ def main(config: _config.TrainConfig):
         initial=start_step,
         total=config.num_train_steps,
         dynamic_ncols=True,
-        disable=jax.process_index() != 0,
     )
 
     infos = []

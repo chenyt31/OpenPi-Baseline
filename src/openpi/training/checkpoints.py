@@ -2,7 +2,6 @@ import logging
 
 from etils import epath
 import jax
-from jax.experimental import multihost_utils
 import orbax.checkpoint as ocp
 
 import openpi.shared.array_typing as at
@@ -16,19 +15,15 @@ def initialize_checkpoint(
     resuming = False
     if checkpoint_dir.exists():
         if overwrite:
-            if jax.process_index() == 0:
-                checkpoint_dir.rmtree()
-                checkpoint_dir.mkdir(parents=True, exist_ok=True)
-                logging.info(f"Wiped checkpoint directory {checkpoint_dir}")
+            checkpoint_dir.rmtree()
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            logging.info(f"Wiped checkpoint directory {checkpoint_dir}")
         elif resume:
             resuming = True
         else:
             raise FileExistsError(f"Checkpoint directory {checkpoint_dir} already exists")
 
-    if jax.process_index() == 0:
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
-    multihost_utils.sync_global_devices("checkpoint dir created")
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     mngr = ocp.CheckpointManager(
         checkpoint_dir,

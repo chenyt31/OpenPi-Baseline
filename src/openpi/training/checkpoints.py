@@ -1,10 +1,12 @@
 import logging
-import orbax.checkpoint as ocp
+
 from etils import epath
 import jax
-from flax.training import train_state
-import openpi.models.model as _model
 from jax.experimental import multihost_utils
+import orbax.checkpoint as ocp
+
+import openpi.shared.array_typing as at
+import openpi.training.utils as training_utils
 
 
 def initialize_checkpoint(
@@ -50,31 +52,26 @@ def initialize_checkpoint(
 
 def restore_weights(
     checkpoint_dir: str,
-    state: train_state.TrainState,
+    state: training_utils.TrainState,
     sharding: jax.sharding.NamedSharding,
-) -> train_state.TrainState:
+) -> training_utils.TrainState:
     """Restores pretrained weights from a given directory. Does not restore optimizer state or model configuration.
 
     Args:
         checkpoint_dir: Directory to load the checkpoint from.
         state: The target TrainState to restore into.
     """
-    logging.info(f"Restoring weights from {checkpoint_dir}")
-    path = epath.Path(checkpoint_dir).expanduser().resolve()
-    return state.replace(model=_model.restore_params(state.model, path, sharding=sharding))
+    # TODO
+    raise NotImplementedError()
 
 
-def save_state(checkpoint_manager: ocp.CheckpointManager, state: train_state.TrainState, step: int) -> None:
-    checkpoint_manager.save(step, args=ocp.args.PyTreeSave(state))
+def save_state(checkpoint_manager: ocp.CheckpointManager, state: training_utils.TrainState, step: int):
+    with at.disable_typechecking():
+        checkpoint_manager.save(step, args=ocp.args.PyTreeSave(state))
 
 
 def restore_state(
-    checkpoint_manager: ocp.CheckpointManager, state: train_state.TrainState, step: int | None = None
-) -> train_state.TrainState:
-    if step is None:
-        step = checkpoint_manager.latest_step()
-
-    # providing a target `TrainState` to `FlaxRestore` causes the serialized metadata to be ignored, and the
-    # provided object to be used to validate shapes/dtypes/structure instead.
-    logging.info(f"Restoring checkpoint from {checkpoint_manager.directory}, step {step}")
-    return checkpoint_manager.restore(step, args=ocp.args.PyTreeRestore(state))
+    checkpoint_manager: ocp.CheckpointManager, state: training_utils.TrainState, step: int | None = None
+) -> training_utils.TrainState:
+    with at.disable_typechecking():
+        return checkpoint_manager.restore(step=step, args=ocp.args.PyTreeRestore(state))

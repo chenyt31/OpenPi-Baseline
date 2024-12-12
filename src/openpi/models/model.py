@@ -125,15 +125,11 @@ class Model(BaseModel):
     module: common.BaseModule = struct.field(pytree_node=False)
     params: at.Params | None = None
 
-    def init_params(self, rng: at.KeyArrayLike, observation: common.Observation, actions: common.Actions) -> "Model":
+    def init_params(self, rng: at.KeyArrayLike, observation: common.Observation, actions: common.Actions) -> at.Params:
         preprocess_rng, init_rng = jax.random.split(rng)
         obs = preprocess_observation(preprocess_rng, observation)
 
-        loss_args = (obs, actions)
-        return dataclasses.replace(
-            self,
-            params=self.module.init(init_rng, *loss_args, method=self.module.compute_loss)["params"],
-        )
+        return self.module.init(init_rng, obs, actions, method=self.module.compute_loss)["params"]
 
     @at.typecheck
     @override

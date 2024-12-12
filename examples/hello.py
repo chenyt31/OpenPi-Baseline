@@ -4,13 +4,13 @@ To run this example:
 > uv run examples/hello.py
 """
 
-import os
+import openpi_client
 
 from openpi import greeter
 
 
 def main():
-    greeter.greet(os.environ["USER"])
+    greeter.greet(openpi_client.__version__)
 
 
 if __name__ == "__main__":

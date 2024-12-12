@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 import dataclasses
-import functools
 import pathlib
 
 import jax

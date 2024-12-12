@@ -3,9 +3,8 @@ import pathlib
 
 import imageio
 import numpy as np
+from openpi_client.runtime import subscriber as _subscriber
 from typing_extensions import override
-
-from openpi.runtime import subscriber as _subscriber
 
 
 class VideoSaver(_subscriber.Subscriber):

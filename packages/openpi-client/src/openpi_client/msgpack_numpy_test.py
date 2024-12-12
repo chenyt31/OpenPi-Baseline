@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import tree
 
-from openpi.shared import msgpack_numpy
+from openpi_client import msgpack_numpy
 
 
 def _check(expected, actual):

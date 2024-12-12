@@ -1,7 +1,6 @@
+from openpi_client import base_policy as _base_policy
+from openpi_client.runtime import agent as _agent
 from typing_extensions import override
-
-from openpi.policies import base_policy as _base_policy
-from openpi.runtime import agent as _agent
 
 
 # TODO: Consider unifying policies and agents.

@@ -1,9 +1,8 @@
 import gym_aloha  # noqa: F401
 import gymnasium
 import numpy as np
+from openpi_client.runtime import environment as _environment
 from typing_extensions import override
-
-from openpi.runtime import environment as _environment
 
 
 class AlohaSimEnvironment(_environment.Environment):

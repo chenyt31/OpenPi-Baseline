@@ -2,9 +2,9 @@ import logging
 import threading
 import time
 
-from openpi.runtime import agent as _agent
-from openpi.runtime import environment as _environment
-from openpi.runtime import subscriber as _subscriber
+from openpi_client.runtime import agent as _agent
+from openpi_client.runtime import environment as _environment
+from openpi_client.runtime import subscriber as _subscriber
 
 
 class Runtime:

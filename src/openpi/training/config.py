@@ -9,8 +9,9 @@ import openpi.training.optimizer as _optimizer
 @dataclasses.dataclass(frozen=True)
 class TrainConfig:
     keep_interval: int = 5000
-    lr_schedule: Annotated[_optimizer.ScheduleFactory, tyro.conf.Suppress] = _optimizer.cosine_decay_schedule
-    optimizer: Annotated[_optimizer.OptimizerFactory, tyro.conf.Suppress] = _optimizer.adamw
+    lr_schedule: _optimizer.LRScheduleConfig = dataclasses.field(default_factory=_optimizer.CosineDecaySchedule)
+    optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
+    ema_decay: float | None = None
     load_pretrained_weights: str | None = None
     checkpoint_dir: str = "/tmp/openpi/checkpoints"
     seed: int = 42
@@ -19,7 +20,7 @@ class TrainConfig:
     log_interval: int = 100
     save_interval: int = 1000
 
-    override: bool = False
+    overwrite: bool = False
     resume: bool = False
 
 

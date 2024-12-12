@@ -19,7 +19,8 @@ def test_model():
     actions = jax.tree.map(make_from_spec, action_spec)
 
     rng = jax.random.key(0)
-    model = model.init_params(rng, observation, actions)
+    params = model.init_params(rng, observation, actions)
+    model = model.replace(params=params)
 
     loss = model.compute_loss(rng, observation, actions)
     assert loss.shape == ()

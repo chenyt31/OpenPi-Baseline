@@ -1,8 +1,6 @@
-from functools import partial
 import logging
 
 from flax.training import common_utils
-from flax.training import train_state
 import jax
 from jax.experimental import mesh_utils
 from jax.experimental import multihost_utils
@@ -34,89 +32,87 @@ def init_logging() -> None:
         fmt="%(asctime)s.%(msecs)03d [%(levelname)s] %(message)-80s (%(process)d:%(filename)s:%(lineno)s)",
         datefmt="%H:%M:%S",
     )
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    logger.addHandler(handler)
+    logger.handlers[0].setFormatter(formatter)
 
 
-def init_model(
+@at.typecheck
+def init_train_state(
     config: _config.TrainConfig,
     model: _model.Model,
     init_rng: at.KeyArrayLike,
-    data: tuple[_common.Observation, _common.Actions],
+    batch: tuple[_common.Observation, _common.Actions],
     mesh: jax.sharding.Mesh,
     *,
     resume: bool,
-) -> tuple[train_state.TrainState, jax.sharding.NamedSharding]:
-    def init_train_state(
-        rng: at.KeyArrayLike, data: tuple[_common.Observation, _common.Actions], model: _model.Model
-    ) -> train_state.TrainState:
+) -> tuple[training_utils.TrainState, jax.sharding.NamedSharding]:
+    def init(rng: at.KeyArrayLike, data: tuple[_common.Observation, _common.Actions]) -> training_utils.TrainState:
         rng, model_rng = jax.random.split(rng)
         observation, actions = data
-        model = model.init_params(model_rng, observation, actions)
+        params = model.init_params(model_rng, observation, actions)
         weight_decay_mask = None
         freeze_mask = None
 
-        lr_schedule = (
-            _optimizer.schedule(config.lr_schedule) if isinstance(config.lr_schedule, str) else config.lr_schedule()
-        )
-        tx = (
-            _optimizer.optimizer(
-                config.optimizer, lr_schedule, weight_decay_mask=weight_decay_mask, freeze_mask=freeze_mask
-            )
-            if isinstance(config.optimizer, str)
-            else config.optimizer(lr_schedule, weight_decay_mask=weight_decay_mask, freeze_mask=freeze_mask)
-        )
-
-        def loss_fn(
-            params: at.Params, rng: at.KeyArrayLike, observation: _common.Observation, actions: _common.Actions
-        ):
-            chunked_loss = model.compute_loss(rng, observation, actions, params={"params": params}, train=True)
-            return jnp.mean(chunked_loss)
-
-        return train_state.TrainState.create(
-            apply_fn=loss_fn,
-            params=model.params["params"],
+        tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask, freeze_mask)
+        return training_utils.TrainState(
+            step=0,
+            params=params,
+            opt_state=tx.init(params),
             tx=tx,
+            ema_decay=config.ema_decay,
+            ema_params=None if config.ema_decay is None else params,
         )
 
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
     data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
     state_sharding = replicated_sharding
-    state = jax.eval_shape(init_train_state, init_rng, data, model)
+    state = jax.eval_shape(init, init_rng, batch)
     if resume:
         return state, state_sharding
-    # jax typechecking doesn't like sharding and jit
-    with at.disable_typechecking():
+    with at.disable_typechecking():  # TODO: https://github.com/patrick-kidger/jaxtyping/issues/277
         state = jax.jit(
-            partial(init_train_state, model=model),
+            init,
             in_shardings=(replicated_sharding, data_parallel_sharding),
             out_shardings=state_sharding,
-        )(init_rng, data)
+        )(init_rng, batch)
     # TODO: Improve this to not have two copies of the weight in memory.
     if config.load_pretrained_weights:
         state = _checkpoints.restore_weights(config.load_pretrained_weights, state, state_sharding)
     return state, state_sharding
 
 
+@at.typecheck
 def train_step(
-    rng: at.KeyArrayLike, state: train_state.TrainState, batch: tuple[_common.Observation, _common.Actions]
-) -> train_state.TrainState:
-    old_params = state.params
+    rng: at.KeyArrayLike,
+    state: training_utils.TrainState,
+    model: _model.Model,
+    batch: tuple[_common.Observation, _common.Actions],
+) -> tuple[training_utils.TrainState, dict[str, at.Array]]:
+    def loss_fn(params: at.Params, rng: at.KeyArrayLike, observation: _common.Observation, actions: _common.Actions):
+        chunked_loss = model.compute_loss(rng, observation, actions, params=params, train=True)
+        return jnp.mean(chunked_loss)
+
     train_rng = jax.random.fold_in(rng, state.step)
     observation, actions = batch
-    loss, grads = jax.value_and_grad(state.apply_fn)(state.params, train_rng, observation, actions)
-    state = state.apply_gradients(grads=grads)
+    loss, grads = jax.value_and_grad(loss_fn)(state.params, train_rng, observation, actions)
+    updates, new_opt_state = state.tx.update(grads, state.opt_state, state.params)
+    new_params = optax.apply_updates(state.params, updates)
 
-    used_grads = jax.tree.map(lambda g, old, new: g if old is not new else None, grads, old_params, state.params)
+    new_state = state.replace(step=state.step + 1, params=new_params, opt_state=new_opt_state)
+    if state.ema_decay is not None:
+        new_state = new_state.replace(
+            ema_params=jax.tree.map(
+                lambda old, new: state.ema_decay * old + (1 - state.ema_decay) * new, state.ema_params, new_params
+            )
+        )
+
     kernel_mask = training_utils.mask_from_regex(r".*\['kernel'\]", state.params)
     kernel_params = jax.tree.map(lambda p, m: p if m else None, state.params, kernel_mask)
     info = {
         "loss": loss,
-        "grad_norm": optax.global_norm(used_grads),
+        "grad_norm": optax.global_norm(grads),  # TODO: do not compute norm for frozen params
         "param_norm": optax.global_norm(kernel_params),
     }
     return state, info
@@ -128,19 +124,20 @@ def main(config: _config.TrainConfig):
         raise ValueError(
             f"Batch size {config.batch_size} must be divisible by the number of devices {jax.device_count()}."
         )
-    jax.config.update("jax_threefry_partitionable", True)
+    jax.config.update("jax_threefry_partitionable", True)  # noqa: FBT003
 
     rng = jax.random.key(config.seed)
-    rng, init_rng = jax.random.split(rng)
+    train_rng, init_rng = jax.random.split(rng)
 
     # data parallel only
     mesh_shape = (jax.device_count(),)
+    # TODO: replace with jax.make_mesh when available
     mesh = jax.sharding.Mesh(mesh_utils.create_device_mesh(mesh_shape), ("batch",))
     data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint(
-        config.checkpoint_dir, keep_interval=config.keep_interval, overwrite=config.override, resume=config.resume
+        config.checkpoint_dir, keep_interval=config.keep_interval, overwrite=config.overwrite, resume=config.resume
     )
     multihost_utils.sync_global_devices("init_checkpoint")
 
@@ -152,18 +149,17 @@ def main(config: _config.TrainConfig):
     logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")
     multihost_utils.sync_global_devices("init_dataloader")
 
-    train_state, train_state_sharding = init_model(config, model, init_rng, batch, mesh, resume=resuming)
-    logging.info(f"Initialized train state: {training_utils.to_tree_info(train_state.params)}")
+    train_state, train_state_sharding = init_train_state(config, model, init_rng, batch, mesh, resume=resuming)
+    logging.info(f"Initialized train state:\n{training_utils.to_tree_info(train_state.params)}")
     multihost_utils.sync_global_devices("init_train_state")
 
     if resuming:
         train_state = _checkpoints.restore_state(checkpoint_manager, train_state)
         multihost_utils.sync_global_devices("resume_training")
 
-    # jax typechecking doesn't like sharding and jit
     ptrain_step = jax.jit(
         train_step,
-        in_shardings=(replicated_sharding, train_state_sharding, data_parallel_sharding),
+        in_shardings=(replicated_sharding, train_state_sharding, None, data_parallel_sharding),
         out_shardings=(train_state_sharding, replicated_sharding),
         donate_argnums=(1,),
     )
@@ -180,18 +176,17 @@ def main(config: _config.TrainConfig):
 
     infos = []
     for step in pbar:
-        with at.disable_typechecking():
-            train_state, info = ptrain_step(rng, train_state, batch)
-            infos.append(info)
+        with at.disable_typechecking():  # TODO: https://github.com/patrick-kidger/jaxtyping/issues/277
+            train_state, info = ptrain_step(train_rng, train_state, model, batch)
+        infos.append(info)
         if step % config.log_interval == 0:
             stacked_infos = common_utils.stack_forest(infos)
-            reduced_info = jax.device_get(jax.tree_util.tree_map(jnp.mean, stacked_infos))
+            reduced_info = jax.device_get(jax.tree.map(jnp.mean, stacked_infos))
             logging.info(f"Step {step}: {reduced_info}")
             infos = []
-        with at.disable_typechecking():
-            batch = next(data_loader)
+        batch = next(data_loader)
 
-        if step % config.save_interval == 0:
+        if step % config.save_interval == 0 and step > start_step:
             _checkpoints.save_state(checkpoint_manager, train_state, step)
 
 

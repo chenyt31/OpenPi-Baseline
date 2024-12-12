@@ -1,9 +1,23 @@
 from collections.abc import Callable
 import re
 
+from flax import struct
 import jax
+import optax
 
 from openpi.shared import array_typing as at
+
+
+@at.typecheck
+@struct.dataclass
+class TrainState:
+    step: at.Int[at.ArrayLike, ""]
+    params: at.Params
+    opt_state: at.PyTree
+    tx: optax.GradientTransformation = struct.field(pytree_node=False)
+
+    ema_decay: float | None = struct.field(pytree_node=False)
+    ema_params: at.Params | None
 
 
 @at.typecheck

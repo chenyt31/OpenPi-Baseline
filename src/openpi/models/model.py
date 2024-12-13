@@ -2,12 +2,13 @@ import abc
 from collections.abc import Sequence
 import dataclasses
 import logging
+import pathlib
 
 import augmax
-from etils import epath
 from flax import struct
 import jax
 import jax.numpy as jnp
+import numpy as np
 import orbax.checkpoint as ocp
 from typing_extensions import override
 
@@ -183,24 +184,33 @@ class Model(BaseModel):
         )
         return actions
 
+    def set_params(self, params: at.Params) -> "Model":
+        return dataclasses.replace(self, params=params)
 
-def restore_params(model: Model, ckpt_path: epath.Path, *, sharding: jax.sharding.Sharding | None = None) -> Model:
-    if sharding is None:
-        sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
 
-    def to_restore_args(tree):
-        return jax.tree.map(lambda _: ocp.ArrayRestoreArgs(sharding=sharding), tree)
+def restore_params(ckpt_path: pathlib.Path | str, *, sharding: jax.sharding.Sharding | None = None) -> at.Params:
+    """Restores unstructured params PyTree from a checkpoint. This works with checkpoints saved with `save_state` during
+    openpi training (see `training/checkpoints.py`) as well as pre-trained checkpoints released for openpi.
+    """
+    ckpt_path = pathlib.Path(ckpt_path).resolve()
+    restore_type = np.ndarray if sharding is None else jax.Array
 
     with ocp.PyTreeCheckpointer() as ckptr:
-        item = ckptr.metadata(ckpt_path) if model.params is None else model.params
-        params = ckptr.restore(
+        metadata = ckptr.metadata(ckpt_path)
+        # Use EMA params if they exist, otherwise regular params. See `training.utils.TrainState`.
+        params_name = "ema_params" if metadata.get("ema_params") is not None else "params"
+        item = {params_name: metadata[params_name]}
+
+        return ckptr.restore(
             ckpt_path,
             ocp.args.PyTreeRestore(
                 item=item,
-                restore_args=to_restore_args(item),
+                restore_args=jax.tree.map(
+                    lambda _: ocp.ArrayRestoreArgs(sharding=sharding, restore_type=restore_type), item
+                ),
+                transforms={},  # required to load a partial PyTree (e.g., only params from a full TrainState)
             ),
-        )["params"]
-        return dataclasses.replace(model, params=params)
+        )[params_name]
 
 
 def create_inputs_spec(model: Model, *, batch_size: int = 1) -> tuple[common.Observation, at.Float[at.Array, "ah ad"]]:

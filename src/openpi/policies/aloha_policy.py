@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 import dataclasses
-import pathlib
 
 import jax
 import jax.numpy as jnp
@@ -15,7 +14,7 @@ from openpi.policies import policy as _policy
 
 def load_pi0_model() -> _model.Model:
     model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
-    return _model.restore_params(model, pathlib.Path("checkpoints/pi0_base/model").absolute())
+    return model.set_params(_model.restore_params("checkpoints/pi0_base/model"))
 
 
 @dataclasses.dataclass

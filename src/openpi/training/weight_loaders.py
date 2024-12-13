@@ -1,15 +1,15 @@
 import collections
 import dataclasses
 import logging
-import os
+import pathlib
 from typing import Protocol, runtime_checkable
 
 import fsspec
 import jax
 import numpy as np
 
+import openpi.models.model as _model
 import openpi.shared.array_typing as at
-import openpi.training.checkpoints as _checkpoints
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class CheckpointWeightLoader(WeightLoader):
     ckpt_path: str
 
     def load(self, params: at.Params) -> at.Params:
-        return _checkpoints.restore_params(self.ckpt_path)
+        return _model.restore_params(self.ckpt_path)
 
 
 def _recover_tree(d: dict) -> dict:
@@ -50,14 +50,14 @@ def _recover_tree(d: dict) -> dict:
 
 @dataclasses.dataclass(frozen=True)
 class PaliGemmaWeightLoader(WeightLoader):
-    cache_path: str | None = os.path.expanduser("~/.cache/openpi/paligemma.npz")  # noqa: PTH111, RUF009
+    cache_path: str | None = "~/.cache/openpi/paligemma.npz"
 
     def load(self, params: at.Params) -> at.Params:
         logger.info("Loading PaliGemma weights. This may take a while the first time.")
         with fsspec.open(
             "filecache::gs://vertex-model-garden-paligemma-us/paligemma/pt_224.npz",
             gs={"token": "anon"},
-            filecache={"cache_storage": self.cache_path},
+            filecache={"cache_storage": pathlib.Path(self.cache_path).expanduser().resolve().as_posix()},
         ) as f:
             flat_params = dict(np.load(f, allow_pickle=False))
         # The weights are stored in a special big_vision format, so we need a special function to unflatten them.

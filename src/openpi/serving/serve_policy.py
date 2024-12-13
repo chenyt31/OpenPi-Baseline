@@ -7,6 +7,7 @@ import tyro
 from openpi.models import exported as _exported
 from openpi.models import model as _model
 from openpi.policies import aloha_policy
+from openpi.policies import droid_policy
 from openpi.policies import policy as _policy
 from openpi.serving import websocket_policy_server
 
@@ -51,18 +52,21 @@ def main(
     port: int = 8000,
     *,
     record: bool = False,
+    model: str = "aloha",  # TODO: Better name for this
     mode: ModelMode = ModelMode.SIM,
     default_prompt: str = "transfer cube",
 ) -> None:
-    logging.info("Loading model...")
-    model, config = create_model(mode)
-    config.default_prompt = default_prompt
+    if model == "aloha":
+        logging.info("Loading model...")
+        model, config = create_model(mode)
+        config.default_prompt = default_prompt
 
-    logging.info("Creating policy...")
-    policy: _policy.BasePolicy = _policy.ActionChunkBroker(
-        aloha_policy.create_aloha_policy(model, config),
-        action_horizon=model.action_horizon // 2,
-    )
+        logging.info("Creating policy...")
+        policy: _policy.BasePolicy = aloha_policy.create_aloha_policy(model, config)
+    elif model == "droid":
+        policy = droid_policy.create_droid_policy(default_prompt)
+    else:
+        raise ValueError(f"Unknown model: {model}")
 
     # Record the policy's behavior.
     if record:

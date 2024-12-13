@@ -1,8 +1,8 @@
 from etils import epath
+from openpi_client import action_chunk_broker
 
 from openpi.models import exported as _exported
 from openpi.policies import aloha_policy
-from openpi.policies import policy as _policy
 
 
 def test_infer():
@@ -40,7 +40,7 @@ def test_exported():
 def test_broker():
     model = aloha_policy.load_pi0_model()
 
-    policy = _policy.ActionChunkBroker(
+    policy = action_chunk_broker.ActionChunkBroker(
         aloha_policy.create_aloha_policy(
             model,
             aloha_policy.PolicyConfig(norm_stats=aloha_policy.make_aloha_norm_stats()),

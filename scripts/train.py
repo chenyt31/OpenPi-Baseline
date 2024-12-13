@@ -41,10 +41,7 @@ def init_logging() -> None:
     logger.handlers[0].setFormatter(formatter)
 
 
-def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader | None, params: at.Params) -> at.Params:
-    if weight_loader is None:
-        return params
-
+def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader, params: at.Params) -> at.Params:
     new_params = weight_loader.load(jax.tree.map(lambda x: x, params))
 
     if errors := list(private_tree_util.equality_errors(params, new_params)):

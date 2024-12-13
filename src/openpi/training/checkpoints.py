@@ -2,6 +2,7 @@ import logging
 
 from etils import epath
 import jax
+import numpy as np
 import orbax.checkpoint as ocp
 
 import openpi.shared.array_typing as at
@@ -59,8 +60,7 @@ def restore_state(
 
 def restore_params(ckpt_path: str, sharding: jax.sharding.Sharding | None = None) -> at.Params:
     """Restores params (but not optimizer state) from a given checkpoint saved with `save_state`."""
-    if sharding is None:
-        sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
+    restore_type = np.ndarray if sharding is None else jax.Array
 
     with ocp.PyTreeCheckpointer() as ckptr:
         metadata = ckptr.metadata(ckpt_path)
@@ -72,7 +72,9 @@ def restore_params(ckpt_path: str, sharding: jax.sharding.Sharding | None = None
             ckpt_path,
             ocp.args.PyTreeRestore(
                 item=item,
-                restore_args=jax.tree.map(lambda _: ocp.ArrayRestoreArgs(sharding=sharding), item),
+                restore_args=jax.tree.map(
+                    lambda _: ocp.ArrayRestoreArgs(sharding=sharding, restore_type=restore_type), item
+                ),
                 transforms={},
             ),
         )[params_name]

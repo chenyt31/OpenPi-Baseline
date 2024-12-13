@@ -17,7 +17,7 @@ class TrainConfig:
     lr_schedule: _optimizer.LRScheduleConfig = dataclasses.field(default_factory=_optimizer.CosineDecaySchedule)
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
     ema_decay: float | None = None
-    weight_loader: weight_loaders.WeightLoader | None = None
+    weight_loader: weight_loaders.WeightLoader = dataclasses.field(default_factory=weight_loaders.NoOpWeightLoader)
     checkpoint_dir: str = "/tmp/openpi/checkpoints"
     seed: int = 42
     batch_size: int = 16
@@ -32,6 +32,11 @@ class TrainConfig:
 _CONFIGS = {
     "default": TrainConfig(),
     "debug": TrainConfig(batch_size=2, module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy")),
+    "debug_restore": TrainConfig(
+        batch_size=2,
+        module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(""),
+    ),
     "paligemma": TrainConfig(
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),
         # module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),

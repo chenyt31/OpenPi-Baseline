@@ -20,11 +20,17 @@ class WeightLoader(Protocol):
 
 
 @dataclasses.dataclass(frozen=True)
+class NoOpWeightLoader(WeightLoader):
+    def load(self, params: at.Params) -> at.Params:
+        return params
+
+
+@dataclasses.dataclass(frozen=True)
 class CheckpointWeightLoader(WeightLoader):
     ckpt_path: str
 
     def load(self, params: at.Params) -> at.Params:
-        return _checkpoints.restore_params(self.ckpt_path, params)
+        return _checkpoints.restore_params(self.ckpt_path)
 
 
 def _recover_tree(d: dict) -> dict:

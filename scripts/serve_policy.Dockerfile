@@ -22,4 +22,4 @@ RUN uv venv --python 3.11.9 $UV_PROJECT_ENVIRONMENT
 RUN uv pip sync /tmp/requirements.txt
 ENV PYTHONPATH=/app:/app/src
 
-CMD ["/bin/bash", "-c", "source /.venv/bin/activate && python src/openpi/serving/serve_policy.py"]
+CMD ["/bin/bash", "-c", "source /.venv/bin/activate && python scripts/serve_policy.py"]

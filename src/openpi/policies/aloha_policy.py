@@ -2,13 +2,11 @@ from collections.abc import Sequence
 import dataclasses
 import pathlib
 
-from etils import epath
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from openpi import transforms
-from openpi.models import exported as _exported
 from openpi.models import model as _model
 from openpi.models import pi0
 from openpi.models import tokenizer
@@ -51,36 +49,6 @@ def make_bool_mask(*dims: int) -> tuple[bool, ...]:
         else:
             result.extend([False] * (-dim))
     return tuple(result)
-
-
-def create_model(mode: str) -> tuple[_model.BaseModel, PolicyConfig]:
-    model: _model.BaseModel
-    config: PolicyConfig
-
-    match mode:
-        case "LIVE":
-            model = load_pi0_model()
-            config = PolicyConfig(
-                norm_stats=make_aloha_norm_stats(),
-                delta_action_mask=make_bool_mask(6, -1, 6, -1),
-            )
-        case "REF":
-            ckpt_path = epath.Path("checkpoints/pi0_real/model").resolve()
-            model = _exported.PiModel.from_checkpoint(ckpt_path)
-            config = PolicyConfig(
-                norm_stats=_exported.import_norm_stats(ckpt_path, "trossen_biarm_single_base_cam_24dim"),
-                delta_action_mask=make_bool_mask(6, -1, 6, -1),
-            )
-        case "SIM":
-            ckpt_path = epath.Path("checkpoints/pi0_sim/model").resolve()
-            model = _exported.PiModel.from_checkpoint(ckpt_path)
-            config = PolicyConfig(
-                norm_stats=_exported.import_norm_stats(ckpt_path, "huggingface_aloha_sim_transfer_cube"),
-                # The model was fine-tuned on the original aloha data.
-                adapt_to_pi=False,
-            )
-
-    return model, config
 
 
 def create_aloha_policy(model: _model.BaseModel, config: PolicyConfig) -> _policy.Policy:

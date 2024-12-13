@@ -29,6 +29,7 @@ dependencies = [
     "typing-extensions>=4.12.2",
     "tyro>=0.8.14",
     "ml_collections==1.0.0",
+    "gcsfs>=2024.10.0",
 ]
 
 

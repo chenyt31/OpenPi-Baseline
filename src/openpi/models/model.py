@@ -1,14 +1,11 @@
 import abc
 from collections.abc import Sequence
-import dataclasses
 import logging
 
 import augmax
-from etils import epath
 from flax import struct
 import jax
 import jax.numpy as jnp
-import orbax.checkpoint as ocp
 from typing_extensions import override
 
 from openpi.models import common
@@ -182,31 +179,6 @@ class Model(BaseModel):
             **sample_kwargs,
         )
         return actions
-
-
-def save_params(model: Model, ckpt_path: epath.Path):
-    with ocp.StandardCheckpointer() as ckptr:
-        ckptr.save(ckpt_path, model.params)
-        ckptr.wait_until_finished()
-
-
-def restore_params(model: Model, ckpt_path: epath.Path, *, sharding: jax.sharding.Sharding | None = None) -> Model:
-    if sharding is None:
-        sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
-
-    def to_restore_args(tree):
-        return jax.tree.map(lambda _: ocp.ArrayRestoreArgs(sharding=sharding), tree)
-
-    with ocp.PyTreeCheckpointer() as ckptr:
-        item = ckptr.metadata(ckpt_path) if model.params is None else model.params
-        params = ckptr.restore(
-            ckpt_path,
-            ocp.args.PyTreeRestore(
-                item=item,
-                restore_args=to_restore_args(item),
-            ),
-        )["params"]
-        return dataclasses.replace(model, params=params)
 
 
 def create_inputs_spec(model: Model, *, batch_size: int = 1) -> tuple[common.Observation, at.Float[at.Array, "ah ad"]]:

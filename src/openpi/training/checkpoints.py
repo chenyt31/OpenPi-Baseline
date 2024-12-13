@@ -45,21 +45,6 @@ def initialize_checkpoint(
     return mngr, resuming
 
 
-def restore_weights(
-    checkpoint_dir: str,
-    state: training_utils.TrainState,
-    sharding: jax.sharding.NamedSharding,
-) -> training_utils.TrainState:
-    """Restores pretrained weights from a given directory. Does not restore optimizer state or model configuration.
-
-    Args:
-        checkpoint_dir: Directory to load the checkpoint from.
-        state: The target TrainState to restore into.
-    """
-    # TODO
-    raise NotImplementedError()
-
-
 def save_state(checkpoint_manager: ocp.CheckpointManager, state: training_utils.TrainState, step: int):
     with at.disable_typechecking():
         checkpoint_manager.save(step, args=ocp.args.PyTreeSave(state))
@@ -70,3 +55,24 @@ def restore_state(
 ) -> training_utils.TrainState:
     with at.disable_typechecking():
         return checkpoint_manager.restore(step=step, args=ocp.args.PyTreeRestore(state))
+
+
+def restore_params(ckpt_path: str, sharding: jax.sharding.Sharding | None = None) -> at.Params:
+    """Restores params (but not optimizer state) from a given checkpoint saved with `save_state`."""
+    if sharding is None:
+        sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
+
+    with ocp.PyTreeCheckpointer() as ckptr:
+        metadata = ckptr.metadata(ckpt_path)
+        # Use EMA params if they exist, otherwise regular params.
+        params_name = "ema_params" if metadata.get("ema_params") is not None else "params"
+        item = {params_name: metadata[params_name]}
+
+        return ckptr.restore(
+            ckpt_path,
+            ocp.args.PyTreeRestore(
+                item=item,
+                restore_args=jax.tree.map(lambda _: ocp.ArrayRestoreArgs(sharding=sharding), item),
+                transforms={},
+            ),
+        )[params_name]

@@ -1,7 +1,11 @@
+from functools import partial
 import logging
+from typing import Any
 
 from flax.training import common_utils
 import jax
+import jax._src.tree_util as private_tree_util
+import jax.experimental
 from jax.experimental import mesh_utils
 import jax.numpy as jnp
 import optax
@@ -15,6 +19,7 @@ import openpi.training.config as _config
 import openpi.training.data_loader as _data_loader
 import openpi.training.optimizer as _optimizer
 import openpi.training.utils as training_utils
+import openpi.training.weight_loaders as _weight_loaders
 
 
 def init_logging() -> None:
@@ -36,6 +41,34 @@ def init_logging() -> None:
     logger.handlers[0].setFormatter(formatter)
 
 
+def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader | None, params: at.Params) -> at.Params:
+    if weight_loader is None:
+        return params
+
+    new_params = weight_loader.load(jax.tree.map(lambda x: x, params))
+
+    if errors := list(private_tree_util.equality_errors(params, new_params)):
+        raise ValueError(
+            "Weight loading changed the params structure:\n"
+            + (
+                "\n".join(
+                    f"   - {jax.tree_util.keystr(path)} changed from {thing1} to {thing2}, so {explanation}.\n"
+                    for path, thing1, thing2, explanation in errors
+                )
+            )
+        )
+
+    def check(kp, x, y):
+        if (x := jax.ShapeDtypeStruct(x.shape, x.dtype)) != (y := jax.ShapeDtypeStruct(y.shape, y.dtype)):
+            raise ValueError(
+                f"Weight loading changed the params structure: expected {y}, got {x} at {jax.tree_util.keystr(kp)}"
+            )
+
+    jax.tree_util.tree_map_with_path(check, params, new_params)
+
+    return new_params
+
+
 @at.typecheck
 def init_train_state(
     config: _config.TrainConfig,
@@ -45,15 +78,19 @@ def init_train_state(
     mesh: jax.sharding.Mesh,
     *,
     resume: bool,
-) -> tuple[training_utils.TrainState, jax.sharding.NamedSharding]:
+) -> tuple[training_utils.TrainState, Any]:
+    weight_decay_mask = None
+    freeze_mask = None
+    tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask, freeze_mask)
+
     def init(rng: at.KeyArrayLike, data: tuple[_common.Observation, _common.Actions]) -> training_utils.TrainState:
         rng, model_rng = jax.random.split(rng)
         observation, actions = data
         params = model.init_params(model_rng, observation, actions)
-        weight_decay_mask = None
-        freeze_mask = None
-
-        tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask, freeze_mask)
+        # if config.weight_loader is not None:
+        params = jax.experimental.io_callback(
+            partial(_load_weights_and_validate, config.weight_loader), params, params, ordered=True
+        )
         return training_utils.TrainState(
             step=0,
             params=params,
@@ -65,20 +102,20 @@ def init_train_state(
 
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
     data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
-    state_sharding = replicated_sharding
-    state = jax.eval_shape(init, init_rng, batch)
+
+    train_state_shape = jax.eval_shape(init, init_rng, batch)
+    # This is where we may want to shard the train state (e.g., FSDP).
+    with at.disable_typechecking():
+        state_sharding = jax.tree.map(lambda _: replicated_sharding, train_state_shape)
+
     if resume:
-        return state, state_sharding
+        return train_state_shape, state_sharding
+
     with at.disable_typechecking():  # TODO: https://github.com/patrick-kidger/jaxtyping/issues/277
-        state = jax.jit(
-            init,
-            in_shardings=(replicated_sharding, data_parallel_sharding),
-            out_shardings=state_sharding,
+        train_state = jax.jit(
+            init, in_shardings=(replicated_sharding, data_parallel_sharding), out_shardings=state_sharding
         )(init_rng, batch)
-    # TODO: Improve this to not have two copies of the weight in memory.
-    if config.load_pretrained_weights:
-        state = _checkpoints.restore_weights(config.load_pretrained_weights, state, state_sharding)
-    return state, state_sharding
+    return train_state, state_sharding
 
 
 @at.typecheck
@@ -146,17 +183,19 @@ def main(config: _config.TrainConfig):
     logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")
 
     train_state, train_state_sharding = init_train_state(config, model, init_rng, batch, mesh, resume=resuming)
+    jax.block_until_ready(train_state)
     logging.info(f"Initialized train state:\n{training_utils.to_tree_info(train_state.params)}")
 
     if resuming:
         train_state = _checkpoints.restore_state(checkpoint_manager, train_state)
 
-    ptrain_step = jax.jit(
-        train_step,
-        in_shardings=(replicated_sharding, train_state_sharding, None, data_parallel_sharding),
-        out_shardings=(train_state_sharding, replicated_sharding),
-        donate_argnums=(1,),
-    )
+    with at.disable_typechecking():
+        ptrain_step = jax.jit(
+            train_step,
+            in_shardings=(replicated_sharding, train_state_sharding, None, data_parallel_sharding),
+            out_shardings=(train_state_sharding, replicated_sharding),
+            donate_argnums=(1,),
+        )
 
     start_step = int(train_state.step)
     pbar = tqdm.trange(

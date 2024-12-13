@@ -1,4 +1,5 @@
 import dataclasses
+from typing import Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -7,8 +8,13 @@ import optax
 import openpi.shared.array_typing as at
 
 
+@runtime_checkable
+class LRScheduleConfig(Protocol):
+    def create(self) -> optax.Schedule: ...
+
+
 @dataclasses.dataclass(frozen=True)
-class CosineDecaySchedule:
+class CosineDecaySchedule(LRScheduleConfig):
     """Cosine decay schedule with warmup."""
 
     warmup_steps: int = 1_000
@@ -27,7 +33,7 @@ class CosineDecaySchedule:
 
 
 @dataclasses.dataclass(frozen=True)
-class RsqrtDecaySchedule:
+class RsqrtDecaySchedule(LRScheduleConfig):
     """Inverse square root decay schedule with warmup."""
 
     warmup_steps: int = 1_000
@@ -48,11 +54,18 @@ class RsqrtDecaySchedule:
         )
 
 
-LRScheduleConfig = CosineDecaySchedule | RsqrtDecaySchedule
+@runtime_checkable
+class OptimizerConfig(Protocol):
+    def create(
+        self,
+        lr: optax.ScalarOrSchedule,
+        weight_decay_mask: at.PyTree | None = None,
+        freeze_weights_mask: at.PyTree | None = None,
+    ) -> optax.GradientTransformation: ...
 
 
 @dataclasses.dataclass(frozen=True)
-class AdamW:
+class AdamW(OptimizerConfig):
     """AdamW optimizer."""
 
     b1: float = 0.9
@@ -74,7 +87,7 @@ class AdamW:
 
 
 @dataclasses.dataclass(frozen=True)
-class SGD:
+class SGD(OptimizerConfig):
     """SGD optimizer."""
 
     lr: float = 5e-5
@@ -88,9 +101,6 @@ class SGD:
     ) -> optax.GradientTransformation:
         assert weight_decay_mask is None, "Weight decay is not supported for SGD"
         return optax.sgd(lr, momentum=self.momentum, nesterov=self.nesterov)
-
-
-OptimizerConfig = AdamW | SGD
 
 
 def create_optimizer(

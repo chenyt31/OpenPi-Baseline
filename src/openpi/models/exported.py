@@ -154,8 +154,11 @@ def _example_to_obs(example: dict) -> common.Observation:
 
 def import_norm_stats(ckpt_path: epath.Path, processor_name: str) -> dict[str, _normalize.NormStats]:
     path = ckpt_path / "processors" / processor_name
+    if not path.exists():
+        raise FileNotFoundError(f"Processor {processor_name} not found in {ckpt_path}")
+
     if not (found_files := list(path.glob("*/norm_stats.msgpack"))):
-        raise FileNotFoundError(f"No norm_stats.msgpack found in {path}")
+        raise FileNotFoundError(f"norm_stats.msgpack not found in {path}")
 
     outputs = []
 

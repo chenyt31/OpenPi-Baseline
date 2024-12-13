@@ -147,7 +147,7 @@ def train_step(
         "grad_norm": optax.global_norm(grads),  # TODO: do not compute norm for frozen params
         "param_norm": optax.global_norm(kernel_params),
     }
-    return state, info
+    return new_state, info
 
 
 def main(config: _config.TrainConfig):

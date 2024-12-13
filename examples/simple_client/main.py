@@ -19,6 +19,8 @@ def main(args: Args) -> None:
     obs_fn = {
         "aloha": _random_observation_aloha,
         "droid": _random_observation_droid,
+        "calvin": _random_observation_calvin,
+        "libero": _random_observation_libero,
     }[args.example]
 
     policy = _websocket_client_policy.WebsocketClientPolicy(
@@ -52,6 +54,24 @@ def _random_observation_droid() -> dict:
         "observation/wrist_image_left": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
         "observation/joint_position": np.random.rand(7),
         "observation/gripper_position": np.random.rand(1),
+        "prompt": "do something",
+    }
+
+
+def _random_observation_calvin() -> dict:
+    return {
+        "observation/state": np.random.rand(15),
+        "observation/rgb_static": np.random.rand(4, 3, 480, 640).astype(np.float32),
+        "observation/rgb_gripper": np.random.rand(4, 3, 480, 640).astype(np.float32),
+        "prompt": "do something",
+    }
+
+
+def _random_observation_libero() -> dict:
+    return {
+        "observation/state": np.random.rand(8),
+        "observation/image": np.random.rand(4, 3, 480, 640).astype(np.float32),
+        "observation/wrist_image": np.random.rand(4, 3, 480, 640).astype(np.float32),
         "prompt": "do something",
     }
 

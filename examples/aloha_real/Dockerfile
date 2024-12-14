@@ -48,9 +48,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.6 /uv /bin/uv
 ENV UV_HTTP_TIMEOUT=120
 ENV UV_LINK_MODE=copy
 COPY ./examples/aloha_real/requirements.txt /tmp/requirements.txt
-RUN uv pip sync --python 3.10 --system /tmp/requirements.txt
+COPY ./packages/openpi-client/pyproject.toml /tmp/openpi-client/pyproject.toml
+RUN uv pip sync --python 3.10 --system /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
 
-ENV PYTHONPATH=/root/app:/root/app/src:/root/interbotix_ws/src/aloha/aloha_scripts:/root/interbotix_ws/src/aloha
+ENV PYTHONPATH=/root/app:/root/app/src:/app/packages/openpi-client/src:/root/interbotix_ws/src/aloha/aloha_scripts:/root/interbotix_ws/src/aloha
 WORKDIR /root/app
 
 # Create an entrypoint script to run the setup commands, followed by the command passed in.

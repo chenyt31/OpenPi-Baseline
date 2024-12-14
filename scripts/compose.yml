@@ -1,25 +1,10 @@
 # Run with:
-# docker compose -f examples/aloha_sim/compose.yml up --build
+# docker compose -f scripts/compose.yml up --build
 services:
-  runtime:
-    image: aloha_sim
-    depends_on:
-      - openpi_server
-    build:
-      context: ../..
-      dockerfile: examples/aloha_sim/Dockerfile
-    init: true
-    tty: true
-    network_mode: host
-    privileged: true
-    volumes:
-      - $PWD:/app
-      - ../../data:/data
-
   openpi_server:
     image: openpi_server
     build:
-      context: ../..
+      context: ..
       dockerfile: scripts/serve_policy.Dockerfile
     init: true
     tty: true

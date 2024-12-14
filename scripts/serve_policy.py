@@ -104,28 +104,6 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
             ckpt_path = epath.Path("checkpoints/pi0_real/model").resolve()
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
-
-def make_bool_mask(*dims: int) -> tuple[bool, ...]:
-    """Make a boolean mask for the given dimensions.
-
-    Example:
-        make_bool_mask(2, -2, 2) == (True, True, False, False, True, True)
-        make_bool_mask(2, 0, 2) == (True, True, True, True)
-
-    Args:
-        dims: The dimensions to make the mask for.
-
-    Returns:
-        A tuple of booleans.
-    """
-    result = []
-    for dim in dims:
-        if dim > 0:
-            result.extend([True] * (dim))
-        else:
-            result.extend([False] * (-dim))
-    return tuple(result)
-
             logging.info("Creating policy...")
             config = _policy_config.PolicyConfig(
                 model=model,
@@ -147,6 +125,28 @@ def make_bool_mask(*dims: int) -> tuple[bool, ...]:
             raise ValueError(f"Unknown model mode: {mode}")
 
     return _policy_config.create_policy(config)
+
+
+def make_bool_mask(*dims: int) -> tuple[bool, ...]:
+    """Make a boolean mask for the given dimensions.
+
+    Example:
+        make_bool_mask(2, -2, 2) == (True, True, False, False, True, True)
+        make_bool_mask(2, 0, 2) == (True, True, True, True)
+
+    Args:
+        dims: The dimensions to make the mask for.
+
+    Returns:
+        A tuple of booleans.
+    """
+    result = []
+    for dim in dims:
+        if dim > 0:
+            result.extend([True] * (dim))
+        else:
+            result.extend([False] * (-dim))
+    return tuple(result)
 
 
 def main(

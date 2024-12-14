@@ -1,5 +1,5 @@
-# docker build . -t pi0_server -f src/openpi/serving/Dockerfile
-# docker run --rm -it --network=host -v .:/app --gpus=all pi0_server /bin/bash
+# docker build . -t openpi_server -f scripts/serve_policy.Dockerfile
+# docker run --rm -it --network=host -v .:/app --gpus=all openpi_server /bin/bash
 FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04@sha256:2d913b09e6be8387e1a10976933642c73c840c0b735f0bf3c28d97fc9bc422e0
 COPY --from=ghcr.io/astral-sh/uv:0.5.1 /uv /uvx /bin/
 
@@ -12,14 +12,19 @@ ENV UV_LINK_MODE=copy
 # leak out of the container when we mount the application code.
 ENV UV_PROJECT_ENVIRONMENT=/.venv
 
-# Copy the requirements file so we can install dependencies.
+# Copy the requirements files so we can install dependencies.
 # The rest of the project is mounted as a volume, so we don't need to rebuild on changes.
 # This strategy is best for development-style usage.
-COPY ./requirements.txt /tmp/requirements.txt
+COPY ./pyproject.toml /tmp/pyproject.toml
+# This is a bit of a hack because installing this the uv way would require copying
+# the openpi-client code into the build, which is not desirable.
+RUN sed -i '/openpi-client/d' /tmp/pyproject.toml
+COPY ./packages/openpi-client/pyproject.toml /tmp/openpi-client/pyproject.toml
 
 # Install python dependencies.
 RUN uv venv --python 3.11.9 $UV_PROJECT_ENVIRONMENT
-RUN uv pip sync /tmp/requirements.txt
-ENV PYTHONPATH=/app:/app/src
+RUN uv pip compile /tmp/pyproject.toml -o /tmp/requirements.txt
+RUN uv pip sync /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
+ENV PYTHONPATH=/app:/app/src:/app/packages/openpi-client/src
 
 CMD ["/bin/bash", "-c", "source /.venv/bin/activate && python scripts/serve_policy.py"]

@@ -25,5 +25,5 @@ Terminal window 2:
 
 ```
 # Run the server
-uv run src/openpi/serving/serve_policy.py --mode SIM
+uv run scripts/serve_policy.py --mode SIM
 ```

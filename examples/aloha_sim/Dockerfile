@@ -21,14 +21,15 @@ ENV UV_LINK_MODE=copy
 # leak out of the container when we mount the application code.
 ENV UV_PROJECT_ENVIRONMENT=/.venv
 
-# Copy the requirements file so we can install dependencies.
+# Copy the requirements files so we can install dependencies.
 # The rest of the project is mounted as a volume, so we don't need to rebuild on changes.
 # This strategy is best for development-style usage.
 COPY ./examples/aloha_sim/requirements.txt /tmp/requirements.txt
+COPY ./packages/openpi-client/pyproject.toml /tmp/openpi-client/pyproject.toml
 
 # Install python dependencies.
 RUN uv venv --python 3.11.9 $UV_PROJECT_ENVIRONMENT
-RUN uv pip sync /tmp/requirements.txt
-ENV PYTHONPATH=/app:/app/src
+RUN uv pip sync /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
+ENV PYTHONPATH=/app:/app/src:/app/packages/openpi-client/src
 
 CMD ["/bin/bash", "-c", "source /.venv/bin/activate && python examples/aloha_sim/main.py"]

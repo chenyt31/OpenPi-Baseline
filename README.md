@@ -33,44 +33,31 @@ AWS_ACCESS_KEY_ID=AKIA4MTWIIQIZBO44C62 AWS_SECRET_ACCESS_KEY=L8h5IUICpnxzDpT6Wv+
 ## Docker Setup
 
 The recommended way to run many of our examples is using Docker. This will simplify software installation, produce a more stable environment, and also
-allow you to avoid installing ROS and cluttering your machine, even when depending on ROS.
+allow you to avoid installing ROS and cluttering your machine, for examples which depend on ROS.
 
 Docker installation instructions are [here](https://docs.docker.com/engine/install/). If using a GPU you must also install the [NVIDIA container toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If your host machine is Ubuntu 22.04, you can use the convenience scripts `scripts/install_docker_ubuntu22.sh` and `scripts/install_nvidia_container_toolkit.sh`.
 
-Per [this answer](https://askubuntu.com/a/1470341) you'll probably need to run `xhost +Local:*` in a terminal for certain visualizations to render.
-
 During the first run of any example, docker will build the images. Go grab a coffee while this happens. Subsequent runs will be faster since the images are cached.
 
-## ALOHA+ACT
+## Running Examples
 
-### Running the Sim, with Docker
+We provide example integrations with several robotics platforms. See the README in each example for more details:
 
-- Follow the instructions [above](#docker-setup) to install Docker.
+- [ALOHA Sim](examples/aloha_sim)
+- [ALOHA Real](examples/aloha_real)
+
+## Running the OpenPI Server
+
+The OpenPI server hosts model inference for an OpenPI policy. The examples describe how to run it in conjunction with each environment, but you can also run it standalone:
+
+### With Docker:
 
 ```bash
-docker compose -f docker/aloha_act/compose_sim.yml up --build
+docker compose -f scripts/compose.yml up --build
 ```
 
-### Running the Sim, without Docker
-
-- Perform the ALOHA software installation ([part 1](https://github.com/tonyzhaozh/aloha?tab=readme-ov-file#software-installation---ros) and [part 2](https://github.com/tonyzhaozh/aloha?tab=readme-ov-file#software-installation---conda))
-- Clone [ACT](https://github.com/tonyzhaozh/act) and follow its installation instructions [here](https://github.com/tonyzhaozh/act?tab=readme-ov-file#installation).
-- **Temporary**: Modify your ACT code to incorporate the changes in [this fork](https://github.com/jimmyt857/act). [Diff viewer](https://github.com/tonyzhaozh/act/compare/main...jimmyt857:main).
-- **Update**: All ACT changes should be applied to the [private fork](https://github.com/Physical-Intelligence/act). We'll figure out how to manage this better when we open source this repo.
-- Install [UV](https://docs.astral.sh/uv/getting-started/installation/).
-
-Run ALOHA and ACT in separate terminals. Then, in another terminal, run the following from the cloned `openpi` directory:
+### Without Docker:
 
 ```bash
-uv run src/openpi/serving/http_policy_server_pi0.py
-```
-
-### Running the Real Robot, with Docker
-
-- Follow the instructions [above](#docker-setup) to install Docker.
-- Perform the [ALOHA hardware installation](https://github.com/tonyzhaozh/aloha?tab=readme-ov-file#hardware-installation).
-- Modify `docker/aloha_act/compose_real.yml` to use the correct realsense camera serial numbers for your robot.
-
-```bash
-docker compose -f docker/aloha_act/compose_real.yml up --build
+uv run scripts/serve_policy.py
 ```

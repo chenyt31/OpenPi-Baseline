@@ -53,6 +53,7 @@ The OpenPI server hosts model inference for an OpenPI policy. The examples descr
 ### With Docker:
 
 ```bash
+export SERVER_ARGS="--mode SIM --default_prompt 'my task'"
 docker compose -f scripts/compose.yml up --build
 ```
 

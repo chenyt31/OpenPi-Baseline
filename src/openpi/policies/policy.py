@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 import logging
 import pathlib
-from typing import TypeAlias
+from typing import Any, TypeAlias
 
 import flax
 import flax.traverse_util
@@ -27,21 +27,25 @@ class Policy(BasePolicy):
         rng: at.KeyArrayLike | None = None,
         transforms: Sequence[_transforms.DataTransformFn] = (),
         output_transforms: Sequence[_transforms.DataTransformFn] = (),
+        sample_kwargs: dict[str, Any] | None = None,
     ):
         self._model = model
         self._input_transform = _transforms.CompositeTransform(transforms)
         self._output_transform = _transforms.CompositeTransform(output_transforms)
         self._rng = rng or jax.random.key(0)
+        self._sample_kwargs = sample_kwargs or {"num_steps": 10}
 
     @override
-    def infer(self, obs: dict) -> dict:
+    def infer(self, obs: dict) -> dict:  # type: ignore[misc]
         inputs = _make_batch(obs)
         inputs = self._input_transform(inputs)
 
         self._rng, sample_rng = jax.random.split(self._rng)
         outputs = {
             "state": inputs["state"],
-            "actions": self._model.sample_actions(sample_rng, common.Observation.from_dict(inputs)),
+            "actions": self._model.sample_actions(
+                sample_rng, common.Observation.from_dict(inputs), **self._sample_kwargs
+            ),
         }
         outputs = self._output_transform(outputs)
         return _unbatch(jax.device_get(outputs))

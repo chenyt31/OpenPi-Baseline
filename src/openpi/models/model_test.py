@@ -20,10 +20,10 @@ def test_model():
 
     rng = jax.random.key(0)
     params = model.init_params(rng, observation, actions)
-    model = model.replace(params=params)
+    model = model.set_params(params)
 
     loss = model.compute_loss(rng, observation, actions)
     assert loss.shape == ()
 
-    actions = model.sample_actions(rng, observation)
+    actions = model.sample_actions(rng, observation, num_steps=10)
     assert actions.shape == (batch_size, 50, 24)

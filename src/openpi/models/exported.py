@@ -26,16 +26,19 @@ class PiModel(_model.BaseModel):
 
     exported: jax.export.Exported = struct.field(pytree_node=False)
     example_spec: Any = struct.field(pytree_node=False)
+    sample_spec: Any = struct.field(pytree_node=False)
 
     @classmethod
-    def from_checkpoint(cls, ckpt_path: epath.Path) -> "PiModel":
+    def from_checkpoint(cls, ckpt_path: epath.Path | str) -> "PiModel":
         """Load a model from a monopi checkpoint model directory."""
+        ckpt_path = epath.Path(ckpt_path).resolve()
         with (ckpt_path / "graph").open("rb") as f:
             exported = jax.export.deserialize(f.read())
 
         input_spec = jax.tree.unflatten(exported.in_tree, exported.in_avals)[0]
         params = _load_params(ckpt_path, input_spec[0])
         example_spec = input_spec[2]
+        sample_spec = input_spec[3]
 
         # Extract the action properties from the output spec.
         output_spec = jax.tree.unflatten(exported.out_tree, exported.out_avals)
@@ -46,6 +49,7 @@ class PiModel(_model.BaseModel):
             params=params,
             exported=exported,
             example_spec=example_spec,
+            sample_spec=sample_spec,
             action_horizon=action_horizon,
             action_dim=action_dim,
             max_token_len=48,
@@ -60,7 +64,7 @@ class PiModel(_model.BaseModel):
             raise ValueError("Only batch_size=1 is supported.")
 
         # Convert to the example format.
-        example = _obs_to_example(obs)
+        example = _obs_to_example(obs, self.example_spec)
         example = _unbatch(example)
 
         # Resize the input images if needed.
@@ -72,9 +76,10 @@ class PiModel(_model.BaseModel):
 
         example["image"] = {key: resize_if_needed(key, value) for key, value in example["image"].items()}
 
-        # This is required by the exported model.
-        if "num_steps" not in sample_kwargs:
-            sample_kwargs["num_steps"] = 10
+        if set(sample_kwargs) != set(self.sample_spec):
+            raise ValueError(
+                f"Sample args {list(sample_kwargs)} do not match the expected args {list(self.sample_spec)}"
+            )
 
         rng_data = jax.random.key_data(rng)
         result = self.exported.call(self.params, rng_data, example, sample_kwargs)
@@ -98,6 +103,34 @@ class PiModel(_model.BaseModel):
         return _example_to_obs(_make_batch(example))
 
 
+def model_from_checkpoint(module: common.BaseModule, ckpt_path: epath.Path | str, param_path: str) -> _model.Model:
+    """Create a model using a monopi checkpoint.
+
+    Args:
+        module: The module to use for the model.
+        ckpt_path: The path to the monopi checkpoint.
+        param_path: Location of the model parameters inside the checkpoint. Can include "/" to support nesting.
+
+    Returns:
+        A model with the parameters loaded from the checkpoint.
+    """
+    pi_model = PiModel.from_checkpoint(ckpt_path)
+
+    params = pi_model.params
+    for part in param_path.split("/"):
+        if part not in params:
+            raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
+        params = params[part]
+
+    return _model.Model(
+        module=module,
+        params=params,
+        action_dim=pi_model.action_dim,
+        action_horizon=pi_model.action_horizon,
+        max_token_len=pi_model.max_token_len,
+    )
+
+
 def _load_params(path: epath.Path, params_spec: at.PyTree, sharding: jax.sharding.Sharding | None = None):
     if sharding is None:
         sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
@@ -118,19 +151,39 @@ def _load_params(path: epath.Path, params_spec: at.PyTree, sharding: jax.shardin
         )["params"]
 
 
-def _obs_to_example(obs: common.Observation) -> dict:
+def _obs_to_example(obs: common.Observation, example_spec: dict) -> dict:
     def to_uint8(v):
         return (255.0 * (v + 1.0) / 2.0).astype(jnp.uint8)
 
     images = {k: to_uint8(v) for k, v in obs.images.items()}
     image_masks = {f"{k}_mask": v for k, v in obs.image_masks.items()}
 
-    return {
+    result = {
         "image": {**images, **image_masks},
         "state": obs.state,
         "prompt_tokens": obs.tokenized_prompt,
-        "mask_input": obs.tokenized_prompt_mask,
     }
+
+    # NOTE(ury): This is used to support the new version with DCT co-training.
+    if "mask_prompt_input" in example_spec:
+        allow_action_diffusion_attention = example_spec["allow_action_diffusion_attention"]
+        mask_ar = example_spec["mask_ar"]
+
+        result = {
+            **result,
+            "mask_prompt_input": obs.tokenized_prompt_mask,
+            "allow_action_diffusion_attention": _make_batch(
+                jnp.zeros(allow_action_diffusion_attention.shape, allow_action_diffusion_attention.dtype)
+            ),
+            "mask_ar": _make_batch(jnp.zeros(mask_ar.shape, mask_ar.dtype)),
+        }
+    else:
+        result = {
+            **result,
+            "mask_input": obs.tokenized_prompt_mask,
+        }
+
+    return result
 
 
 def _example_to_obs(example: dict) -> common.Observation:
@@ -140,6 +193,10 @@ def _example_to_obs(example: dict) -> common.Observation:
             image_masks[k.removesuffix("_mask")] = v
         else:
             images[k] = v
+
+    # NOTE(ury): This is used to support the new version with DCT co-training.
+    if "mask_prompt_input" in example:
+        example["mask_input"] = example["mask_prompt_input"]
 
     return common.Observation.from_dict(
         {
@@ -152,7 +209,8 @@ def _example_to_obs(example: dict) -> common.Observation:
     )
 
 
-def import_norm_stats(ckpt_path: epath.Path, processor_name: str) -> dict[str, _normalize.NormStats]:
+def import_norm_stats(ckpt_path: epath.Path | str, processor_name: str) -> dict[str, _normalize.NormStats]:
+    ckpt_path = epath.Path(ckpt_path).resolve()
     path = ckpt_path / "processors" / processor_name
     if not path.exists():
         raise FileNotFoundError(f"Processor {processor_name} not found in {ckpt_path}")
@@ -184,9 +242,9 @@ def import_norm_stats(ckpt_path: epath.Path, processor_name: str) -> dict[str, _
     }
 
 
-def _make_batch(data: dict) -> dict:
+def _make_batch(data: at.PyTree) -> at.PyTree:
     return jax.tree.map(lambda x: x[jnp.newaxis, ...], data)
 
 
-def _unbatch(data: dict) -> dict:
+def _unbatch(data: at.PyTree) -> at.PyTree:
     return jax.tree.map(lambda x: x[0, ...], data)

@@ -1,7 +1,6 @@
 import enum
 import logging
 
-from etils import epath
 import tyro
 
 from openpi.models import exported as _exported
@@ -51,7 +50,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
             )
         case ModelMode.REF:
             logging.info("Loading model...")
-            ckpt_path = epath.Path("checkpoints/pi0_real/model").resolve()
+            ckpt_path = "checkpoints/pi0_real/model"
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
@@ -76,7 +75,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
             )
         case ModelMode.SIM:
             logging.info("Loading model...")
-            ckpt_path = epath.Path("checkpoints/pi0_sim/model").resolve()
+            ckpt_path = "checkpoints/pi0_sim/model"
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
@@ -99,15 +98,14 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                 ],
             )
         case ModelMode.DROID:
-            # TODO: Change the code here to use the droid parameters.
             logging.info("Loading model...")
-            ckpt_path = epath.Path("checkpoints/pi0_real/model").resolve()
+            ckpt_path = "checkpoints/gemmamix_dct_dec5_droid_dec8_1008am/340000/model"
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
             config = _policy_config.PolicyConfig(
                 model=model,
-                norm_stats=_exported.import_norm_stats(ckpt_path, "trossen_biarm_single_base_cam_24dim"),
+                norm_stats=_exported.import_norm_stats(ckpt_path, "openx_droid"),
                 default_prompt=default_prompt,
                 input_layers=[
                     droid_policy.DroidInputs(
@@ -120,6 +118,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                         delta_action_mask=None,
                     ),
                 ],
+                sample_kwargs={"num_denoising_steps": 10},
             )
         case _:
             raise ValueError(f"Unknown model mode: {mode}")
@@ -131,7 +130,7 @@ def main(
     port: int = 8000,
     *,
     record: bool = False,
-    mode: ModelMode = ModelMode.SIM,
+    mode: ModelMode = ModelMode.DROID,
     default_prompt: str = "transfer cube",
 ) -> None:
     policy = create_policy(mode, default_prompt)

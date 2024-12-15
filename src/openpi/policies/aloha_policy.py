@@ -274,9 +274,8 @@ def gripper_to_angular(value):
 
     # This is the inverse of the angular to linear transformation inside the Interbotix code.
     def linear_to_radian(linear_position, arm_length, horn_radius):
-        return jnp.arcsin(
-            (-(arm_length**2) + horn_radius**2 + linear_position**2) / (2 * horn_radius * linear_position)
-        )
+        value = (horn_radius**2 + linear_position**2 - arm_length**2) / (2 * horn_radius * linear_position)
+        return jnp.arcsin(jnp.clip(value, -1.0, 1.0))
 
     # The constants are taken from the Interbotix code.
     value = linear_to_radian(value, arm_length=0.036, horn_radius=0.022)
@@ -297,7 +296,7 @@ def gripper_from_angular(value):
     # PUPPET_GRIPPER_JOINT_OPEN, PUPPET_GRIPPER_JOINT_CLOSE
     value = normalize(value, min_val=-0.6213, max_val=1.4910)
 
-    # Addition adjustment to match the range that was produced by the pi0 model.
+    # Additional adjustment to match the range that was produced by the pi0 model.
     return normalize(value, 0.0, 1.05)
 
 

@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 import dataclasses
+from typing import Any
 
 from openpi.models import tokenizer
 import openpi.models.model as _model
@@ -17,6 +18,7 @@ class PolicyConfig:
     output_layers: Sequence[transforms.DataTransformFn]
 
     default_prompt: str | None = None
+    sample_kwargs: dict[str, Any] | None = None
 
 
 def create_policy(config: PolicyConfig) -> _policy.Policy:
@@ -33,6 +35,7 @@ def create_policy(config: PolicyConfig) -> _policy.Policy:
             transforms.Unnormalize(config.norm_stats),
             *config.output_layers,
         ],
+        sample_kwargs=config.sample_kwargs,
     )
 
 

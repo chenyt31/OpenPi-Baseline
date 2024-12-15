@@ -1,4 +1,3 @@
-from etils import epath
 from openpi_client import action_chunk_broker
 
 from openpi.models import exported as _exported
@@ -19,8 +18,8 @@ def test_infer():
     assert outputs["qpos"].shape == (model.action_horizon, 14)
 
 
-def test_exported():
-    ckpt_path = epath.Path("checkpoints/pi0_sim/model").resolve()
+def test_exported_aloha_sim():
+    ckpt_path = "checkpoints/pi0_sim/model"
     model = _exported.PiModel.from_checkpoint(ckpt_path)
 
     policy = aloha_policy.create_aloha_policy(

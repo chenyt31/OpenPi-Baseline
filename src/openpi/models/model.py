@@ -187,6 +187,10 @@ class Model(BaseModel):
     def set_params(self, params: at.Params) -> "Model":
         return dataclasses.replace(self, params=params)
 
+    def fake_obs(self, batch_size: int = 1) -> common.Observation:
+        observation_spec, _ = create_inputs_spec(self, batch_size=batch_size)
+        return jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), observation_spec)
+
 
 def restore_params(ckpt_path: pathlib.Path | str, *, sharding: jax.sharding.Sharding | None = None) -> at.Params:
     """Restores unstructured params PyTree from a checkpoint. This works with checkpoints saved with `save_state` during

@@ -39,6 +39,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                 norm_stats=aloha_policy.make_aloha_norm_stats(),
                 default_prompt=default_prompt,
                 input_layers=[
+                    aloha_policy.ActInputsRepack(),
                     aloha_policy.AlohaInputs(
                         action_dim=model.action_dim,
                         delta_action_mask=delta_action_mask,
@@ -50,6 +51,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                         delta_action_mask=delta_action_mask,
                         adapt_to_pi=True,
                     ),
+                    aloha_policy.ActOutputsRepack(),
                 ],
             )
         case ModelMode.REF:
@@ -64,6 +66,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                 norm_stats=_exported.import_norm_stats(ckpt_path, "trossen_biarm_single_base_cam_24dim"),
                 default_prompt=default_prompt,
                 input_layers=[
+                    aloha_policy.ActInputsRepack(),
                     aloha_policy.AlohaInputs(
                         action_dim=model.action_dim,
                         delta_action_mask=delta_action_mask,
@@ -75,6 +78,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                         delta_action_mask=delta_action_mask,
                         adapt_to_pi=True,
                     ),
+                    aloha_policy.ActOutputsRepack(),
                 ],
             )
         case ModelMode.SIM:
@@ -88,6 +92,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                 norm_stats=_exported.import_norm_stats(ckpt_path, "huggingface_aloha_sim_transfer_cube"),
                 default_prompt=default_prompt,
                 input_layers=[
+                    aloha_policy.ActInputsRepack(),
                     aloha_policy.AlohaInputs(
                         action_dim=model.action_dim,
                         delta_action_mask=None,
@@ -99,6 +104,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                         delta_action_mask=None,
                         adapt_to_pi=False,
                     ),
+                    aloha_policy.ActOutputsRepack(),
                 ],
             )
         case ModelMode.DROID:

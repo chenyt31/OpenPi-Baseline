@@ -1,18 +1,21 @@
+from collections.abc import Iterator
 from functools import partial
 import logging
 from typing import Any
 
+import etils.epath as epath
 from flax.training import common_utils
 import jax
 import jax._src.tree_util as private_tree_util
 import jax.experimental
-from jax.experimental import mesh_utils
 import jax.numpy as jnp
+import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import optax
 import tqdm
 
 import openpi.models.common as _common
 import openpi.models.model as _model
+import openpi.policies.aloha_policy as aloha_policy
 import openpi.shared.array_typing as at
 import openpi.training.checkpoints as _checkpoints
 import openpi.training.config as _config
@@ -20,6 +23,7 @@ import openpi.training.data_loader as _data_loader
 import openpi.training.optimizer as _optimizer
 import openpi.training.utils as training_utils
 import openpi.training.weight_loaders as _weight_loaders
+import openpi.transforms as _transforms
 
 
 def init_logging() -> None:
@@ -150,21 +154,70 @@ def train_step(
     return new_state, info
 
 
+class LeRobotRepack(_transforms.DataTransformFn):
+    def __call__(self, item) -> dict:
+        img = item["observation.images.top"]
+        return {
+            "images": {"cam_high": img},
+            "state": item["observation.state"],
+            "actions": item["action"],
+        }
+
+
+def create_data_loader(
+    config: _config.TrainConfig, model: _model.Model, sharding: jax.sharding.Sharding
+) -> Iterator[tuple[_common.Observation, _common.Actions]]:
+    repo_id = "lerobot/aloha_sim_transfer_cube_human"
+    action_horizon = model.action_horizon
+
+    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
+    dataset = lerobot_dataset.LeRobotDataset(
+        repo_id, delta_timestamps={"action": [t / dataset_meta.fps for t in range(action_horizon)]}
+    )
+
+    for batch in _data_loader.data_loader(
+        dataset,
+        local_batch_size=config.batch_size // jax.process_count(),
+        sharding=sharding,
+        transforms=[
+            LeRobotRepack(),
+            aloha_policy.AlohaInputs(action_dim=model.action_dim),
+            _transforms.ResizeImages(224, 224),
+        ],
+    ):
+        # Perform this after the batch has been sharded.
+        yield _common.Observation.from_dict(batch), batch["actions"]
+
+
+def create_fake_data_loader(
+    config: _config.TrainConfig, model: _model.Model, sharding: jax.sharding.Sharding
+) -> Iterator[tuple[_common.Observation, _common.Actions]]:
+    dataset = _data_loader.FakeDataset(model, config.num_train_steps)
+
+    return _data_loader.data_loader(
+        dataset,
+        local_batch_size=config.batch_size // jax.process_count(),
+        sharding=sharding,
+    )
+
+
 def main(config: _config.TrainConfig):
     init_logging()
+
     if config.batch_size % jax.device_count() != 0:
         raise ValueError(
             f"Batch size {config.batch_size} must be divisible by the number of devices {jax.device_count()}."
         )
+
     jax.config.update("jax_threefry_partitionable", True)  # noqa: FBT003
+    jax.config.update("jax_compilation_cache_dir", str(epath.Path("~/.cache/jax").expanduser()))
 
     rng = jax.random.key(config.seed)
     train_rng, init_rng = jax.random.split(rng)
 
     # data parallel only
-    mesh_shape = (jax.device_count(),)
     # TODO: replace with jax.make_mesh when available
-    mesh = jax.sharding.Mesh(mesh_utils.create_device_mesh(mesh_shape), ("batch",))
+    mesh = jax.sharding.Mesh(jax.devices(), ("batch",))
     data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
@@ -173,9 +226,8 @@ def main(config: _config.TrainConfig):
     )
 
     model = _model.Model(module=config.module, action_dim=24, action_horizon=50, max_token_len=48)
-    data_loader = _data_loader.fake_init_data_loader(
-        model, local_batch_size=config.batch_size // jax.process_count(), dp_sharding=data_parallel_sharding
-    )
+
+    data_loader = create_data_loader(config, model, data_parallel_sharding)
     batch = next(data_loader)
     logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")
 
@@ -211,6 +263,7 @@ def main(config: _config.TrainConfig):
         if step % config.log_interval == 0:
             stacked_infos = common_utils.stack_forest(infos)
             reduced_info = jax.device_get(jax.tree.map(jnp.mean, stacked_infos))
+            reduced_info = ", ".join(f"{k}={v:.4f}" for k, v in reduced_info.items())
             logging.info(f"Step {step}: {reduced_info}")
             infos = []
         batch = next(data_loader)

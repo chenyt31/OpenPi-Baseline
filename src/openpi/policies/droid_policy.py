@@ -11,8 +11,6 @@ class DroidInputs(transforms.DataTransformFn):
         self._delta_action_mask = delta_action_mask
 
     def __call__(self, data: dict) -> dict:
-        # Note to self (Ury): The action dim in Karl's model is 32.
-        # Pad from 8 to the model action dim.
         state = jnp.concat([data["observation/joint_position"], data["observation/gripper_position"]], axis=1)
         state = transforms.pad_to_dim(state, self._action_dim)
 

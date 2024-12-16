@@ -37,8 +37,8 @@ class Policy(BasePolicy):
 
     @override
     def infer(self, obs: dict) -> dict:  # type: ignore[misc]
-        inputs = _make_batch(obs)
-        inputs = self._input_transform(inputs)
+        inputs = self._input_transform(_make_batch(obs))
+        inputs = jax.tree_util.tree_map(lambda x: jnp.asarray(x), inputs)
 
         self._rng, sample_rng = jax.random.split(self._rng)
         outputs = {
@@ -63,7 +63,7 @@ class PolicyRecorder(_base_policy.BasePolicy):
         self._record_step = 0
 
     @override
-    def infer(self, obs: dict) -> dict:
+    def infer(self, obs: dict) -> dict:  # type: ignore[misc]
         results = self._policy.infer(obs)
 
         data = {"inputs": obs, "outputs": results}
@@ -76,12 +76,12 @@ class PolicyRecorder(_base_policy.BasePolicy):
         return results
 
 
-def _make_batch(data: dict) -> dict:
-    def _transform(x: np.ndarray) -> jnp.ndarray:
-        return jnp.asarray(x)[jnp.newaxis, ...]
+def _make_batch(data: at.PyTree[np.ndarray]) -> at.PyTree[np.ndarray]:
+    def _transform(x: np.ndarray) -> np.ndarray:
+        return np.asarray(x)[np.newaxis, ...]
 
     return jax.tree_util.tree_map(_transform, data)
 
 
-def _unbatch(data: dict) -> dict:
+def _unbatch(data: at.PyTree[np.ndarray]) -> at.PyTree[np.ndarray]:
     return jax.tree_util.tree_map(lambda x: np.asarray(x[0, ...]), data)

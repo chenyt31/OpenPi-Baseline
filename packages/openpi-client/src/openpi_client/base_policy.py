@@ -1,8 +1,8 @@
 import abc
-from typing import Dict  # noqa: UP035
+from typing import Dict
 
 
 class BasePolicy(abc.ABC):
     @abc.abstractmethod
-    def infer(self, obs: Dict) -> Dict:  # noqa: UP006
+    def infer(self, obs: Dict) -> Dict:
         """Infer actions from observations."""

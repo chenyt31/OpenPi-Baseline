@@ -26,10 +26,10 @@ def _custom_dot_product_attention(
     value,
     bias=None,
     mask=None,
-    broadcast_dropout: bool = True,
+    broadcast_dropout: bool = True,  # noqa
     dropout_rng=None,
     dropout_rate: float = 0.0,
-    deterministic: bool = False,
+    deterministic: bool = False,  # noqa
     dtype=None,
     precision=None,
     module=None,

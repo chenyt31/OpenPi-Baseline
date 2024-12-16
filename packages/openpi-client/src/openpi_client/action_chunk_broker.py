@@ -1,4 +1,4 @@
-from typing import Dict  # noqa: UP035
+from typing import Dict
 
 import numpy as np
 import tree
@@ -22,7 +22,7 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         self._action_horizon = action_horizon
         self._cur_step: int = 0
 
-        self._last_results: Dict[str, np.ndarray] | None = None  # noqa: UP006
+        self._last_results: Dict[str, np.ndarray] | None = None
 
     @override
     def infer(self, obs: Dict) -> Dict:  # noqa: UP006

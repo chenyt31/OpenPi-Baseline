@@ -20,14 +20,14 @@ def get_annotation_to_dim_size() -> dict[str, int]:
 
 
 def eqn_to_shape(eqn: str, annotation_to_dim_size: dict[str, int]) -> tuple[tuple[int, ...], ...]:
-    (lhs_part_0, lhs_part_1), _ = gemma._parse_einops_eqn(eqn)
+    (lhs_part_0, lhs_part_1), _ = gemma._parse_einops_eqn(eqn)  # noqa: SLF001
     return tuple(int(ann) if ann.isdigit() else annotation_to_dim_size[ann] for ann in lhs_part_0), tuple(
         int(ann) if ann.isdigit() else annotation_to_dim_size[ann] for ann in lhs_part_1
     )
 
 
 @pytest.mark.parametrize(
-    "eqn,lora_annotation",
+    ("eqn", "lora_annotation"),
     [
         ("BSD,3KDH->3BSKH", "3KDL,3KLKH->3KDH"),
         ("BTD,NDH->BTNH", "NDL,NLNH->NDH"),
@@ -64,7 +64,7 @@ def test_lora_einsum_equivalent_to_original(eqn: str, lora_annotation: str):
 
 
 @pytest.mark.parametrize(
-    "eqn,lora_annotation",
+    ("eqn", "lora_annotation"),
     [
         ("BSD,3KDH->3BSKH", "3KDL,3KLKH->3KDH"),
         ("BTD,NDH->BTNH", "NDL,NLNH->NDH"),

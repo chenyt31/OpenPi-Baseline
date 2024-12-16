@@ -18,6 +18,7 @@ class Args:
 def main(args: Args) -> None:
     obs_fn = {
         "aloha": _random_observation_aloha,
+        "droid": _random_observation_droid,
     }[args.example]
 
     policy = _websocket_client_policy.WebsocketClientPolicy(
@@ -42,6 +43,16 @@ def _random_observation_aloha() -> dict:
     return {
         "qpos": np.ones((14,)),
         "image": np.random.rand(4, 3, 480, 640).astype(np.float32),
+    }
+
+
+def _random_observation_droid() -> dict:
+    return {
+        "observation/exterior_image_1_left": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "observation/wrist_image_left": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "observation/joint_position": np.random.rand(7),
+        "observation/gripper_position": np.random.rand(1),
+        # "raw_text": "do something",
     }
 
 

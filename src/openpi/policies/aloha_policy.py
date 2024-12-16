@@ -229,6 +229,9 @@ class AlohaInputs(transforms.DataTransformFn):
             # case when we do training.
             inputs["actions"] = transforms.pad_to_dim(data["action/qpos"], self._action_dim)
 
+        if "prompt" in data:
+            inputs["prompt"] = data["prompt"]
+
         return inputs
 
 

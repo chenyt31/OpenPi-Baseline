@@ -16,7 +16,7 @@ class DroidInputs(transforms.DataTransformFn):
 
         base_image = data["observation/exterior_image_1_left"]
 
-        return {
+        inputs = {
             "state": state,
             "image": {
                 "base_0_rgb": data["observation/exterior_image_1_left"],
@@ -29,6 +29,11 @@ class DroidInputs(transforms.DataTransformFn):
                 "right_wrist_0_rgb": jnp.zeros(1, dtype=jnp.bool_),
             },
         }
+
+        if "prompt" in data:
+            inputs["prompt"] = data["prompt"]
+
+        return inputs
 
 
 class DroidOutputs(transforms.DataTransformFn):

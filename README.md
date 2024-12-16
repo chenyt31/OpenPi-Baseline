@@ -1,20 +1,36 @@
 # openpi
 
-See the design doc [here](https://docs.google.com/document/d/1ykjuV0GjuaYGzhppasmGlldJ5TOA-UCETBHKoxeoyqw/edit).
+OpenPI holds open-source models and packages for robotics, published by the [Physical Intelligence team](https://www.physicalintelligence.company/).
+
+Currently, it is focused on the `pi0` model described in [this blog post](https://www.physicalintelligence.company/blog/pi0).
 
 ## Usage
 
 When cloning this repo, make sure to update submodules:
 
 ```bash
+git clone --recurse-submodules https://github.com/Physical-Intelligence/openpi.git
+
+# Or if you already cloned the repo:
 git submodule update --init --recursive
 ```
 
-```bash
-uv run examples/hello.py
-```
+## Setup
 
-## Downloading checkpoints
+### Using UV
+
+We use [UV](https://docs.astral.sh/uv/) to manage Python dependencies. See the [UV installation instructions](https://docs.astral.sh/uv/getting-started/installation/) to set it up.
+
+### Docker Setup
+
+The recommended way to run many of our examples is using Docker. This will simplify software installation, produce a more stable environment, and also
+allow you to avoid installing ROS and cluttering your machine, for examples which depend on ROS.
+
+Docker installation instructions are [here](https://docs.docker.com/engine/install/). If using a GPU you must also install the [NVIDIA container toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If your host machine is Ubuntu 22.04, you can use the convenience scripts `scripts/install_docker_ubuntu22.sh` and `scripts/install_nvidia_container_toolkit.sh`.
+
+During the first run of any example, docker will build the images. Go grab a coffee while this happens. Subsequent runs will be faster since the images are cached.
+
+### Downloading checkpoints
 
 Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html). For linux, this means running the following commands:
 
@@ -29,15 +45,6 @@ Run the following from the cloned `openpi` directory:
 ```bash
 AWS_ACCESS_KEY_ID=AKIA4MTWIIQIZBO44C62 AWS_SECRET_ACCESS_KEY=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 aws s3 sync s3://openpi-assets/checkpoints/pi0_base ./checkpoints/pi0_base
 ```
-
-## Docker Setup
-
-The recommended way to run many of our examples is using Docker. This will simplify software installation, produce a more stable environment, and also
-allow you to avoid installing ROS and cluttering your machine, for examples which depend on ROS.
-
-Docker installation instructions are [here](https://docs.docker.com/engine/install/). If using a GPU you must also install the [NVIDIA container toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If your host machine is Ubuntu 22.04, you can use the convenience scripts `scripts/install_docker_ubuntu22.sh` and `scripts/install_nvidia_container_toolkit.sh`.
-
-During the first run of any example, docker will build the images. Go grab a coffee while this happens. Subsequent runs will be faster since the images are cached.
 
 ## Running Examples
 

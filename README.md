@@ -4,7 +4,7 @@ OpenPI holds open-source models and packages for robotics, published by the [Phy
 
 Currently, it is focused on the `pi0` model described in [this blog post](https://www.physicalintelligence.company/blog/pi0).
 
-## Usage
+## Setup
 
 When cloning this repo, make sure to update submodules:
 
@@ -14,8 +14,6 @@ git clone --recurse-submodules https://github.com/Physical-Intelligence/openpi.g
 # Or if you already cloned the repo:
 git submodule update --init --recursive
 ```
-
-## Setup
 
 ### Using UV
 
@@ -52,6 +50,8 @@ We provide example integrations with several robotics platforms. See the README 
 
 - [ALOHA Sim](examples/aloha_sim)
 - [ALOHA Real](examples/aloha_real)
+- [CALVIN](examples/calvin)
+- [LIBERO](examples/libero)
 
 ## Running the OpenPI Server
 

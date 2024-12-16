@@ -1,5 +1,5 @@
 # docker build . -t aloha_real -f examples/aloha_real/Dockerfile
-# docker run --rm -it --network=host -v /dev:/dev -v .:/root/app --privileged aloha_real /bin/bash
+# docker run --rm -it --network=host -v /dev:/dev -v .:/app --privileged aloha_real /bin/bash
 
 FROM ros:noetic-robot@sha256:0e12e4db836e78c74c4b04c6d16f185d9a18d2b13cf5580747efa075eb6dc6e0
 SHELL ["/bin/bash", "-c"]
@@ -51,8 +51,8 @@ COPY ./examples/aloha_real/requirements.txt /tmp/requirements.txt
 COPY ./packages/openpi-client/pyproject.toml /tmp/openpi-client/pyproject.toml
 RUN uv pip sync --python 3.10 --system /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
 
-ENV PYTHONPATH=/root/app:/root/app/src:/app/packages/openpi-client/src:/root/interbotix_ws/src/aloha/aloha_scripts:/root/interbotix_ws/src/aloha
-WORKDIR /root/app
+ENV PYTHONPATH=/app:/app/src:/app/packages/openpi-client/src:/root/interbotix_ws/src/aloha/aloha_scripts:/root/interbotix_ws/src/aloha
+WORKDIR /app
 
 # Create an entrypoint script to run the setup commands, followed by the command passed in.
 RUN cat <<'EOF' > /usr/local/bin/entrypoint.sh
@@ -62,4 +62,4 @@ EOF
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["python3", "/root/app/examples/aloha_real/main.py"]
+CMD ["python3", "/app/examples/aloha_real/main.py"]

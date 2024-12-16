@@ -15,7 +15,7 @@ services:
     network_mode: host
     privileged: true
     volumes:
-      - $PWD:/root/app
+      - $PWD:/app
       - ../../data:/data
 
   aloha_ros_nodes:

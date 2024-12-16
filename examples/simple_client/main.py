@@ -12,7 +12,7 @@ class Args:
     host: str = "0.0.0.0"
     port: int = 8000
 
-    example: str = "aloha"
+    example: str = "droid"
 
 
 def main(args: Args) -> None:

@@ -13,14 +13,13 @@ that it falls back to pickle for object arrays.
 """
 
 import functools
-from typing import Union
 
 import msgpack
 import numpy as np
 
 
 def pack_array(obj):
-    if isinstance(obj, Union[np.ndarray, np.generic]) and obj.dtype.kind in ("V", "O", "c"):  # noqa: UP007
+    if (isinstance(obj, np.ndarray) or isinstance(np.generic)) and obj.dtype.kind in ("V", "O", "c"):
         raise ValueError(f"Unsupported dtype: {obj.dtype}")
 
     if isinstance(obj, np.ndarray):

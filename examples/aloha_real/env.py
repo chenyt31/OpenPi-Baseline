@@ -4,7 +4,8 @@ from typing_extensions import override
 import einops
 
 from examples.aloha_real import real_env as _real_env
-from openpi.runtime import environment as _environment
+from openpi_client import image_tools
+from openpi_client.runtime import environment as _environment
 
 
 class AlohaRealEnvironment(_environment.Environment):
@@ -41,7 +42,6 @@ class AlohaRealEnvironment(_environment.Environment):
             curr_image = einops.rearrange(curr_image, "h w c -> c h w")
             images.append(curr_image)
         stacked_images = np.stack(images, axis=0).astype(np.uint8)
-        print(stacked_images.shape)
 
         # TODO: Consider removing these transformations.
         return {

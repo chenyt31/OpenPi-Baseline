@@ -1,3 +1,5 @@
+from typing import Dict  # noqa: UP035
+
 import numpy as np
 import tree
 from typing_extensions import override
@@ -20,10 +22,10 @@ class ActionChunkBroker(_base_policy.BasePolicy):
         self._action_horizon = action_horizon
         self._cur_step: int = 0
 
-        self._last_results: dict[str, np.ndarray] | None = None
+        self._last_results: Dict[str, np.ndarray] | None = None  # noqa: UP006
 
     @override
-    def infer(self, obs: dict) -> dict:
+    def infer(self, obs: Dict) -> Dict:  # noqa: UP006
         if self._last_results is None:
             self._last_results = self._policy.infer(obs)
             self._cur_step = 0

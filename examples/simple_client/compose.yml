@@ -11,6 +11,8 @@ services:
     init: true
     tty: true
     network_mode: host
+    volumes:
+      - $PWD:/app
 
   openpi_server:
     image: openpi_server

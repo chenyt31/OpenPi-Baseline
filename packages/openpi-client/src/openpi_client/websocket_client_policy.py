@@ -1,5 +1,6 @@
 import logging
 import time
+from typing import Dict  # noqa: UP035
 
 from typing_extensions import override
 import websockets.sync.client
@@ -29,7 +30,7 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
                 time.sleep(5)
 
     @override
-    def infer(self, obs: dict) -> dict:
+    def infer(self, obs: Dict) -> Dict:  # noqa: UP006
         data = self._packer.pack(obs)
         self._ws.send(data)
         response = self._ws.recv()

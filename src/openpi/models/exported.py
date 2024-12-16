@@ -174,10 +174,12 @@ def _obs_to_example(obs: common.Observation, example_spec: dict) -> dict:
         result = {
             **result,
             "mask_prompt_input": obs.tokenized_prompt_mask,
+            # NOTE(ury): These values are likely wrong. Put something for now
+            # to make sure that the model doesn't crash.
             "allow_action_diffusion_attention": _make_batch(
                 jnp.zeros(allow_action_diffusion_attention.shape, allow_action_diffusion_attention.dtype)
             ),
-            "mask_ar": _make_batch(jnp.zeros(mask_ar.shape, mask_ar.dtype)),
+            "mask_ar": _make_batch(jnp.ones(mask_ar.shape, mask_ar.dtype)),
         }
     else:
         result = {

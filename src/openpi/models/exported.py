@@ -45,6 +45,8 @@ class PiModel(_model.BaseModel):
         actions_spec = output_spec["actions"]
         action_horizon, action_dim = actions_spec.shape
 
+        max_token_len = example_spec["prompt_tokens"].shape[-1]
+
         return cls(
             params=params,
             exported=exported,
@@ -52,7 +54,7 @@ class PiModel(_model.BaseModel):
             sample_spec=sample_spec,
             action_horizon=action_horizon,
             action_dim=action_dim,
-            max_token_len=48,
+            max_token_len=max_token_len,
         )
 
     @jax.jit

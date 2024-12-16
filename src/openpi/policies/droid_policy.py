@@ -13,16 +13,24 @@ class DroidInputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Note to self (Ury): The action dim in Karl's model is 32.
         # Pad from 8 to the model action dim.
-        data["state"] = transforms.pad_to_dim(data["state"], self._action_dim)
+        state = jnp.concat([data["observation/joint_position"], data["observation/gripper_position"]], axis=1)
+        state = transforms.pad_to_dim(state, self._action_dim)
 
-        # TODO(karl): Rename these to the droid keys.
-        data["image_mask"] = {
-            "base_0_rgb": jnp.ones(1, dtype=jnp.bool_),
-            "left_wrist_0_rgb": jnp.ones(1, dtype=jnp.bool_),
-            "right_wrist_0_rgb": jnp.ones(1, dtype=jnp.bool_),
+        base_image = data["observation/exterior_image_1_left"]
+
+        return {
+            "state": state,
+            "image": {
+                "base_0_rgb": data["observation/exterior_image_1_left"],
+                "left_wrist_0_rgb": data["observation/wrist_image_left"],
+                "right_wrist_0_rgb": jnp.zeros_like(base_image),
+            },
+            "image_mask": {
+                "base_0_rgb": jnp.ones(1, dtype=jnp.bool_),
+                "left_wrist_0_rgb": jnp.ones(1, dtype=jnp.bool_),
+                "right_wrist_0_rgb": jnp.zeros(1, dtype=jnp.bool_),
+            },
         }
-
-        return data
 
 
 class DroidOutputs(transforms.DataTransformFn):
@@ -39,4 +47,4 @@ class DroidOutputs(transforms.DataTransformFn):
             mask = jnp.asarray(self._delta_action_mask[:8])
             actions = actions + jnp.expand_dims(jnp.where(mask, state, 0), axis=-2)
 
-        return {"qpos": actions}
+        return {"actions": actions}

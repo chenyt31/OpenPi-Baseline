@@ -6,7 +6,9 @@ import tyro
 from openpi.models import exported as _exported
 from openpi.models import model as _model
 from openpi.policies import aloha_policy
+from openpi.policies import calvin_policy
 from openpi.policies import droid_policy
+from openpi.policies import libero_policy
 from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.serving import websocket_policy_server
@@ -17,6 +19,8 @@ class ModelMode(enum.Enum):
     REF = "ref"
     SIM = "sim"
     DROID = "droid"
+    CALVIN = "calvin"
+    LIBERO = "libero"
 
 
 def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
@@ -117,6 +121,42 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                     droid_policy.DroidOutputs(
                         delta_action_mask=None,
                     ),
+                ],
+                sample_kwargs={"num_denoising_steps": 10},
+            )
+        case ModelMode.CALVIN:
+            logging.info("Loading model...")
+            ckpt_path = "checkpoints/release_gemmamix_calvin_nov24_2053/40000/model"
+            model = _exported.PiModel.from_checkpoint(ckpt_path)
+
+            logging.info("Creating policy...")
+            config = _policy_config.PolicyConfig(
+                model=model,
+                norm_stats=_exported.import_norm_stats(ckpt_path, "calvin"),
+                default_prompt=default_prompt,
+                input_layers=[
+                    calvin_policy.CalvinInputs(action_dim=model.action_dim),
+                ],
+                output_layers=[
+                    calvin_policy.CalvinOutputs(),
+                ],
+                sample_kwargs={"num_denoising_steps": 10},
+            )
+        case ModelMode.LIBERO:
+            logging.info("Loading model...")
+            ckpt_path = "checkpoints/release_gemmamix_libero_nov23_1443/40000/model"
+            model = _exported.PiModel.from_checkpoint(ckpt_path)
+
+            logging.info("Creating policy...")
+            config = _policy_config.PolicyConfig(
+                model=model,
+                norm_stats=_exported.import_norm_stats(ckpt_path, "libero"),
+                default_prompt=default_prompt,
+                input_layers=[
+                    libero_policy.LiberoInputs(action_dim=model.action_dim),
+                ],
+                output_layers=[
+                    libero_policy.LiberoOutputs(),
                 ],
                 sample_kwargs={"num_denoising_steps": 10},
             )

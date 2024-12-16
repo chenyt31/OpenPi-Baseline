@@ -13,7 +13,8 @@
 # limitations under the License.
 """ViT implementation adapted from https://github.com/google-research/vision_transformer/blob/main/vit_jax/models_vit.py."""
 
-from typing import Any, Callable, Optional, Tuple, Type
+from collections.abc import Callable
+from typing import Any
 
 import flax.linen as nn
 import jax
@@ -23,7 +24,7 @@ from openpi.models import resnet as models_resnet
 
 Array = Any
 PRNGKey = Any
-Shape = Tuple[int]
+Shape = tuple[int]
 Dtype = Any
 
 
@@ -56,7 +57,7 @@ class AddPositionEmbs(nn.Module):
           Output tensor with shape `(bs, timesteps, in_dim)`.
         """
         # inputs.shape is (batch_size, seq_len, emb_dim).
-        assert inputs.ndim == 3, "Number of dimensions should be 3," " but it is: %d" % inputs.ndim
+        assert inputs.ndim == 3, f"Number of dimensions should be 3, but it is: {inputs.ndim}"
         pos_emb_shape = (1, inputs.shape[1], inputs.shape[2])
         pe = self.param("pos_embedding", self.posemb_init, pos_emb_shape, self.param_dtype)
         return inputs + pe
@@ -68,7 +69,7 @@ class MlpBlock(nn.Module):
     mlp_dim: int
     dtype: Dtype = jnp.float32
     param_dtype: Dtype = jnp.float32
-    out_dim: Optional[int] = None
+    out_dim: int | None = None
     dropout_rate: float = 0.1
     kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.xavier_uniform()
     bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.normal(stddev=1e-6)
@@ -97,8 +98,7 @@ class MlpBlock(nn.Module):
         )(  # pytype: disable=wrong-arg-types
             x
         )
-        output = nn.Dropout(rate=self.dropout_rate)(output, deterministic=deterministic)
-        return output
+        return nn.Dropout(rate=self.dropout_rate)(output, deterministic=deterministic)
 
 
 class Encoder1DBlock(nn.Module):
@@ -213,9 +213,7 @@ class Encoder(nn.Module):
             dtype=self.dtype,
             num_heads=self.num_heads,
         )(x, not train)
-        encoded = nn.LayerNorm(name="encoder_norm", dtype=self.dtype)(x)
-
-        return encoded
+        return nn.LayerNorm(name="encoder_norm", dtype=self.dtype)(x)
 
 
 class VisionTransformer(nn.Module):
@@ -226,12 +224,12 @@ class VisionTransformer(nn.Module):
     patches: Any
     transformer: Any
     hidden_size: int
-    resnet: Optional[Any] = None
-    representation_size: Optional[int] = None
+    resnet: Any | None = None
+    representation_size: int | None = None
     classifier: str = "token"
     head_bias_init: float = 0.0
-    encoder: Type[nn.Module] = Encoder
-    model_name: Optional[str] = None
+    encoder: type[nn.Module] = Encoder
+    model_name: str | None = None
 
     @nn.compact
     def __call__(self, inputs, *, train):

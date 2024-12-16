@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict  # noqa: UP035
+from typing import Dict
 
 from typing_extensions import override
 import websockets.sync.client

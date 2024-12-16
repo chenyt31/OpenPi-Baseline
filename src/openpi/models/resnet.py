@@ -13,7 +13,8 @@
 # limitations under the License.
 """ResNet implementation copied from https://github.com/google-research/vision_transformer/blob/main/vit_jax/models_resnet.py."""
 
-from typing import Callable, Sequence, TypeVar
+from collections.abc import Callable, Sequence
+from typing import TypeVar
 
 from flax import linen as nn
 import jax.numpy as jnp
@@ -24,8 +25,7 @@ T = TypeVar("T")
 def weight_standardize(w, axis, eps):
     """Subtracts mean and divides by standard deviation."""
     w = w - jnp.mean(w, axis=axis)
-    w = w / (jnp.std(w, axis=axis) + eps)
-    return w
+    return w / (jnp.std(w, axis=axis) + eps)
 
 
 class StdConv(nn.Conv):
@@ -64,8 +64,7 @@ class ResidualUnit(nn.Module):
         y = StdConv(features=self.features * 4, kernel_size=(1, 1), use_bias=False, name="conv3")(y)
 
         y = nn.GroupNorm(name="gn3", scale_init=nn.initializers.zeros)(y)
-        y = nn.relu(residual + y)
-        return y
+        return nn.relu(residual + y)
 
 
 class ResNetStage(nn.Module):

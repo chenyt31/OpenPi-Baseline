@@ -41,7 +41,10 @@ CONFIGS = {
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),
         # module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
     ),
-    "pi0_small": TrainConfig(module=pi0_small.Module()),
+    "pi0_small": TrainConfig(
+        module=pi0_small.Module(),
+        weight_loader=weight_loaders.GoogleViTWeightLoader(),
+    ),
 }
 
 

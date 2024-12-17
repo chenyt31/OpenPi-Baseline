@@ -2434,7 +2434,7 @@ requires-dist = [
     { name = "jaxtyping", specifier = "==0.2.34" },
     { name = "lerobot", git = "https://github.com/huggingface/lerobot" },
     { name = "ml-collections", specifier = "==1.0.0" },
-    { name = "numpy", specifier = "==1.26.4" },
+    { name = "numpy", specifier = ">=1.26.4" },
     { name = "opencv-python", specifier = ">=4.10.0.84" },
     { name = "openpi-client", editable = "packages/openpi-client" },
     { name = "orbax-checkpoint", specifier = "==0.7.0" },

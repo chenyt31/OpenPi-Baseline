@@ -17,8 +17,7 @@ dependencies = [
     "ipykernel>=6.29.5",
     "jax[cuda12]==0.4.34",
     "jaxtyping==0.2.34",
-    # TODO: Upgrade to 2.1.2 once we have an alternative to pickle for data serialization.
-    "numpy==1.26.4",
+    "numpy>=1.26.4",
     "opencv-python>=4.10.0.84",
     "openpi-client",
     "orbax-checkpoint==0.7.0",

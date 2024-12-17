@@ -21,10 +21,14 @@ COPY ./pyproject.toml /tmp/pyproject.toml
 RUN sed -i '/openpi-client/d' /tmp/pyproject.toml
 COPY ./packages/openpi-client/pyproject.toml /tmp/openpi-client/pyproject.toml
 
+
 # Install python dependencies.
+RUN apt-get update && apt-get install -y git git-lfs
+RUN git lfs install --system
 RUN uv venv --python 3.11.9 $UV_PROJECT_ENVIRONMENT
-RUN uv pip compile /tmp/pyproject.toml -o /tmp/requirements.txt
-RUN uv pip sync /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
+RUN GIT_LFS_SKIP_SMUDGE=1 uv pip compile /tmp/pyproject.toml -o /tmp/requirements.txt
+RUN GIT_LFS_SKIP_SMUDGE=1 uv pip sync /tmp/requirements.txt /tmp/openpi-client/pyproject.toml
+
 ENV PYTHONPATH=/app:/app/src:/app/packages/openpi-client/src
 
 CMD /bin/bash -c "source /.venv/bin/activate && python scripts/serve_policy.py $SERVER_ARGS"

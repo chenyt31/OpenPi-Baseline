@@ -10,19 +10,15 @@ class LiberoInputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         state = transforms.pad_to_dim(data["observation/state"], self._action_dim)
 
-        base_image = data["observation/image"]
-
         inputs = {
             "state": state,
             "image": {
-                "base_0_rgb": data["observation/image"],
-                "left_wrist_0_rgb": data["observation/wrist_image"],
-                "right_wrist_0_rgb": jnp.zeros_like(base_image),
+                "image": data["observation/image"],
+                "wrist_image": data["observation/wrist_image"],
             },
             "image_mask": {
-                "base_0_rgb": jnp.ones(1, dtype=jnp.bool_),
-                "left_wrist_0_rgb": jnp.ones(1, dtype=jnp.bool_),
-                "right_wrist_0_rgb": jnp.zeros(1, dtype=jnp.bool_),
+                "image": jnp.ones(1, dtype=jnp.bool_),
+                "wrist_image": jnp.ones(1, dtype=jnp.bool_),
             },
         }
 

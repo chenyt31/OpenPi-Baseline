@@ -24,6 +24,8 @@ idna==3.10
     # via requests
 imageio==2.35.1
     # via -r examples/libero/requirements.in
+imageio-ffmpeg==0.5.1
+    # via imageio
 importlib-metadata==8.5.0
     # via typeguard
 importlib-resources==6.4.5
@@ -65,6 +67,8 @@ pillow==10.4.0
     #   matplotlib
     #   robosuite
     #   torchvision
+psutil==6.1.0
+    # via imageio
 pygments==2.18.0
     # via rich
 pynput==1.7.7
@@ -88,7 +92,9 @@ robosuite==1.4.1
 scipy==1.10.1
     # via robosuite
 setuptools==75.3.0
-    # via numba
+    # via
+    #   imageio-ffmpeg
+    #   numba
 shtab==1.7.1
     # via tyro
 six==1.17.0

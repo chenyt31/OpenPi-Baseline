@@ -10,19 +10,15 @@ class CalvinInputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         state = transforms.pad_to_dim(data["observation/state"], self._action_dim)
 
-        base_image = data["observation/rgb_static"]
-
         inputs = {
             "state": state,
             "image": {
-                "base_0_rgb": data["observation/rgb_static"],
-                "left_wrist_0_rgb": data["observation/rgb_gripper"],
-                "right_wrist_0_rgb": jnp.zeros_like(base_image),
+                "rgb_static": data["observation/rgb_static"],
+                "rgb_gripper": data["observation/rgb_gripper"],
             },
             "image_mask": {
-                "base_0_rgb": jnp.ones(1, dtype=jnp.bool_),
-                "left_wrist_0_rgb": jnp.ones(1, dtype=jnp.bool_),
-                "right_wrist_0_rgb": jnp.zeros(1, dtype=jnp.bool_),
+                "rgb_static": jnp.ones(1, dtype=jnp.bool_),
+                "rgb_gripper": jnp.ones(1, dtype=jnp.bool_),
             },
         }
 
@@ -37,6 +33,6 @@ class CalvinOutputs(transforms.DataTransformFn):
         pass
 
     def __call__(self, data: dict) -> dict:
-        # Only return the first 8 dims.
-        actions = jnp.asarray(data["actions"][..., :8])
+        # Only return the first 15 dims.
+        actions = jnp.asarray(data["actions"][..., :15])
         return {"actions": actions}

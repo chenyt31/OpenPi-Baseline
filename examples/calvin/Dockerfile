@@ -1,7 +1,7 @@
 # docker build . -t calvin -f examples/calvin/Dockerfile
 # docker run --rm -it --network=host -v .:/app --privileged calvin /bin/bash
 
-FROM python:3.8-slim@sha256:1d52838af602b4b5a831beb13a0e4d073280665ea7be7f69ce2382f29c5a613f
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04@sha256:2d913b09e6be8387e1a10976933642c73c840c0b735f0bf3c28d97fc9bc422e0
 SHELL ["/bin/bash", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -20,7 +20,8 @@ RUN apt-get update && \
     libsm6 \
     libxrender1 \
     libxext6 \
-    unzip
+    unzip \
+    ffmpeg
 
 # Install miniconda
 ENV CONDA_DIR=/opt/conda
@@ -39,7 +40,7 @@ RUN source /opt/conda/bin/activate calvin && \
     cd /root/calvin && \
     ./install.sh && \
     pip install \
-    imageio \
+    imageio[ffmpeg] \
     moviepy \
     numpy==1.23.0 \
     tqdm \

@@ -1,12 +1,13 @@
 # docker build . -t libero -f examples/libero/Dockerfile
 # docker run --rm -it --network=host -v .:/app libero /bin/bash
-FROM python:3.8-slim@sha256:1d52838af602b4b5a831beb13a0e4d073280665ea7be7f69ce2382f29c5a613f
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04@sha256:2d913b09e6be8387e1a10976933642c73c840c0b735f0bf3c28d97fc9bc422e0
 COPY --from=ghcr.io/astral-sh/uv:0.5.1 /uv /uvx /bin/
 
 RUN apt-get update && \
     apt-get install -y \
     make \
     g++ \
+    clang \
     libosmesa6-dev \
     libgl1-mesa-glx \
     libglew-dev \

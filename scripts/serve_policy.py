@@ -158,7 +158,9 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                 output_layers=[
                     libero_policy.LiberoOutputs(),
                 ],
-                sample_kwargs={"num_denoising_steps": 10},
+                sample_kwargs={
+                    "num_steps": 10,
+                },
             )
         case _:
             raise ValueError(f"Unknown model mode: {mode}")

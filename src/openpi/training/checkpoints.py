@@ -3,7 +3,6 @@ import logging
 from etils import epath
 import orbax.checkpoint as ocp
 
-import openpi.shared.array_typing as at
 import openpi.training.utils as training_utils
 
 

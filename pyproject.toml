@@ -40,6 +40,14 @@ Repository = "https://github.com/Physical-Intelligence/openpi"
 dev = [
     "pytest>=8.3.4",
     "ruff>=0.8.2",
+    "pre-commit>=4.0.1",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pre-commit>=4.0.1",
+    "pytest>=8.3.4",
+    "ruff>=0.8.3",
 ]
 
 
@@ -105,6 +113,7 @@ select = [
 ignore = [
   "F722",  # Conflicts with array typing.
   "T201",  # We use print statements.
+  "PD008", # Lots of false positives.
 ]
 unfixable = [
   "B905", # Fix defaults to strict=False, which is not what we want.

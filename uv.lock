@@ -2441,7 +2441,7 @@ dependencies = [
     { name = "pillow", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "ruff", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "sentencepiece", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
-    { name = "tqdm", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "tqdm-loggable", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "typing-extensions", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "tyro", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
 ]
@@ -2476,7 +2476,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=11.0.0" },
     { name = "ruff", specifier = ">=0.7.1" },
     { name = "sentencepiece", specifier = ">=0.2.0" },
-    { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "tqdm-loggable", specifier = ">=0.2" },
     { name = "typing-extensions", specifier = ">=4.12.2" },
     { name = "tyro", specifier = ">=0.8.14" },
 ]
@@ -3765,6 +3765,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl", hash = "sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2", size = 78540 },
+]
+
+[[package]]
+name = "tqdm-loggable"
+version = "0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tqdm", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/65/96/d924c326727dbdcac6043065dba08b1455aaaca4f7ef1e79d4fea889b34d/tqdm_loggable-0.2.tar.gz", hash = "sha256:175abec3e1f63bbd2eac192fa5da075e80c7bb715d7ccf3cd1a29b7ab5af0617", size = 7442 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/1f/1acb36a85797beba22934f124be6b51a7c18a4f408ce31443bec073181c7/tqdm_loggable-0.2-py3-none-any.whl", hash = "sha256:9703046302b93a667166487759e6f3f49597e86c89eb132ba1f31caa07bf0941", size = 9264 },
 ]
 
 [[package]]

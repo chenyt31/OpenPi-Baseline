@@ -11,7 +11,7 @@ import jax.experimental
 import jax.numpy as jnp
 import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import optax
-import tqdm
+import tqdm_loggable.auto as tqdm
 
 import openpi.models.common as _common
 import openpi.models.model as _model
@@ -244,9 +244,8 @@ def main(config: _config.TrainConfig):
     )
 
     start_step = int(train_state.step)
-    pbar = tqdm.trange(
-        start_step,
-        config.num_train_steps,
+    pbar = tqdm.tqdm(
+        range(start_step, config.num_train_steps),
         initial=start_step,
         total=config.num_train_steps,
         dynamic_ncols=True,
@@ -260,7 +259,7 @@ def main(config: _config.TrainConfig):
             stacked_infos = common_utils.stack_forest(infos)
             reduced_info = jax.device_get(jax.tree.map(jnp.mean, stacked_infos))
             reduced_info = ", ".join(f"{k}={v:.4f}" for k, v in reduced_info.items())
-            logging.info(f"Step {step}: {reduced_info}")
+            pbar.write(f"Step {step}: {reduced_info}")
             infos = []
         batch = next(data_loader)
 

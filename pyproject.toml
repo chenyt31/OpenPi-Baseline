@@ -24,12 +24,12 @@ dependencies = [
     "pillow>=11.0.0",
     "ruff>=0.7.1",
     "sentencepiece>=0.2.0",
-    "tqdm>=4.67.1",
     "typing-extensions>=4.12.2",
     "tyro>=0.8.14",
     "ml_collections==1.0.0",
     "fsspec[gcs]>=2024.6.0",
     "lerobot",
+    "tqdm-loggable>=0.2",
 ]
 
 

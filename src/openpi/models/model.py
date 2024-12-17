@@ -221,21 +221,22 @@ def create_inputs_spec(model: Model, *, batch_size: int = 1) -> tuple[common.Obs
     image_spec = jax.ShapeDtypeStruct([batch_size, 224, 224, 3], jnp.float32)
     image_mask_spec = jax.ShapeDtypeStruct([batch_size], jnp.bool_)
 
-    observation_spec = common.Observation(
-        images={
-            "base_0_rgb": image_spec,
-            "left_wrist_0_rgb": image_spec,
-            "right_wrist_0_rgb": image_spec,
-        },
-        image_masks={
-            "base_0_rgb": image_mask_spec,
-            "left_wrist_0_rgb": image_mask_spec,
-            "right_wrist_0_rgb": image_mask_spec,
-        },
-        state=jax.ShapeDtypeStruct([batch_size, model.action_dim], jnp.float32),
-        tokenized_prompt=jax.ShapeDtypeStruct([batch_size, model.max_token_len], jnp.int32),
-        tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, model.max_token_len], jnp.int32),
-    )
+    with at.disable_typechecking():
+        observation_spec = common.Observation(
+            images={
+                "base_0_rgb": image_spec,
+                "left_wrist_0_rgb": image_spec,
+                "right_wrist_0_rgb": image_spec,
+            },
+            image_masks={
+                "base_0_rgb": image_mask_spec,
+                "left_wrist_0_rgb": image_mask_spec,
+                "right_wrist_0_rgb": image_mask_spec,
+            },
+            state=jax.ShapeDtypeStruct([batch_size, model.action_dim], jnp.float32),
+            tokenized_prompt=jax.ShapeDtypeStruct([batch_size, model.max_token_len], jnp.int32),
+            tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, model.max_token_len], jnp.int32),
+        )
     action_spec = jax.ShapeDtypeStruct([batch_size, model.action_horizon, model.action_dim], jnp.float32)
 
     return observation_spec, action_spec

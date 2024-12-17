@@ -29,7 +29,7 @@ class TrainConfig:
     resume: bool = False
 
 
-_CONFIGS = {
+CONFIGS = {
     "default": TrainConfig(),
     "debug": TrainConfig(batch_size=2, module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy")),
     "debug_restore": TrainConfig(
@@ -55,7 +55,7 @@ def cli() -> TrainConfig:
                         tyro.conf.subcommand(k, default=v),
                     )
                 )
-                for k, v in _CONFIGS.items()
+                for k, v in CONFIGS.items()
             )
         ),
     )

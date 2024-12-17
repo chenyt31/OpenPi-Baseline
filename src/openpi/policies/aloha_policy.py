@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 import dataclasses
 
+import einops
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -32,6 +33,7 @@ def create_aloha_policy(model: _model.BaseModel, config: PolicyConfig) -> _polic
     return _policy.Policy(
         model,
         transforms=[
+            ActInputsRepack(),
             AlohaInputs(
                 action_dim=model.action_dim,
                 delta_action_mask=config.delta_action_mask,
@@ -49,6 +51,7 @@ def create_aloha_policy(model: _model.BaseModel, config: PolicyConfig) -> _polic
                 delta_action_mask=config.delta_action_mask,
                 adapt_to_pi=config.adapt_to_pi,
             ),
+            ActOutputsRepack(),
         ],
     )
 
@@ -181,7 +184,51 @@ def make_aloha_norm_stats():
     }
 
 
+class ActInputsRepack(transforms.DataTransformFn):
+    def __call__(self, data: dict) -> dict:
+        # images is [..., num_cams, channel, height, width] of type uint8.
+        # number of cameras (num_cams) depends on the environment.
+        images = jnp.asarray(data["image"])
+
+        num_cams = images.shape[-4]
+        if num_cams == 4:
+            cam_names = ["cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist"]
+        elif num_cams == 1:
+            cam_names = ["cam_high"]
+        else:
+            raise ValueError(f"Expected 1 or 4 cameras, got {num_cams}")
+
+        # `images` have shape [..., cam_idx, channel, height, width].
+        image_splits = [jnp.squeeze(x, axis=-4) for x in jnp.split(images, num_cams, axis=-4)]
+        images_dict = dict(zip(cam_names, image_splits, strict=True))
+
+        return {
+            "images": images_dict,
+            "state": data["qpos"],
+        }
+
+
+class ActOutputsRepack(transforms.DataTransformFn):
+    def __call__(self, data: dict) -> dict:
+        return {"qpos": data["actions"]}
+
+
 class AlohaInputs(transforms.DataTransformFn):
+    """Inputs for the Aloha policy.
+
+    Expected inputs:
+    - images: dict[name, img] where img is [..., channel, height, width]. name must be in EXPECTED_CAMERAS.
+    - state: [..., 14]
+    - actions: [..., action_horizon, action_dim]
+
+    Args:
+        action_dim: The dimension of the action space.
+        delta_action_mask: A boolean mask for the action dimensions. If None, absolute actions are used.
+        adapt_to_pi: If true, will adapt the joint and gripper values to match the pi runtime.
+    """
+
+    EXPECTED_CAMERAS = ("cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist")
+
     def __init__(self, action_dim: int, *, delta_action_mask: Sequence[bool] | None = None, adapt_to_pi: bool = False):
         self._action_dim = action_dim
         self._delta_action_mask = delta_action_mask
@@ -193,8 +240,12 @@ class AlohaInputs(transforms.DataTransformFn):
         # Get the state. We are padding from 14 to the model action dim.
         state = transforms.pad_to_dim(data["state"], self._action_dim)
 
+        in_images = data["images"]
+        if set(in_images) - set(self.EXPECTED_CAMERAS):
+            raise ValueError(f"Expected images to contain {self.EXPECTED_CAMERAS}, got {tuple(in_images)}")
+
         # Assume that base image always exists.
-        base_image = data["cam_high"]
+        base_image = in_images["cam_high"]
         batch_size = base_image.shape[:-3]
 
         images = {
@@ -205,13 +256,13 @@ class AlohaInputs(transforms.DataTransformFn):
         }
 
         # Add the extra images.
-        extra_images = {
+        extra_image_names = {
             "left_wrist_0_rgb": "cam_left_wrist",
             "right_wrist_0_rgb": "cam_right_wrist",
         }
-        for dest, source in extra_images.items():
-            if source in data:
-                images[dest] = data[source]
+        for dest, source in extra_image_names.items():
+            if source in in_images:
+                images[dest] = in_images[source]
                 image_masks[dest] = jnp.ones(batch_size, dtype=jnp.bool_)
             else:
                 images[dest] = jnp.zeros_like(base_image)
@@ -224,10 +275,14 @@ class AlohaInputs(transforms.DataTransformFn):
         }
 
         # Actions are only available during training.
-        if "action/qpos" in data:
-            # TODO(ury): We need to convert this to delta actions. Make sure that this is the
-            # case when we do training.
-            inputs["actions"] = transforms.pad_to_dim(data["action/qpos"], self._action_dim)
+        if "actions" in data:
+            actions = jnp.asarray(data["actions"])
+
+            if self._delta_action_mask is not None:
+                mask = jnp.asarray(self._delta_action_mask[:14])
+                actions = actions - jnp.expand_dims(jnp.where(mask, state[..., :14], 0), axis=-2)
+
+            inputs["actions"] = transforms.pad_to_dim(actions, self._action_dim)
 
         if "prompt" in data:
             inputs["prompt"] = data["prompt"]
@@ -236,6 +291,13 @@ class AlohaInputs(transforms.DataTransformFn):
 
 
 class AlohaOutputs(transforms.DataTransformFn):
+    """Outputs for the Aloha policy.
+
+    Args:
+        delta_action_mask: A boolean mask for the action dimensions. If None, absolute actions are used.
+        adapt_to_pi: If true, will adapt the joint and gripper values to match the pi runtime.
+    """
+
     def __init__(self, *, delta_action_mask: Sequence[bool] | None = None, adapt_to_pi: bool = False):
         self._delta_action_mask = delta_action_mask
         self._adapt_to_pi = adapt_to_pi
@@ -250,7 +312,7 @@ class AlohaOutputs(transforms.DataTransformFn):
             mask = jnp.asarray(self._delta_action_mask[:14])
             actions = actions + jnp.expand_dims(jnp.where(mask, state, 0), axis=-2)
 
-        return {"qpos": _encode_aloha(actions, adapt_to_pi=self._adapt_to_pi)}
+        return {"actions": _encode_actions(actions, adapt_to_pi=self._adapt_to_pi)}
 
 
 def joint_flip_mask() -> jax.Array:
@@ -304,18 +366,28 @@ def gripper_from_angular(value):
 
 
 def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
-    # qpos is [..., 14] of type float:
-    # 0-5: left arm joint angles
-    # 6: left arm gripper
-    # 7-12: right arm joint angles
-    # 13: right arm gripper
-    qpos = jnp.asarray(data["qpos"])
+    # state is [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
+    # dim sizes: [6, 1, 6, 1]
+    state = jnp.asarray(data["state"])
+    state = _decode_state(state, adapt_to_pi=adapt_to_pi)
 
-    # State is:
-    # [left_arm_joint_angles, right_arm_joint_angles, left_arm_gripper, right_arm_gripper]
-    # [6, 1, 6, 1]
-    state = qpos
+    def convert_image(img):
+        img = jnp.asarray(img)
+        # Convert to uint8 if using float images.
+        if np.issubdtype(img.dtype, jnp.floating):
+            img = (255 * img).astype(jnp.uint8)
+        # Convert from [..., channel, height, width] to [..., height, width, channel].
+        return einops.rearrange(img, "... c h w -> ... h w c")
 
+    images = data["images"]
+    images_dict = {name: convert_image(img) for name, img in images.items()}
+
+    data["images"] = images_dict
+    data["state"] = state
+    return data
+
+
+def _decode_state(state: jax.Array, *, adapt_to_pi: bool = False) -> jax.Array:
     if adapt_to_pi:
         # Flip the joints.
         state = joint_flip_mask() * state
@@ -324,32 +396,10 @@ def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
         state = state.at[..., 6].set(gripper_to_angular(state[..., 6]))
         state = state.at[..., 13].set(gripper_to_angular(state[..., 13]))
 
-    # images is [..., num_cams, channel, height, width] of type uint8.
-    # number of cameras (num_cams) depends on the environment.
-    images = jnp.asarray(data["image"])
-
-    num_cams = images.shape[-4]
-    if num_cams == 4:
-        cam_names = ["cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist"]
-    elif num_cams == 1:
-        cam_names = ["cam_high"]
-    else:
-        raise ValueError(f"Expected 1 or 4 cameras, got {num_cams}")
-
-    # `images` have shape [..., cam_idx, channel, height, width].
-    # Convert from [..., channel, height, width] to [..., height, width, channel].
-    images = jnp.rollaxis(images, -3, len(images.shape))
-    # Convert to uint8 if using float images.
-    if np.issubdtype(images.dtype, jnp.floating):
-        images = (255 * images).astype(jnp.uint8)
-    # Split into a dict with keys as camera names.
-    image_splits = [jnp.squeeze(x, axis=-4) for x in jnp.split(images, num_cams, axis=-4)]
-    images_dict = dict(zip(cam_names, image_splits, strict=True))
-
-    return {**images_dict, "state": state}
+    return state
 
 
-def _encode_aloha(actions: jax.Array, *, adapt_to_pi: bool = False) -> jax.Array:
+def _encode_actions(actions: jax.Array, *, adapt_to_pi: bool = False) -> jax.Array:
     if adapt_to_pi:
         # Flip the joints.
         actions = joint_flip_mask() * actions

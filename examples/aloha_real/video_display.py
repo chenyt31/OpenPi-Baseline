@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing_extensions import override
 
-from openpi.runtime import subscriber as _subscriber
+from openpi_client.runtime import subscriber as _subscriber
 
 
 class VideoDisplay(_subscriber.Subscriber):

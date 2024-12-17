@@ -1,5 +1,6 @@
 from collections.abc import Callable, Sequence
-from typing import Any, Protocol, TypeAlias, TypeVar
+import dataclasses
+from typing import Protocol, TypeAlias, TypeVar
 
 import flax.traverse_util as traverse_util
 import jax
@@ -8,9 +9,10 @@ import numpy as np
 
 from openpi.models import tokenizer as _tokenizer
 from openpi.shared import array_typing as at
+from openpi.shared import image_tools
 from openpi.shared import normalize as _normalize
 
-Batch: TypeAlias = dict[str, Any]
+Batch: TypeAlias = at.PyTree
 NormStats: TypeAlias = _normalize.NormStats
 
 
@@ -22,38 +24,48 @@ class DataTransformFn(Protocol):
     def __call__(self, data: Batch) -> Batch: ...
 
 
+@dataclasses.dataclass(frozen=True)
 class CompositeTransform(DataTransformFn):
-    def __init__(self, transforms: Sequence[DataTransformFn]):
-        self._transforms = list(transforms)
+    transforms: Sequence[DataTransformFn]
 
     def __call__(self, data: Batch) -> Batch:
-        for transform in self._transforms:
+        for transform in self.transforms:
             data = transform(data)
         return data
 
 
+@dataclasses.dataclass(frozen=True)
 class Normalize(DataTransformFn):
-    def __init__(self, norm_stats: at.PyTree[NormStats], *, strict: bool = False):
-        self._norm_stats = norm_stats
-        self._strict = strict
+    norm_stats: at.PyTree[NormStats]
+    strict: bool = False
 
     def __call__(self, data: dict) -> dict:
         def normalize(x, stats: NormStats):
             return (x - stats.mean) / (stats.std + 1e-6)
 
-        return apply_tree(data, self._norm_stats, normalize, strict=self._strict)
+        return apply_tree(data, self.norm_stats, normalize, strict=self.strict)
 
 
+@dataclasses.dataclass(frozen=True)
 class Unnormalize(DataTransformFn):
-    def __init__(self, norm_stats: at.PyTree[NormStats]):
-        self._norm_stats = norm_stats
+    norm_stats: at.PyTree[NormStats]
 
     def __call__(self, data: dict) -> dict:
         def unnormalize(x, stats: NormStats):
             return x * (stats.std + 1e-6) + stats.mean
 
         # Make sure that all the keys in the norm stats are present in the data.
-        return apply_tree(data, self._norm_stats, unnormalize, strict=True)
+        return apply_tree(data, self.norm_stats, unnormalize, strict=True)
+
+
+@dataclasses.dataclass(frozen=True)
+class ResizeImages(DataTransformFn):
+    height: int
+    width: int
+
+    def __call__(self, item) -> dict:
+        item["image"] = {k: image_tools.resize_with_pad(v, self.height, self.width) for k, v in item["image"].items()}
+        return item
 
 
 class TokenizePrompt(DataTransformFn):
@@ -94,7 +106,7 @@ def apply_tree(
     return traverse_util.unflatten_dict({k: transform(k, v) for k, v in tree.items()}, sep="/")
 
 
-def pad_to_dim(x: jax.Array, target_dim: int, axis: int = -1) -> at.Array:  # type: ignore
+def pad_to_dim(x: jax.Array, target_dim: int, axis: int = -1) -> jax.Array:
     current_dim = x.shape[axis]
     if current_dim < target_dim:
         pad_width = [(0, 0)] * len(x.shape)

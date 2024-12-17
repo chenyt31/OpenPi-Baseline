@@ -45,12 +45,10 @@ def initialize_checkpoint(
 
 
 def save_state(checkpoint_manager: ocp.CheckpointManager, state: training_utils.TrainState, step: int):
-    with at.disable_typechecking():
-        checkpoint_manager.save(step, args=ocp.args.PyTreeSave(state))
+    checkpoint_manager.save(step, args=ocp.args.PyTreeSave(state))
 
 
 def restore_state(
     checkpoint_manager: ocp.CheckpointManager, state: training_utils.TrainState, step: int | None = None
 ) -> training_utils.TrainState:
-    with at.disable_typechecking():
-        return checkpoint_manager.restore(step=step, args=ocp.args.PyTreeRestore(state))
+    return checkpoint_manager.restore(step=step, args=ocp.args.PyTreeRestore(state))

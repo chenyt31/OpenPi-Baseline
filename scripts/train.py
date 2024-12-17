@@ -106,16 +106,14 @@ def init_train_state(
 
     train_state_shape = jax.eval_shape(init, init_rng, batch)
     # This is where we may want to shard the train state (e.g., FSDP).
-    with at.disable_typechecking():
-        state_sharding = jax.tree.map(lambda _: replicated_sharding, train_state_shape)
+    state_sharding = jax.tree.map(lambda _: replicated_sharding, train_state_shape)
 
     if resume:
         return train_state_shape, state_sharding
 
-    with at.disable_typechecking():  # TODO: https://github.com/patrick-kidger/jaxtyping/issues/277
-        train_state = jax.jit(
-            init, in_shardings=(replicated_sharding, data_parallel_sharding), out_shardings=state_sharding
-        )(init_rng, batch)
+    train_state = jax.jit(
+        init, in_shardings=(replicated_sharding, data_parallel_sharding), out_shardings=state_sharding
+    )(init_rng, batch)
     return train_state, state_sharding
 
 
@@ -238,13 +236,12 @@ def main(config: _config.TrainConfig):
     if resuming:
         train_state = _checkpoints.restore_state(checkpoint_manager, train_state)
 
-    with at.disable_typechecking():
-        ptrain_step = jax.jit(
-            train_step,
-            in_shardings=(replicated_sharding, train_state_sharding, None, data_parallel_sharding),
-            out_shardings=(train_state_sharding, replicated_sharding),
-            donate_argnums=(1,),
-        )
+    ptrain_step = jax.jit(
+        train_step,
+        in_shardings=(replicated_sharding, train_state_sharding, None, data_parallel_sharding),
+        out_shardings=(train_state_sharding, replicated_sharding),
+        donate_argnums=(1,),
+    )
 
     start_step = int(train_state.step)
     pbar = tqdm.trange(
@@ -257,8 +254,7 @@ def main(config: _config.TrainConfig):
 
     infos = []
     for step in pbar:
-        with at.disable_typechecking():  # TODO: https://github.com/patrick-kidger/jaxtyping/issues/277
-            train_state, info = ptrain_step(train_rng, train_state, model, batch)
+        train_state, info = ptrain_step(train_rng, train_state, model, batch)
         infos.append(info)
         if step % config.log_interval == 0:
             stacked_infos = common_utils.stack_forest(infos)

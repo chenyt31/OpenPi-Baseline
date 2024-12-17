@@ -1,33 +1,43 @@
 import contextlib
 import functools as ft
+import inspect
 
 import jax
 import jax.core
-from jaxtyping import Array as _Array
-from jaxtyping import Bool  # noqa
-from jaxtyping import DTypeLike  # noqa
-from jaxtyping import Float  # noqa
-from jaxtyping import Int  # noqa
-from jaxtyping import Key  # noqa
-from jaxtyping import Num  # noqa
+from jaxtyping import Array  # noqa: F401
+from jaxtyping import ArrayLike
+from jaxtyping import Bool  # noqa: F401
+from jaxtyping import DTypeLike  # noqa: F401
+from jaxtyping import Float
+from jaxtyping import Int  # noqa: F401
+from jaxtyping import Key  # noqa: F401
+from jaxtyping import Num  # noqa: F401
 from jaxtyping import PyTree
-from jaxtyping import Real  # noqa
+from jaxtyping import Real  # noqa: F401
 from jaxtyping import Shaped
-from jaxtyping import UInt8  # noqa
+from jaxtyping import UInt8  # noqa: F401
 from jaxtyping import config
 from jaxtyping import jaxtyped
+import jaxtyping._decorator
 import typeguard
 
-# TODO(ury): Review this and consider switching to jax.typing
+# patch jaxtyping to handle https://github.com/patrick-kidger/jaxtyping/issues/277.
+# the problem is that custom PyTree nodes are sometimes initialized with arbitrary types (e.g., `jax.ShapeDtypeStruct`,
+# `jax.Sharding`, or even <object>) due to JAX tracing operations. this patch skips typechecking when the stack trace
+# contains `jax._src.tree_util`, which should only be the case during tree unflattening.
+_original_check_dataclass_annotations = jaxtyping._decorator._check_dataclass_annotations  # noqa: SLF001
 
-# Support jax.ShapeDtypeStruct for compatibility with jax.eval_shape
-# Support jax.core.ShapedArray for compatibility with various Flax transforms (e.g., nn.scan)
-Array = _Array | jax.ShapeDtypeStruct | jax.core.ShapedArray
-ArrayLike = Array | jax.typing.ArrayLike
+
+def _check_dataclass_annotations(self, typechecker):
+    if not any(frame.frame.f_globals["__name__"] == "jax._src.tree_util" for frame in inspect.stack()):  # noqa: RET503
+        return _original_check_dataclass_annotations(self, typechecker)
+
+
+jaxtyping._decorator._check_dataclass_annotations = _check_dataclass_annotations  # noqa: SLF001
+
 KeyArrayLike = jax.typing.ArrayLike
 
-Params = PyTree  # don't actually check leaves, too slow
-OptState = PyTree  # don't actually check leaves, too slow
+Params = PyTree[Float[ArrayLike, "..."]]
 Batch = PyTree[Shaped[ArrayLike, "b ..."]]
 
 typecheck = ft.partial(jaxtyped, typechecker=typeguard.typechecked)

@@ -1,5 +1,5 @@
 # docker build . -t libero -f examples/libero/Dockerfile
-# docker run --rm -it --network=host -v .:/app libero /bin/bash
+# docker run --rm -it --network=host -v .:/app --gpus all libero /bin/bash
 FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04@sha256:2d913b09e6be8387e1a10976933642c73c840c0b735f0bf3c28d97fc9bc422e0
 COPY --from=ghcr.io/astral-sh/uv:0.5.1 /uv /uvx /bin/
 
@@ -38,5 +38,16 @@ COPY ./packages/openpi-client/pyproject.toml /tmp/openpi-client/pyproject.toml
 RUN uv venv --python 3.8 $UV_PROJECT_ENVIRONMENT
 RUN uv pip sync /tmp/requirements.txt /tmp/requirements-libero.txt /tmp/openpi-client/pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu113 --index-strategy=unsafe-best-match
 ENV PYTHONPATH=/app:/app/packages/openpi-client/src:/app/third_party/libero
+
+# Create a default config file to avoid an input prompt from LIBERO's init script.
+# https://github.com/Lifelong-Robot-Learning/LIBERO/blob/master/libero/libero/__init__.py
+ENV LIBERO_CONFIG_PATH=/tmp/libero
+RUN mkdir -p /tmp/libero && cat <<'EOF' > /tmp/libero/config.yaml
+benchmark_root: /app/third_party/libero/libero/libero
+bddl_files: /app/third_party/libero/libero/libero/bddl_files
+init_states: /app/third_party/libero/libero/libero/init_files
+datasets: /app/third_party/libero/libero/datasets
+assets: /app/third_party/libero/libero/libero/assets
+EOF
 
 CMD ["/bin/bash", "-c", "source /.venv/bin/activate && python examples/libero/main.py"]

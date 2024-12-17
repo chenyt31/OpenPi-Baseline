@@ -19,6 +19,14 @@ git submodule update --init --recursive
 
 We use [UV](https://docs.astral.sh/uv/) to manage Python dependencies. See the [UV installation instructions](https://docs.astral.sh/uv/getting-started/installation/) to set it up.
 
+Once UV is installed, run the following to set up the environment:
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 uv sync
+```
+
+NOTE: `GIT_LFS_SKIP_SMUDGE=1` is needed to pull LeRobot as a dependency.
+
 ### Docker Setup
 
 The recommended way to run many of our examples is using Docker. This will simplify software installation, produce a more stable environment, and also

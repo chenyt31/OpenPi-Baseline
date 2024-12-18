@@ -1,3 +1,4 @@
+# THIS DOCKERFILE DOES NOT YET WORK
 # Dockerfile for the CALVIN benchmark.
 
 # Build the container:
@@ -38,7 +39,6 @@ ENV PATH=$CONDA_DIR/bin:$PATH
 # So we have to clone it directly.
 RUN git clone --recurse-submodules https://github.com/mees/calvin.git /root/calvin
 
-COPY ./examples/calvin/requirements.txt /root/calvin/requirements.txt
 RUN conda create -n calvin python=3.8
 RUN source /opt/conda/bin/activate calvin && \
     pip install setuptools==57.5.0 && \

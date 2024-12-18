@@ -7,6 +7,9 @@ Note: When updating requirements.txt in this directory, there is an additional f
 ## With Docker
 
 ```bash
+# Grant access to the X11 server:
+sudo xhost +local:docker
+
 export SERVER_ARGS="--mode LIBERO"
 docker compose -f examples/libero/compose.yml up --build
 ```

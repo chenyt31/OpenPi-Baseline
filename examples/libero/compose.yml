@@ -15,6 +15,9 @@ services:
     volumes:
       - $PWD:/app
       - ../../data:/data
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+    environment:
+      - DISPLAY=$DISPLAY
     deploy:
       resources:
         reservations:

@@ -154,7 +154,7 @@ class Model(BaseModel):
         loss_args = (obs, actions)
 
         return jnp.mean(
-            self.module.apply({"params": params}, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss)
+            self.module.apply({"params": params}, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss)  # type: ignore
         )
 
     @jax.jit

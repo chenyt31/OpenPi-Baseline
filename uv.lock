@@ -2010,6 +2010,19 @@ wheels = [
 ]
 
 [[package]]
+name = "numpydantic"
+version = "1.6.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "pydantic", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/b9/3afb3f86e1f54d3b55f1cc40713067869efe8a8d565fdf1dbc75d8d33d18/numpydantic-1.6.6.tar.gz", hash = "sha256:b3dcab2928ad7e150837647df3d1536b1b93ed3c1b311bf045f256f15b747de1", size = 77557 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/72/7ba1d8996eaa5915540fd80f472594cb1e6dbdbb2ac53cebbf687558b876/numpydantic-1.6.6-py3-none-any.whl", hash = "sha256:8b6113639dd39425caf80f5800e2ffc30059dcd6a74f7705c5ff8a71533ad95b", size = 85465 },
+]
+
+[[package]]
 name = "nvidia-cublas-cu12"
 version = "12.4.5.8"
 source = { registry = "https://pypi.org/simple" }
@@ -2482,6 +2495,7 @@ dependencies = [
     { name = "lerobot", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "ml-collections", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "numpy", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "numpydantic", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "opencv-python", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "openpi-client", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "orbax-checkpoint", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
@@ -2520,6 +2534,7 @@ requires-dist = [
     { name = "lerobot", git = "https://github.com/huggingface/lerobot?rev=66f87365988cb5424435ea03b428426b4ede98cb" },
     { name = "ml-collections", specifier = "==1.0.0" },
     { name = "numpy", specifier = ">=1.26.4" },
+    { name = "numpydantic", specifier = ">=1.6.6" },
     { name = "opencv-python", specifier = ">=4.10.0.84" },
     { name = "openpi-client", editable = "packages/openpi-client" },
     { name = "orbax-checkpoint", specifier = "==0.7.0" },
@@ -2538,7 +2553,6 @@ requires-dist = [
 dev = [
     { name = "pre-commit", specifier = ">=4.0.1" },
     { name = "pytest", specifier = ">=8.3.4" },
-    { name = "ruff", specifier = ">=0.8.2" },
     { name = "ruff", specifier = ">=0.8.3" },
 ]
 

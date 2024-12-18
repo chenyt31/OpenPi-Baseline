@@ -34,6 +34,11 @@ class CompositeTransform(DataTransformFn):
         return data
 
 
+def compose(transforms: Sequence[DataTransformFn]) -> DataTransformFn:
+    """Compose a sequence of transforms into a single transform."""
+    return CompositeTransform(transforms)
+
+
 @dataclasses.dataclass(frozen=True)
 class Normalize(DataTransformFn):
     norm_stats: at.PyTree[NormStats]
@@ -92,7 +97,15 @@ class TokenizePrompt(DataTransformFn):
         else:
             prompt = np.asarray(data.pop("prompt"))
 
+        # TODO(ury): Adjust the tokenizer to take a single element instead.
+        shape = prompt.shape
+        if len(shape) == 0:
+            prompt = prompt[np.newaxis, ...]
         tokens, token_masks = self._tokenizer.tokenize(prompt)
+        if len(shape) == 0:
+            tokens = tokens[0]
+            token_masks = token_masks[0]
+
         return {**data, "tokenized_prompt": jnp.asarray(tokens), "tokenized_prompt_mask": jnp.asarray(token_masks)}
 
 

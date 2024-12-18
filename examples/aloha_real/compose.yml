@@ -31,8 +31,7 @@ services:
     privileged: true
     volumes:
       - /dev:/dev
-    command:
-      - roslaunch --wait aloha ros_nodes.launch
+    command: roslaunch --wait aloha ros_nodes.launch
 
   ros_master:
     image: ros:noetic-robot

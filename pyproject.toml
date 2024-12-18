@@ -71,8 +71,6 @@ line-length = 120
 target-version = "py311"
 extend-exclude = [
   "docker",
-  # Disabling since it contains py37 compatible code.
-  "examples",
   "third_party",
 ]
 

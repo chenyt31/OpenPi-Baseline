@@ -1,11 +1,9 @@
+import einops
 import numpy as np
+from openpi_client.runtime import environment as _environment
 from typing_extensions import override
 
-import einops
-
 from examples.aloha_real import real_env as _real_env
-from openpi_client import image_tools
-from openpi_client.runtime import environment as _environment
 
 
 class AlohaRealEnvironment(_environment.Environment):
@@ -37,7 +35,7 @@ class AlohaRealEnvironment(_environment.Environment):
                 del obs["images"][k]
 
         images = []
-        for cam_name in obs["images"].keys():
+        for cam_name in obs["images"]:
             curr_image = obs["images"][cam_name]
             curr_image = einops.rearrange(curr_image, "h w c -> c h w")
             images.append(curr_image)

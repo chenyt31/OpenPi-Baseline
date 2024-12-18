@@ -2,7 +2,6 @@ import collections
 import dataclasses
 import logging
 import math
-import os
 import pathlib
 
 import imageio
@@ -163,7 +162,7 @@ def eval_libero(args: Args) -> None:
 
             # Save a replay video of the episode
             suffix = "success" if done else "failure"
-            task_segment = task_description.replace(' ', '_')
+            task_segment = task_description.replace(" ", "_")
             imageio.mimwrite(
                 pathlib.Path(args.video_out_path) / f"rollout_{task_segment}_{suffix}.mp4",
                 [np.asarray(x) for x in replay_images],
@@ -186,7 +185,7 @@ def eval_libero(args: Args) -> None:
 def _get_libero_env(task, resolution, seed):
     """Initializes and returns the LIBERO environment, along with the task description."""
     task_description = task.language
-    task_bddl_file = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
+    task_bddl_file = pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
     env_args = {"bddl_file_name": task_bddl_file, "camera_heights": resolution, "camera_widths": resolution}
     env = OffScreenRenderEnv(**env_args)
     env.seed(seed)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state

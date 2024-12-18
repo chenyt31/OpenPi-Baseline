@@ -15,6 +15,8 @@ def download(url: str, **kwargs) -> pathlib.Path:
         raise FileNotFoundError(f"File not found at {url}")
     protocol_str = fs.protocol[0] if isinstance(fs.protocol, tuple) else fs.protocol
     local_path = cache_dir / protocol_str / path
+    if local_path.exists():
+        return local_path
 
     total_size = fs.du(url)
     executor = futures.ThreadPoolExecutor(max_workers=1)
@@ -23,6 +25,6 @@ def download(url: str, **kwargs) -> pathlib.Path:
         while not future.done():
             current_size = sum(f.stat().st_size for f in [*local_path.rglob("*"), local_path] if f.is_file())
             pbar.update(current_size - pbar.n)
-            time.sleep(0.1)
+            time.sleep(1)
         pbar.update(total_size - pbar.n)
     return local_path

@@ -1,18 +1,17 @@
 import collections
 import dataclasses
 import logging
-import pathlib
 import re
 from typing import Protocol, runtime_checkable
 
 import flax
-import fsspec
 import jax
 import jax.numpy as jnp
 import numpy as np
 import scipy.ndimage
 
 import openpi.models.model as _model
+from openpi.shared import download
 import openpi.shared.array_typing as at
 
 logger = logging.getLogger(__name__)
@@ -91,15 +90,9 @@ def _fix_groupnorm(params: at.Params) -> at.Params:
 
 @dataclasses.dataclass(frozen=True)
 class PaliGemmaWeightLoader(WeightLoader):
-    cache_path: str | None = "~/.cache/openpi/paligemma.npz"
-
     def load(self, params: at.Params) -> at.Params:
-        logger.info("Loading PaliGemma weights. This may take a while the first time.")
-        with fsspec.open(
-            "filecache::gs://vertex-model-garden-paligemma-us/paligemma/pt_224.npz",
-            gs={"token": "anon"},
-            filecache={"cache_storage": pathlib.Path(self.cache_path).expanduser().resolve().as_posix()},
-        ) as f:
+        path = download.download("gs://vertex-model-garden-paligemma-us/paligemma/pt_224.npz", gs={"token": "anon"})
+        with path.open("rb") as f:
             flat_params = dict(np.load(f, allow_pickle=False))
         # The weights are stored in a special big_vision format, so we need a special function to unflatten them.
         paligemma_params = _recover_tree(flat_params)["params"]
@@ -118,18 +111,16 @@ class PaliGemmaWeightLoader(WeightLoader):
 
 @dataclasses.dataclass(frozen=True)
 class GoogleViTWeightLoader(WeightLoader):
-    cache_path: str | None = "~/.cache/openpi/vit.npz"
     # The Google ViT can take any resolution, including non-square ones. The resolution specified here must match the
     # resolution of the images passed into the model.
     target_resolution: tuple[int, int] = (224, 224)
 
     def load(self, params: at.Params) -> at.Params:
-        logger.info("Loading Google ViT weights. This may take a while the first time.")
-        with fsspec.open(
-            "filecache::gs://vit_models/augreg/R26_S_32-i21k-300ep-lr_0.001-aug_light1-wd_0.1-do_0.0-sd_0.0.npz",
+        path = download.download(
+            "gs://vit_models/augreg/R26_S_32-i21k-300ep-lr_0.001-aug_light1-wd_0.1-do_0.0-sd_0.0.npz",
             gs={"token": "anon"},
-            filecache={"cache_storage": pathlib.Path(self.cache_path).expanduser().resolve().as_posix()},
-        ) as f:
+        )
+        with path.open("rb") as f:
             flat_params = dict(np.load(f, allow_pickle=False))
         pretrained_params = _fix_groupnorm(_convert_pre_linen(_recover_tree(flat_params)))
 

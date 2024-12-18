@@ -3,6 +3,7 @@ import logging
 
 import tyro
 
+from openpi import transforms
 from openpi.models import exported as _exported
 from openpi.models import model as _model
 from openpi.policies import aloha_policy
@@ -109,7 +110,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
             )
         case ModelMode.DROID:
             logging.info("Loading model...")
-            ckpt_path = "checkpoints/gemmamix_dct_dec5_droid_dec8_1008am/340000/model"
+            ckpt_path = "checkpoints/gemmamix_nov4_droid_no22_1056am/290000/model"
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
@@ -127,8 +128,9 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                     droid_policy.DroidOutputs(
                         delta_action_mask=None,
                     ),
+                    transforms.SubsampleActions(stride=5),
                 ],
-                sample_kwargs={"num_denoising_steps": 10},
+                sample_kwargs={"num_steps": 10},
             )
         case ModelMode.CALVIN:
             logging.info("Loading model...")
@@ -146,7 +148,7 @@ def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:
                 output_layers=[
                     calvin_policy.CalvinOutputs(),
                 ],
-                sample_kwargs={"num_denoising_steps": 10},
+                sample_kwargs={"num_steps": 10},
             )
         case ModelMode.LIBERO:
             logging.info("Loading model...")

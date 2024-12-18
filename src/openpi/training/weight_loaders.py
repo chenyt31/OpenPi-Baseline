@@ -2,7 +2,7 @@ import collections
 import dataclasses
 import logging
 import re
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 import flax
 import jax
@@ -17,7 +17,6 @@ import openpi.shared.array_typing as at
 logger = logging.getLogger(__name__)
 
 
-@runtime_checkable
 class WeightLoader(Protocol):
     def load(self, params: at.Params) -> at.Params: ...
 

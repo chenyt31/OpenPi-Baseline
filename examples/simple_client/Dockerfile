@@ -1,5 +1,11 @@
+# Dockerfile for the simple client.
+
+# Build the container:
 # docker build . -t simple_client -f examples/simple_client/Dockerfile
+
+# Run the container:
 # docker run --rm -it --network=host -v .:/app simple_client /bin/bash
+
 FROM python:3.7-slim
 COPY --from=ghcr.io/astral-sh/uv:0.5.1 /uv /uvx /bin/
 

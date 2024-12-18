@@ -1,5 +1,11 @@
+# Dockerfile for the LIBERO benchmark.
+
+# Build the container:
 # docker build . -t libero -f examples/libero/Dockerfile
+
+# Run the container:
 # docker run --rm -it --network=host -v .:/app --gpus all libero /bin/bash
+
 FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04@sha256:2d913b09e6be8387e1a10976933642c73c840c0b735f0bf3c28d97fc9bc422e0
 COPY --from=ghcr.io/astral-sh/uv:0.5.1 /uv /uvx /bin/
 

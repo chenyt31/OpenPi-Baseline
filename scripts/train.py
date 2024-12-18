@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+import dataclasses
 from functools import partial
 import logging
 from typing import Any
@@ -12,6 +13,7 @@ import jax.numpy as jnp
 import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import optax
 import tqdm_loggable.auto as tqdm
+import wandb
 
 import openpi.models.common as _common
 import openpi.models.model as _model
@@ -26,7 +28,7 @@ import openpi.training.weight_loaders as _weight_loaders
 import openpi.transforms as _transforms
 
 
-def init_logging() -> None:
+def init_logging():
     """Custom logging format for better readability."""
     level_mapping = {"DEBUG": "D", "INFO": "I", "WARNING": "W", "ERROR": "E", "CRITICAL": "C"}
 
@@ -43,6 +45,25 @@ def init_logging() -> None:
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     logger.handlers[0].setFormatter(formatter)
+
+
+def init_wandb(config: _config.TrainConfig, *, resuming: bool):
+    exp_dir = epath.Path(config.checkpoint_dir) / config.exp_name
+    if not exp_dir.exists():
+        raise FileNotFoundError(f"Experiment directory {exp_dir} does not exist.")
+    if resuming:
+        run_id = (exp_dir / "wandb_id.txt").read_text().strip()
+        wandb.init(id=run_id, resume="must", project=config.project_name)
+    else:
+        wandb.init(
+            name=config.exp_name,
+            config=dataclasses.asdict(config),
+            project=config.project_name,
+        )
+        (exp_dir / "wandb_id.txt").write_text(wandb.run.id)
+
+    # log all of the code in the repo
+    wandb.run.log_code(epath.Path(__file__).parent.parent)
 
 
 def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader, params: at.Params) -> at.Params:
@@ -88,7 +109,6 @@ def init_train_state(
         rng, model_rng = jax.random.split(rng)
         observation, actions = data
         params = model.init_params(model_rng, observation, actions)
-        # if config.weight_loader is not None:
         params = jax.experimental.io_callback(
             partial(_load_weights_and_validate, config.weight_loader), params, params, ordered=True
         )
@@ -220,8 +240,12 @@ def main(config: _config.TrainConfig):
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint(
-        config.checkpoint_dir, keep_interval=config.keep_interval, overwrite=config.overwrite, resume=config.resume
+        epath.Path(config.checkpoint_dir) / config.exp_name,
+        keep_interval=config.keep_interval,
+        overwrite=config.overwrite,
+        resume=config.resume,
     )
+    init_wandb(config, resuming=resuming)
 
     model = _model.Model(module=config.module, action_dim=24, action_horizon=50, max_token_len=48)
 
@@ -258,8 +282,9 @@ def main(config: _config.TrainConfig):
         if step % config.log_interval == 0:
             stacked_infos = common_utils.stack_forest(infos)
             reduced_info = jax.device_get(jax.tree.map(jnp.mean, stacked_infos))
-            reduced_info = ", ".join(f"{k}={v:.4f}" for k, v in reduced_info.items())
-            pbar.write(f"Step {step}: {reduced_info}")
+            info_str = ", ".join(f"{k}={v:.4f}" for k, v in reduced_info.items())
+            pbar.write(f"Step {step}: {info_str}")
+            wandb.log(reduced_info, step=step)
             infos = []
         batch = next(data_loader)
 

@@ -1,6 +1,7 @@
 import dataclasses
 from typing import Annotated, Union
 
+import namer
 import tyro
 
 from openpi.models import common
@@ -18,6 +19,8 @@ class TrainConfig:
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
     ema_decay: float | None = None
     weight_loader: weight_loaders.WeightLoader = dataclasses.field(default_factory=weight_loaders.NoOpWeightLoader)
+    project_name: str = "openpi"
+    exp_name: str = namer.generate(category=["food", "technology"], suffix_length=3)  # noqa: RUF009
     checkpoint_dir: str = "/tmp/openpi/checkpoints"
     seed: int = 42
     batch_size: int = 16

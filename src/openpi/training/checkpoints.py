@@ -7,9 +7,8 @@ import openpi.training.utils as training_utils
 
 
 def initialize_checkpoint(
-    checkpoint_dir: str, keep_interval: int, *, overwrite: bool, resume: bool
+    checkpoint_dir: epath.Path, keep_interval: int, *, overwrite: bool, resume: bool
 ) -> tuple[ocp.CheckpointManager, bool]:
-    checkpoint_dir = epath.Path(checkpoint_dir)
     resuming = False
     if checkpoint_dir.exists():
         if overwrite:

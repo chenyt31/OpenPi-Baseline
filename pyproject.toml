@@ -30,6 +30,8 @@ dependencies = [
     "fsspec[gcs]>=2024.6.0",
     "lerobot",
     "tqdm-loggable>=0.2",
+    "wandb>=0.19.1",
+    "unique-namer>=1.6.1",
 ]
 
 

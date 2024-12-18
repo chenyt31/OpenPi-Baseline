@@ -12,7 +12,7 @@ def make_from_spec(spec: jax.ShapeDtypeStruct):
 def test_model():
     model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
 
-    batch_size = 8
+    batch_size = 2
     observation_spec, action_spec = _model.create_inputs_spec(model, batch_size=batch_size)
 
     observation = jax.tree.map(make_from_spec, observation_spec)

@@ -1,7 +1,7 @@
-from collections.abc import Iterator
 import dataclasses
 from functools import partial
 import logging
+import platform
 from typing import Any
 
 import etils.epath as epath
@@ -10,14 +10,12 @@ import jax
 import jax._src.tree_util as private_tree_util
 import jax.experimental
 import jax.numpy as jnp
-import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import optax
 import tqdm_loggable.auto as tqdm
 import wandb
 
 import openpi.models.common as _common
 import openpi.models.model as _model
-import openpi.policies.aloha_policy as aloha_policy
 import openpi.shared.array_typing as at
 import openpi.training.checkpoints as _checkpoints
 import openpi.training.config as _config
@@ -25,7 +23,6 @@ import openpi.training.data_loader as _data_loader
 import openpi.training.optimizer as _optimizer
 import openpi.training.utils as training_utils
 import openpi.training.weight_loaders as _weight_loaders
-import openpi.transforms as _transforms
 
 
 def init_logging():
@@ -172,55 +169,9 @@ def train_step(
     return new_state, info
 
 
-class LeRobotRepack(_transforms.DataTransformFn):
-    def __call__(self, item) -> dict:
-        img = item["observation.images.top"]
-        return {
-            "images": {"cam_high": img},
-            "state": item["observation.state"],
-            "actions": item["action"],
-        }
-
-
-def create_data_loader(
-    config: _config.TrainConfig, model: _model.Model, sharding: jax.sharding.Sharding
-) -> Iterator[tuple[_common.Observation, _common.Actions]]:
-    repo_id = "lerobot/aloha_sim_transfer_cube_human"
-    action_horizon = model.action_horizon
-
-    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
-    dataset = lerobot_dataset.LeRobotDataset(
-        repo_id, delta_timestamps={"action": [t / dataset_meta.fps for t in range(action_horizon)]}
-    )
-
-    for batch in _data_loader.data_loader(
-        dataset,
-        local_batch_size=config.batch_size // jax.process_count(),
-        sharding=sharding,
-        transforms=[
-            LeRobotRepack(),
-            aloha_policy.AlohaInputs(action_dim=model.action_dim),
-            _transforms.ResizeImages(224, 224),
-        ],
-    ):
-        # Perform this after the batch has been sharded.
-        yield _common.Observation.from_dict(batch), batch["actions"]
-
-
-def create_fake_data_loader(
-    config: _config.TrainConfig, model: _model.Model, sharding: jax.sharding.Sharding
-) -> Iterator[tuple[_common.Observation, _common.Actions]]:
-    dataset = _data_loader.FakeDataset(model, config.num_train_steps)
-
-    return _data_loader.data_loader(
-        dataset,
-        local_batch_size=config.batch_size // jax.process_count(),
-        sharding=sharding,
-    )
-
-
 def main(config: _config.TrainConfig):
     init_logging()
+    logging.info(f"Running on: {platform.node()}")
 
     if config.batch_size % jax.device_count() != 0:
         raise ValueError(
@@ -239,17 +190,18 @@ def main(config: _config.TrainConfig):
     data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
+    checkpoint_dir = epath.Path(config.checkpoint_dir) / config.name / config.exp_name
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint(
-        epath.Path(config.checkpoint_dir) / config.exp_name,
+        checkpoint_dir,
         keep_interval=config.keep_interval,
         overwrite=config.overwrite,
         resume=config.resume,
     )
     init_wandb(config, resuming=resuming)
 
-    model = _model.Model(module=config.module, action_dim=24, action_horizon=50, max_token_len=48)
+    model = config.create_model()
 
-    data_loader = create_data_loader(config, model, data_parallel_sharding)
+    data_loader = _data_loader.create_data_loader(config, model, data_parallel_sharding)
     batch = next(data_loader)
     logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")
 

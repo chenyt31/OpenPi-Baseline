@@ -1,12 +1,14 @@
-import dataclasses
+import json
 
 import numpy as np
+import numpydantic
+import pydantic
 
 
-@dataclasses.dataclass
+@pydantic.dataclasses.dataclass
 class NormStats:
-    mean: np.ndarray
-    std: np.ndarray
+    mean: numpydantic.NDArray
+    std: numpydantic.NDArray
 
 
 class RunningStats:
@@ -37,6 +39,17 @@ class RunningStats:
         self._mean += (batch_mean - self._mean) * (num_elements / self._count)
         self._mean_of_squares += (batch_mean_of_squares - self._mean_of_squares) * (num_elements / self._count)
 
+    def merge(self, other: "RunningStats") -> None:
+        """Merge two running statistics."""
+        if self._count == 0:
+            self._mean = other._mean  # noqa: SLF001
+            self._mean_of_squares = other._mean_of_squares  # noqa: SLF001
+        else:
+            ratio = other._count / self._count  # noqa: SLF001
+            self._mean = (self._mean + ratio * other._mean) / (1 + ratio)  # noqa: SLF001
+            self._mean_of_squares = (self._mean_of_squares + ratio * other._mean_of_squares) / (1 + ratio)  # noqa: SLF001
+        self._count += other._count  # noqa: SLF001
+
     def get_statistics(self) -> NormStats:
         """
         Compute and return the statistics of the vectors processed so far.
@@ -50,3 +63,17 @@ class RunningStats:
         variance = self._mean_of_squares - self._mean**2
         stddev = np.sqrt(np.maximum(0, variance))
         return NormStats(mean=self._mean, std=stddev)
+
+
+class _NormStatsDict(pydantic.BaseModel):
+    norm_stats: dict[str, NormStats]
+
+
+def serialize_json(norm_stats: dict[str, NormStats]) -> str:
+    """Serialize the running statistics to a JSON string."""
+    return _NormStatsDict(norm_stats=norm_stats).model_dump_json(indent=2)
+
+
+def deserialize_json(data: str) -> dict[str, NormStats]:
+    """Deserialize the running statistics from a JSON string."""
+    return _NormStatsDict(**json.loads(data)).norm_stats

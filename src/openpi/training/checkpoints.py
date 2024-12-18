@@ -7,8 +7,9 @@ import openpi.training.utils as training_utils
 
 
 def initialize_checkpoint(
-    checkpoint_dir: epath.Path, keep_interval: int, *, overwrite: bool, resume: bool
+    checkpoint_dir: epath.Path | str, keep_interval: int, *, overwrite: bool, resume: bool
 ) -> tuple[ocp.CheckpointManager, bool]:
+    checkpoint_dir = epath.Path(checkpoint_dir).resolve()
     resuming = False
     if checkpoint_dir.exists():
         if overwrite:
@@ -18,7 +19,10 @@ def initialize_checkpoint(
         elif resume:
             resuming = True
         else:
-            raise FileExistsError(f"Checkpoint directory {checkpoint_dir} already exists")
+            raise FileExistsError(
+                f"Checkpoint directory {checkpoint_dir} already exists. Use --overwrite or --resume "
+                "to indicate how to handle it."
+            )
 
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 

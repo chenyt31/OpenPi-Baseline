@@ -3,11 +3,14 @@ from typing import Protocol, SupportsIndex, TypeVar
 
 import jax
 import jax.numpy as jnp
+import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import numpy as np
 
 import openpi.models.common as _common
 import openpi.models.model as _model
+import openpi.models.tokenizer as _tokenizer
 import openpi.shared.array_typing as at
+import openpi.training.config as _config
 import openpi.transforms as _transforms
 
 T_co = TypeVar("T_co", covariant=True)
@@ -54,8 +57,8 @@ class FakeDataset(Dataset):
 def data_loader(
     dataset: Dataset,
     local_batch_size: int,
-    sharding: jax.sharding.Sharding,
     *,
+    sharding: jax.sharding.Sharding | None = None,
     transforms: Sequence[_transforms.DataTransformFn] = (),
     shuffle: bool = False,
     max_batches: int | None = None,
@@ -65,6 +68,8 @@ def data_loader(
         raise NotImplementedError("Data loader with multiple processes is not supported.")
 
     num_samples = len(dataset)
+    if sharding is None:
+        sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
 
     def sampler() -> Iterator[int]:
         rng = jax.random.key(0)
@@ -102,3 +107,53 @@ def data_loader(
             num_batches += 1
 
     return data_loader()
+
+
+def create_dataset(data_config: _config.DataConfig, model: _model.Model) -> Dataset:
+    repo_id = data_config.repo_id
+    if repo_id == "fake":
+        return FakeDataset(model, num_samples=1024)
+
+    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id)
+    return lerobot_dataset.LeRobotDataset(
+        data_config.repo_id,
+        delta_timestamps={"action": [t / dataset_meta.fps for t in range(model.action_horizon)]},
+        root=data_config.dataset_root,
+    )
+
+
+def create_data_loader(
+    config: _config.TrainConfig,
+    model: _model.Model,
+    *,
+    sharding: jax.sharding.Sharding | None = None,
+    skip_norm_stats: bool = False,
+    max_batches: int | None = None,
+) -> Iterator[tuple[_common.Observation, _common.Actions]]:
+    data_config = config.data.create(config.metadata_dir, model)
+    dataset = create_dataset(data_config, model)
+
+    norm_stats = {}
+    if not skip_norm_stats:
+        if data_config.norm_stats is None:
+            raise ValueError("Normalization stats not found. Make sure to run `compute_norm_stats.py` first.")
+        norm_stats = data_config.norm_stats
+
+    transforms = [
+        *data_config.input_transforms,
+        _transforms.Normalize(norm_stats),
+        _transforms.TokenizePrompt(
+            _tokenizer.PaligemmaTokenizer(model.max_token_len),
+            default_prompt=data_config.default_prompt,
+        ),
+    ]
+
+    for batch in data_loader(
+        dataset,
+        local_batch_size=config.batch_size // jax.process_count(),
+        sharding=sharding,
+        transforms=transforms,
+        max_batches=max_batches,
+    ):
+        # Perform this after the batch has been sharded.
+        yield _common.Observation.from_dict(batch), batch["actions"]

@@ -68,6 +68,15 @@ class ResizeImages(DataTransformFn):
         return item
 
 
+@dataclasses.dataclass(frozen=True)
+class SubsampleActions(DataTransformFn):
+    stride: int
+
+    def __call__(self, data: dict) -> dict:
+        data["actions"] = data["actions"][:: self.stride]
+        return data
+
+
 class TokenizePrompt(DataTransformFn):
     # This is the default text prompt for the model.
     DEFAULT_PROMPT = "be a good robot"

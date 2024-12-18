@@ -33,12 +33,13 @@ class TrainConfig:
 
 
 CONFIGS = {
-    "default": TrainConfig(),
-    "debug": TrainConfig(batch_size=2, module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy")),
+    "debug": TrainConfig(
+        batch_size=2, module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"), save_interval=100
+    ),
     "debug_restore": TrainConfig(
         batch_size=2,
         module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
-        weight_loader=weight_loaders.CheckpointWeightLoader(""),
+        weight_loader=weight_loaders.CheckpointWeightLoader(tyro.MISSING),
     ),
     "paligemma": TrainConfig(
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),

@@ -14,6 +14,7 @@ def test_train(tmp_path: pathlib.Path, config_name: str):
         _config.CONFIGS[config_name],
         batch_size=2,
         checkpoint_dir=tmp_path / "checkpoint",
+        exp_name="test",
         overwrite=False,
         resume=False,
         num_train_steps=2,

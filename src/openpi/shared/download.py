@@ -21,7 +21,7 @@ def download(url: str, **kwargs) -> pathlib.Path:
     future = executor.submit(fs.get, url, local_path, recursive=True)
     with tqdm.tqdm(total=total_size, desc=f"Downloading {url}", unit="iB", unit_scale=True, unit_divisor=1024) as pbar:
         while not future.done():
-            current_size = sum(f.stat().st_size for f in local_path.rglob("*") if f.is_file())
+            current_size = sum(f.stat().st_size for f in [*local_path.rglob("*"), local_path] if f.is_file())
             pbar.update(current_size - pbar.n)
             time.sleep(0.1)
         pbar.update(total_size - pbar.n)

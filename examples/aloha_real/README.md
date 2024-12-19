@@ -12,7 +12,7 @@ This repo uses a fork of the ALOHA repo, with very minor modifications to use Re
 ## With Docker
 
 ```bash
-export SERVER_ARGS="--mode REF --default_prompt='toast out of toaster'"
+export SERVER_ARGS="--env ALOHA --default_prompt='toast out of toaster'"
 docker compose -f examples/aloha_real/compose.yml up --build
 ```
 

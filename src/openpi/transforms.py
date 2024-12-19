@@ -46,6 +46,16 @@ def compose(transforms: Sequence[DataTransformFn]) -> DataTransformFn:
 
 
 @dataclasses.dataclass(frozen=True)
+class InjectDefaultPrompt(DataTransformFn):
+    prompt: str | None
+
+    def __call__(self, data: dict) -> dict:
+        if self.prompt is not None and "prompt" not in data:
+            data["prompt"] = self.prompt
+        return data
+
+
+@dataclasses.dataclass(frozen=True)
 class Normalize(DataTransformFn):
     norm_stats: at.PyTree[NormStats] | None
     strict: bool = False

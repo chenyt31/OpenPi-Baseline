@@ -49,4 +49,25 @@ The Pi0 Base Model is an out-of-the-box model for general tasks. You can find mo
 While we strongly recommend fine-tuning the model to your own data to adapt it to particular tasks, it may be possible to prompt the model to attempt some tasks that were in the pre-training data. For example, below is a video of the model attempting the "toast out of toaster" task.
 
 <p align="center"> 
-  <img src="https://github.com/Physical-Intelligence/openpi/blob/main/examples/aloha_real/data/toast.gif" alt="toast out of toaster"/> </p>
+  <img src="https://github.com/Physical-Intelligence/openpi/blob/main/examples/aloha_real/data/toast.gif" alt="toast out of toaster"/> 
+</p>
+
+## Training on your own Aloha dataset
+
+OpenPI suppports training on data collected in the default aloha hdf5 format. To do so you must first convert the data to the huggingface format. We include `scripts/aloha_hd5.py` to help you do this. Once the dataset is converted, add a new `TrainConfig` to `src/openpi/training/configs.py` and replace repo id with the id assigned to your dataset during conversion.
+
+```python
+TrainConfig(
+    name=<your-config-name>,
+    data=LeRobotAlohaDataConfig(
+        repo_id=<your-repo-id>,
+        delta_action_mask=[True] * 6 + [False] + [True] * 6 + [False],
+    ),
+),
+```
+
+Run the training script:
+
+```bash
+python scripts/train.py <your-config-name>
+```

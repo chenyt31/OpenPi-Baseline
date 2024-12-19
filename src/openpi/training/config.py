@@ -160,7 +160,7 @@ class TrainConfig:
     @property
     def checkpoint_dir(self) -> pathlib.Path:
         """Get the checkpoint directory for this config."""
-        return (pathlib.Path(self.checkpoint_base_dir) / self.exp_name).resolve()
+        return (pathlib.Path(self.checkpoint_base_dir) / self.name / self.exp_name).resolve()
 
     def create_model(self) -> _model.Model:
         return _model.Model(
@@ -188,7 +188,7 @@ _CONFIGS = [
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             delta_action_mask=None,
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("checkpoints/pi0_base/model"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("checkpoints/pi0_base"),
         num_train_steps=20_000,
     ),
     TrainConfig(

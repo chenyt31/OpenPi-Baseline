@@ -88,6 +88,14 @@ def restore_state(
     return checkpoint_manager.restore(step, items)
 
 
+def load_norm_stats(checkpoint_step_dir: epath.Path | str) -> dict[str, _normalize.NormStats]:
+    checkpoint_step_dir = epath.Path(checkpoint_step_dir)
+    json_path = checkpoint_step_dir / "assets" / "norm_stats.json"
+    if not json_path.exists():
+        raise FileNotFoundError(f"Norm stats file not found at: {json_path}")
+    return _normalize.deserialize_json(json_path.read_text())
+
+
 class Callback(Protocol):
     def __call__(self, directory: epath.Path) -> None: ...
 

@@ -32,7 +32,7 @@ def compute_stats_task(start: int, progress_counter, task_info: TaskInfo) -> dic
     data_config, dataset = create_dataset(_config.get_config(task_info.config_name))
 
     num_frames = len(dataset)
-    transform = _transforms.compose(data_config.input_transforms)
+    transform = _transforms.compose([*data_config.repack_transforms.inputs, *data_config.data_transforms.inputs])
 
     stats = {key: normalize.RunningStats() for key in task_info.keys}
     for i in range(start, min(start + task_info.chunk_size, num_frames)):

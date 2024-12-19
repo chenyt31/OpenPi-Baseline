@@ -25,6 +25,12 @@ class DataTransformFn(Protocol):
 
 
 @dataclasses.dataclass(frozen=True)
+class Group:
+    inputs: Sequence[DataTransformFn] = ()
+    outputs: Sequence[DataTransformFn] = ()
+
+
+@dataclasses.dataclass(frozen=True)
 class CompositeTransform(DataTransformFn):
     transforms: Sequence[DataTransformFn]
 
@@ -41,23 +47,29 @@ def compose(transforms: Sequence[DataTransformFn]) -> DataTransformFn:
 
 @dataclasses.dataclass(frozen=True)
 class Normalize(DataTransformFn):
-    norm_stats: at.PyTree[NormStats]
+    norm_stats: at.PyTree[NormStats] | None
     strict: bool = False
 
     def __call__(self, data: dict) -> dict:
         def normalize(x, stats: NormStats):
             return (x - stats.mean) / (stats.std + 1e-6)
 
+        if self.norm_stats is None:
+            return data
+
         return apply_tree(data, self.norm_stats, normalize, strict=self.strict)
 
 
 @dataclasses.dataclass(frozen=True)
 class Unnormalize(DataTransformFn):
-    norm_stats: at.PyTree[NormStats]
+    norm_stats: at.PyTree[NormStats] | None
 
     def __call__(self, data: dict) -> dict:
         def unnormalize(x, stats: NormStats):
             return x * (stats.std + 1e-6) + stats.mean
+
+        if self.norm_stats is None:
+            return data
 
         # Make sure that all the keys in the norm stats are present in the data.
         return apply_tree(data, self.norm_stats, unnormalize, strict=True)

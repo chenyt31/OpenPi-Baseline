@@ -1,4 +1,5 @@
 import abc
+import dataclasses
 from typing import TypeAlias
 
 from flax import struct
@@ -41,6 +42,14 @@ class Observation:
             tokenized_prompt=data.get("tokenized_prompt"),
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
         )
+
+    def to_dict(self) -> at.PyTree[at.ArrayLike]:
+        """Convert the Observation to a nested dict."""
+        result = dataclasses.asdict(self)
+        # TODO(ury): This is awkward. Adjust the names to be the same.
+        result["image"] = result.pop("images")
+        result["image_mask"] = result.pop("image_masks")
+        return result
 
 
 Actions: TypeAlias = at.Float[at.ArrayLike, "*b ah ad"]

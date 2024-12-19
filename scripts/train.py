@@ -44,12 +44,12 @@ def init_logging():
     logger.handlers[0].setFormatter(formatter)
 
 
-def init_wandb(config: _config.TrainConfig, *, resuming: bool):
-    exp_dir = epath.Path(config.checkpoint_dir) / config.exp_name
-    if not exp_dir.exists():
-        raise FileNotFoundError(f"Experiment directory {exp_dir} does not exist.")
+def init_wandb(config: _config.TrainConfig, *, resuming: bool, log_code: bool = False):
+    ckpt_dir = config.checkpoint_dir
+    if not ckpt_dir.exists():
+        raise FileNotFoundError(f"Checkpoint directory {ckpt_dir} does not exist.")
     if resuming:
-        run_id = (exp_dir / "wandb_id.txt").read_text().strip()
+        run_id = (ckpt_dir / "wandb_id.txt").read_text().strip()
         wandb.init(id=run_id, resume="must", project=config.project_name)
     else:
         wandb.init(
@@ -57,10 +57,10 @@ def init_wandb(config: _config.TrainConfig, *, resuming: bool):
             config=dataclasses.asdict(config),
             project=config.project_name,
         )
-        (exp_dir / "wandb_id.txt").write_text(wandb.run.id)
+        (ckpt_dir / "wandb_id.txt").write_text(wandb.run.id)
 
-    # log all of the code in the repo
-    wandb.run.log_code(epath.Path(__file__).parent.parent)
+    if log_code:
+        wandb.run.log_code(epath.Path(__file__).parent.parent)
 
 
 def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader, params: at.Params) -> at.Params:
@@ -190,9 +190,8 @@ def main(config: _config.TrainConfig):
     data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
-    checkpoint_dir = epath.Path(config.checkpoint_dir) / config.name / config.exp_name
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint(
-        checkpoint_dir,
+        config.checkpoint_dir,
         keep_interval=config.keep_interval,
         overwrite=config.overwrite,
         resume=config.resume,
@@ -201,8 +200,9 @@ def main(config: _config.TrainConfig):
 
     model = config.create_model()
 
-    data_loader = _data_loader.create_data_loader(config, model, data_parallel_sharding)
-    batch = next(data_loader)
+    data_loader = _data_loader.create_data_loader(config, model, sharding=data_parallel_sharding)
+    data_iter = iter(data_loader)
+    batch = next(data_iter)
     logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")
 
     train_state, train_state_sharding = init_train_state(config, model, init_rng, batch, mesh, resume=resuming)
@@ -210,7 +210,7 @@ def main(config: _config.TrainConfig):
     logging.info(f"Initialized train state:\n{training_utils.to_tree_info(train_state.params)}")
 
     if resuming:
-        train_state = _checkpoints.restore_state(checkpoint_manager, train_state)
+        train_state = _checkpoints.restore_state(checkpoint_manager, train_state, data_loader)
 
     ptrain_step = jax.jit(
         train_step,
@@ -238,10 +238,10 @@ def main(config: _config.TrainConfig):
             pbar.write(f"Step {step}: {info_str}")
             wandb.log(reduced_info, step=step)
             infos = []
-        batch = next(data_loader)
+        batch = next(data_iter)
 
         if (step % config.save_interval == 0 and step > start_step) or step == config.num_train_steps - 1:
-            _checkpoints.save_state(checkpoint_manager, train_state, step)
+            _checkpoints.save_state(checkpoint_manager, train_state, data_loader, step)
 
     checkpoint_manager.wait_until_finished()
 

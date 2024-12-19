@@ -78,7 +78,7 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     default_prompt: str | None = None
     # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
     # fine-tuning a pretrained model.
-    adopt_to_pi: bool = False
+    adapt_to_pi: bool = False
 
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
         norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
@@ -97,13 +97,13 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
                     aloha_policy.AlohaInputs(
                         action_dim=model.action_dim,
                         delta_action_mask=self.delta_action_mask,
-                        adapt_to_pi=self.adopt_to_pi,
+                        adapt_to_pi=self.adapt_to_pi,
                     ),
                 ],
                 outputs=[
                     aloha_policy.AlohaOutputs(
                         delta_action_mask=self.delta_action_mask,
-                        adapt_to_pi=self.adopt_to_pi,
+                        adapt_to_pi=self.adapt_to_pi,
                     ),
                 ],
             ),

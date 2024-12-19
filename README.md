@@ -48,8 +48,19 @@ sudo ./aws/install
 Run the following from the cloned `openpi` directory:
 
 ```bash
-AWS_ACCESS_KEY_ID=AKIA4MTWIIQIZBO44C62 AWS_SECRET_ACCESS_KEY=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 aws s3 sync s3://openpi-assets/checkpoints/pi0_base ./checkpoints/pi0_base
+# Set AWS credentials. These will no longer be needed after openpi graduates from beta.
+export AWS_ACCESS_KEY_ID=AKIA4MTWIIQIZBO44C62
+export AWS_SECRET_ACCESS_KEY=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
+
+# Download the `pi0_sim` checkpoint.
+export CHECKPOINT_NAME=pi0_sim
+aws s3 sync s3://openpi-assets/checkpoints/$CHECKPOINT_NAME ./checkpoints/$CHECKPOINT_NAME
 ```
+
+Available checkpoints:
+
+- `pi0_sim`: TODO
+- `pi0_droid`: TODO
 
 ## Running Examples
 

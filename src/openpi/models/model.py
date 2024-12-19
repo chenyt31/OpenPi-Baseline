@@ -196,7 +196,10 @@ def restore_params(ckpt_path: pathlib.Path | str, *, sharding: jax.sharding.Shar
     """Restores unstructured params PyTree from a checkpoint. This works with checkpoints saved with `save_state` during
     openpi training (see `training/checkpoints.py`) as well as pre-trained checkpoints released for openpi.
     """
-    ckpt_path = pathlib.Path(ckpt_path).resolve()
+    ckpt_path = pathlib.Path(ckpt_path).resolve() / "model"
+    if not ckpt_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found at: {ckpt_path}")
+
     restore_type = np.ndarray if sharding is None else jax.Array
 
     with ocp.PyTreeCheckpointer() as ckptr:

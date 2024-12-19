@@ -28,3 +28,8 @@ def download(url: str, **kwargs) -> pathlib.Path:
             time.sleep(1)
         pbar.update(total_size - pbar.n)
     return local_path
+
+
+def download_openpi(url: str) -> pathlib.Path:
+    """Download a file from the OpenPI S3 bucket."""
+    return download(url, s3={"key": "AKIA4MTWIIQIZBO44C62", "secret": "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"})

@@ -1,5 +1,6 @@
 import enum
 import logging
+from typing import Any
 
 import tyro
 
@@ -13,6 +14,8 @@ from openpi.policies import libero_policy
 from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.serving import websocket_policy_server
+from openpi.training import checkpoints as _checkpoints
+from openpi.training import config as _config
 
 
 class ModelMode(enum.Enum):
@@ -22,6 +25,40 @@ class ModelMode(enum.Enum):
     DROID = "droid"
     CALVIN = "calvin"
     LIBERO = "libero"
+
+
+def load_trained_policy(
+    config_name: str,
+    checkpoint_path: str,
+    repack_transforms: transforms.Group | None = None,
+    sample_kwargs: dict[str, Any] | None = None,
+) -> _policy.Policy:
+    repack_transforms = repack_transforms or transforms.Group()
+    config = _config.get_config(config_name)
+
+    logging.info("Loading model...")
+    model = config.create_model()
+    model = model.set_params(_model.restore_params(checkpoint_path))
+
+    data_config = config.data.create(config.metadata_dir, model)
+    norm_stats = _checkpoints.load_norm_stats(checkpoint_path)
+
+    return _policy.Policy(
+        model,
+        transforms=[
+            *repack_transforms.inputs,
+            *data_config.data_transforms.inputs,
+            transforms.Normalize(norm_stats),
+            *data_config.model_transforms.inputs,
+        ],
+        output_transforms=[
+            *data_config.model_transforms.outputs,
+            transforms.Unnormalize(norm_stats),
+            *data_config.data_transforms.outputs,
+            *repack_transforms.outputs,
+        ],
+        sample_kwargs=sample_kwargs,
+    )
 
 
 def create_policy(mode: ModelMode, default_prompt: str) -> _policy.Policy:

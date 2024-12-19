@@ -104,7 +104,7 @@ class TrainConfig:
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)
 
     metadata_base_dir: str = "./assets"
-    checkpoint_dir: str = "./checkpoints"
+    checkpoint_base_dir: str = "./checkpoints"
 
     seed: int = 42
     batch_size: int = 16
@@ -121,6 +121,11 @@ class TrainConfig:
     def metadata_dir(self) -> pathlib.Path:
         """Get the metadata directory for this config."""
         return (pathlib.Path(self.metadata_base_dir) / self.name).resolve()
+
+    @property
+    def checkpoint_dir(self) -> pathlib.Path:
+        """Get the checkpoint directory for this config."""
+        return (pathlib.Path(self.checkpoint_base_dir) / self.exp_name).resolve()
 
     def create_model(self) -> _model.Model:
         return _model.Model(
@@ -170,12 +175,17 @@ _CONFIGS = [
         batch_size=2,
         module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
         save_interval=100,
+        overwrite=True,
+        exp_name="debug",
+        num_train_steps=10,
     ),
     TrainConfig(
         name="debug_restore",
         batch_size=2,
         module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
-        weight_loader=weight_loaders.CheckpointWeightLoader(tyro.MISSING),
+        resume=True,
+        exp_name="debug",
+        num_train_steps=10,
     ),
 ]
 

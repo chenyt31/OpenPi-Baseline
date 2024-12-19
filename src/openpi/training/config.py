@@ -3,7 +3,7 @@ import dataclasses
 import difflib
 import os
 import pathlib
-from typing import Annotated, Protocol, Union
+from typing import Annotated, Any, Protocol, Union
 
 import namer
 import tyro
@@ -151,6 +151,9 @@ class TrainConfig:
 
     overwrite: bool = False
     resume: bool = False
+
+    # Keyword arguments to pass to the policy's sample method.
+    sample_kwargs: dict[str, Any] | None = None
 
     @property
     def metadata_dir(self) -> pathlib.Path:

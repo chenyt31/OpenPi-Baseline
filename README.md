@@ -73,17 +73,26 @@ We provide example integrations with several robotics platforms. See the README 
 
 ## Running the OpenPI Server
 
-The OpenPI server hosts model inference for an OpenPI policy. The examples describe how to run it in conjunction with each environment, but you can also run it standalone:
+The OpenPI server hosts model inference for an OpenPI policy. 
+
+The server can be configured using the folllowing commands line arguments:
+
+- `--env`: The environment to serve the policy for.
+- `--config-name`: If provided, loads the policy from a training config. Otherwise, loads the default pi0 policy.
+- `--checkpoint-path`: Required if `config-name` is provided. Specifies the path to the checkpoint to load.
+- `--default-prompt`: If provided, overrides the default prompt for the policy.
+
+The examples describe how to run it in conjunction with each environment, but you can also run it standalone:
 
 ### With Docker:
 
 ```bash
-export SERVER_ARGS="--mode SIM --default_prompt 'my task'"
+export SERVER_ARGS="--env ALOHA_SIM --default_prompt 'my task'"
 docker compose -f scripts/compose.yml up --build
 ```
 
 ### Without Docker:
 
 ```bash
-uv run scripts/serve_policy.py --mode SIM --default_prompt 'my task'
+uv run scripts/serve_policy.py --env ALOHA_SIM --default_prompt 'my task'
 ```

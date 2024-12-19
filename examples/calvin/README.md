@@ -5,7 +5,7 @@ This example runs the CALVIN benchmark: https://github.com/mees/calvin
 ## With Docker
 
 ```bash
-export SERVER_ARGS="--mode CALVIN"
+export SERVER_ARGS="--env CALVIN"
 docker compose -f examples/calvin/compose.yml up --build
 ```
 

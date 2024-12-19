@@ -3,7 +3,7 @@
 ## With Docker
 
 ```bash
-export SERVER_ARGS="--mode SIM"
+export SERVER_ARGS="--env ALOHA_SIM"
 docker compose -f examples/aloha_sim/compose.yml up --build
 ```
 
@@ -20,6 +20,12 @@ uv pip install -e packages/openpi-client
 
 # Run the simulation
 MUJOCO_GL=egl python examples/aloha_sim/main.py
+```
+
+Note: If you are seeing EGL errors, you may need to install the following dependencies:
+
+```bash
+sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev
 ```
 
 Terminal window 2:

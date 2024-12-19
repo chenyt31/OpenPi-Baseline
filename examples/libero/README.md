@@ -10,7 +10,7 @@ Note: When updating requirements.txt in this directory, there is an additional f
 # Grant access to the X11 server:
 sudo xhost +local:docker
 
-export SERVER_ARGS="--mode LIBERO"
+export SERVER_ARGS="--env LIBERO"
 docker compose -f examples/libero/compose.yml up --build
 ```
 

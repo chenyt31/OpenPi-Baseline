@@ -3,7 +3,7 @@ import dataclasses
 import difflib
 import os
 import pathlib
-from typing import Annotated, Protocol, Union, runtime_checkable
+from typing import Annotated, Protocol, Union
 
 import namer
 import tyro
@@ -12,6 +12,7 @@ import openpi.models.common as common
 import openpi.models.model as _model
 import openpi.models.pi0 as pi0
 import openpi.models.pi0_small as pi0_small
+import openpi.models.tokenizer as _tokenizer
 from openpi.policies import aloha_policy
 import openpi.shared.normalize as _normalize
 import openpi.training.optimizer as _optimizer
@@ -32,17 +33,21 @@ class DataConfig:
     repo_id: str | None = None
     # Contains precomputed normalization stats.
     norm_stats: dict[str, _transforms.NormStats] | None = None
-    # Input transforms.
-    input_transforms: Sequence[_transforms.DataTransformFn] = ()
-    # Default prompt that will be used the model.
-    default_prompt: str | None = None
+
+    # Used to adopt the inputs from a dataset specific format to a common format
+    # which is expected by the data transforms.
+    repack_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
+    # Data transforms, typically include robot specific transformations. Will be applied
+    # before the data is normalized.
+    data_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
+    # Model specific transforms. Will be applied after the data is normalized.
+    model_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
 
     # Indicates where the cached dataset should be stored.
     # This can also be controlled by setting the LEROBOT_HOME environment variable.
     dataset_root: str | None = dataclasses.field(default_factory=default_dataset_root)
 
 
-@runtime_checkable
 class DataConfigFactory(Protocol):
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
         """Create a data config."""
@@ -63,10 +68,17 @@ class LeRobotRepack(_transforms.DataTransformFn):
 
 
 @dataclasses.dataclass(frozen=True)
-class LeRobotDataConfig(DataConfigFactory):
-    repo_id: str = "lerobot/aloha_sim_transfer_cube_human"
+class LeRobotAlohaDataConfig(DataConfigFactory):
+    # The LeRobot repo id.
+    repo_id: str
+    # The delta action mask. Each value corresponds to an action dimension and indicates if it should be converted to a delta action.
+    # If None, absolute actions are used.
     delta_action_mask: Sequence[bool] | None = None
+    # If provided, will determine the default prompt that be used by the model.
     default_prompt: str | None = None
+    # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
+    # fine-tuning a pretrained model.
+    adopt_to_pi: bool = False
 
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
         norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
@@ -75,18 +87,41 @@ class LeRobotDataConfig(DataConfigFactory):
         return DataConfig(
             repo_id=self.repo_id,
             norm_stats=norm_stats,
-            default_prompt=self.default_prompt,
-            input_transforms=[
-                LeRobotRepack(),
-                aloha_policy.AlohaInputs(action_dim=model.action_dim, delta_action_mask=self.delta_action_mask),
-                _transforms.ResizeImages(224, 224),
-            ],
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    LeRobotRepack(),
+                ]
+            ),
+            data_transforms=_transforms.Group(
+                inputs=[
+                    aloha_policy.AlohaInputs(
+                        action_dim=model.action_dim,
+                        delta_action_mask=self.delta_action_mask,
+                        adapt_to_pi=self.adopt_to_pi,
+                    ),
+                ],
+                outputs=[
+                    aloha_policy.AlohaOutputs(
+                        delta_action_mask=self.delta_action_mask,
+                        adapt_to_pi=self.adopt_to_pi,
+                    ),
+                ],
+            ),
+            model_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.ResizeImages(224, 224),
+                    _transforms.TokenizePrompt(
+                        _tokenizer.PaligemmaTokenizer(model.max_token_len),
+                        default_prompt=self.default_prompt,
+                    ),
+                ]
+            ),
         )
 
 
 @dataclasses.dataclass(frozen=True)
 class TrainConfig:
-    name: str
+    name: tyro.conf.Suppress[str]
     project_name: str = "openpi"
     exp_name: str = namer.generate(category=["food", "technology"], suffix_length=3)  # noqa: RUF009
 
@@ -142,14 +177,14 @@ _CONFIGS = [
     #
     TrainConfig(
         name="pi0",
-        data=LeRobotDataConfig(
+        data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             delta_action_mask=None,
         ),
     ),
     TrainConfig(
         name="pi0_pretrained",
-        data=LeRobotDataConfig(
+        data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             delta_action_mask=None,
         ),
@@ -158,6 +193,10 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_paligemma",
+        data=LeRobotAlohaDataConfig(
+            repo_id="lerobot/aloha_sim_transfer_cube_human",
+            delta_action_mask=None,
+        ),
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),
     ),
     #

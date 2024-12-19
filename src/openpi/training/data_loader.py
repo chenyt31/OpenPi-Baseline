@@ -8,7 +8,6 @@ import numpy as np
 
 import openpi.models.common as _common
 import openpi.models.model as _model
-import openpi.models.tokenizer as _tokenizer
 import openpi.shared.array_typing as at
 import openpi.training.config as _config
 import openpi.transforms as _transforms
@@ -121,12 +120,10 @@ def create_data_loader(
     return DataLoaderImpl(
         data_config,
         transforms=[
-            *data_config.input_transforms,
+            *data_config.repack_transforms.inputs,
+            *data_config.data_transforms.inputs,
             _transforms.Normalize(norm_stats),
-            _transforms.TokenizePrompt(
-                _tokenizer.PaligemmaTokenizer(model.max_token_len),
-                default_prompt=data_config.default_prompt,
-            ),
+            *data_config.model_transforms.inputs,
         ],
     )
 

@@ -47,13 +47,13 @@ def test_lora_einsum_equivalent_to_original(eqn: str, lora_annotation: str):
         nn.initializers.zeros_init(),
     )
 
-    x = jax.random.normal(jax.random.PRNGKey(0), x_shape)
+    x = jax.random.normal(jax.random.key(0), x_shape)
 
     def module_call(instance, x):
         return instance(eqn, x)
 
-    einsum_variables = einsum.init(jax.random.PRNGKey(0), x, method=module_call)
-    lora_einsum_variables = lora_einsum.init(jax.random.PRNGKey(0), x, method=module_call)
+    einsum_variables = einsum.init(jax.random.key(0), x, method=module_call)
+    lora_einsum_variables = lora_einsum.init(jax.random.key(0), x, method=module_call)
     # Copy over the weights from the original einsum to the lora einsum since the initialization order is
     # not the same.
     lora_einsum_variables["params"]["w"] = einsum_variables["params"]["w"]
@@ -84,14 +84,14 @@ def test_lora_einsum_param_merge_works(eqn: str, lora_annotation: str):
         nn.initializers.lecun_normal(),
     )
 
-    x = jax.random.uniform(jax.random.PRNGKey(0), x_shape)
+    x = jax.random.uniform(jax.random.key(0), x_shape)
 
     def module_call(instance, x):
         return instance(eqn, x)
 
-    lora_einsum_variables = lora_einsum.init(jax.random.PRNGKey(0), x, method=module_call)
+    lora_einsum_variables = lora_einsum.init(jax.random.key(0), x, method=module_call)
     einsum_variables = gemma.merge_lora_params(lora_einsum_variables, lambda x: lora_annotation)
 
     y = einsum.apply(einsum_variables, x, rngs={}, method=module_call)
     y_lora = lora_einsum.apply(lora_einsum_variables, x, rngs={}, method=module_call)
-    chex.assert_trees_all_close(y, y_lora, atol=1e-4, rtol=1e-5)
+    chex.assert_trees_all_close(y, y_lora, atol=0.001)

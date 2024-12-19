@@ -1,6 +1,10 @@
+import concurrent.futures as futures
+import dataclasses
 import logging
+from typing import Protocol
 
 from etils import epath
+import jax
 import orbax.checkpoint as ocp
 
 import openpi.shared.normalize as _normalize
@@ -30,6 +34,10 @@ def initialize_checkpoint(
 
     mngr = ocp.CheckpointManager(
         checkpoint_dir,
+        item_handlers={
+            "assets": CallbackHandler(),
+            "model": ocp.PyTreeCheckpointHandler(),
+        },
         options=ocp.CheckpointManagerOptions(
             max_to_keep=1,
             keep_period=keep_interval,
@@ -48,23 +56,23 @@ def initialize_checkpoint(
     return mngr, resuming
 
 
-def _assets_dir(checkpoint_manager: ocp.CheckpointManager, step: int) -> epath.Path:
-    return checkpoint_manager.directory / str(step) / "assets"
-
-
 def save_state(
     checkpoint_manager: ocp.CheckpointManager,
     state: training_utils.TrainState,
     data_loader: _data_loader.DataLoader,
     step: int,
 ):
-    checkpoint_manager.save(step, args=ocp.args.PyTreeSave(state))
+    def save_assets(directory: epath.Path):
+        # Save the normalization stats.
+        norm_stats = data_loader.data_config().norm_stats
+        if norm_stats is not None:
+            (directory / "norm_stats.json").write_text(_normalize.serialize_json(norm_stats))
 
-    assets_dir = _assets_dir(checkpoint_manager, step)
-    # Save the normalization stats.
-    norm_stats = data_loader.data_config().norm_stats
-    if norm_stats is not None:
-        (assets_dir / "norm_stats.json").write_text(_normalize.serialize_json(norm_stats))
+    items = {
+        "assets": save_assets,
+        "model": state,
+    }
+    checkpoint_manager.save(step, items)
 
 
 def restore_state(
@@ -74,4 +82,41 @@ def restore_state(
     step: int | None = None,
 ) -> training_utils.TrainState:
     del data_loader
-    return checkpoint_manager.restore(step=step, args=ocp.args.PyTreeRestore(state))
+    items = {
+        "model": ocp.args.PyTreeRestore(state),
+    }
+    return checkpoint_manager.restore(step, items)
+
+
+class Callback(Protocol):
+    def __call__(self, directory: epath.Path) -> None: ...
+
+
+class CallbackHandler(ocp.AsyncCheckpointHandler):
+    """A CheckpointHandler for calling an arbitrary function asynchronously. Only for saving, not for restoring."""
+
+    def __init__(self):
+        self._executor = futures.ThreadPoolExecutor(max_workers=1)
+
+    def close(self):
+        self._executor.shutdown()
+
+    def save(self, directory: epath.Path, args: "CallbackSave"):
+        if jax.process_index() == 0:
+            args.callback(directory)
+
+    async def async_save(self, directory: epath.Path, args: "CallbackSave") -> list[futures.Future]:
+        return [self._executor.submit(self.save, directory, args)]
+
+    def restore(self, *args, **kwargs):
+        raise NotImplementedError("CallbackHandler does not support restore")
+
+
+@ocp.args.register_with_handler(CallbackHandler, for_save=True)
+@dataclasses.dataclass
+class CallbackSave(ocp.args.CheckpointArgs):
+    callback: Callback
+
+
+@ocp.args.register_with_handler(CallbackHandler, for_restore=True)
+class CallbackRestore(ocp.args.CheckpointArgs): ...

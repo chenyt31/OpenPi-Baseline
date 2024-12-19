@@ -108,7 +108,7 @@ class TrainConfig:
 
     seed: int = 42
     batch_size: int = 16
-    num_train_steps: int = 2_000_000
+    num_train_steps: int = 100_000
 
     log_interval: int = 100
     save_interval: int = 1000
@@ -154,6 +154,7 @@ _CONFIGS = [
             delta_action_mask=None,
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("checkpoints/pi0_base/model"),
+        num_train_steps=20_000,
     ),
     TrainConfig(
         name="pi0_paligemma",

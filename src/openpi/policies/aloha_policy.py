@@ -277,6 +277,7 @@ class AlohaInputs(transforms.DataTransformFn):
         # Actions are only available during training.
         if "actions" in data:
             actions = jnp.asarray(data["actions"])
+            actions = _encode_actions_inv(actions, adapt_to_pi=self._adapt_to_pi)
 
             if self._delta_action_mask is not None:
                 mask = jnp.asarray(self._delta_action_mask[:14])
@@ -359,10 +360,13 @@ def gripper_from_angular(value):
 
     # These values are coming from the Aloha code:
     # PUPPET_GRIPPER_JOINT_OPEN, PUPPET_GRIPPER_JOINT_CLOSE
-    value = normalize(value, min_val=-0.6213, max_val=1.4910)
+    return normalize(value, min_val=-0.6213, max_val=1.4910)
 
-    # Additional adjustment to match the range that was produced by the pi0 model.
-    return normalize(value, 0.0, 1.05)
+
+def gripper_from_angular_inv(value):
+    # Directly inverts the gripper_from_angular function.
+    value = unnormalize(value, min_val=-0.6213, max_val=1.4910)
+    return normalize(value, min_val=0.4, max_val=1.5)
 
 
 def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
@@ -406,5 +410,15 @@ def _encode_actions(actions: jax.Array, *, adapt_to_pi: bool = False) -> jax.Arr
 
         actions = actions.at[..., 6].set(gripper_from_angular(actions[..., 6]))
         actions = actions.at[..., 13].set(gripper_from_angular(actions[..., 13]))
+
+    return actions
+
+
+def _encode_actions_inv(actions: jax.Array, *, adapt_to_pi: bool = False) -> jax.Array:
+    if adapt_to_pi:
+        actions = joint_flip_mask() * actions
+
+        actions = actions.at[..., 6].set(gripper_from_angular_inv(actions[..., 6]))
+        actions = actions.at[..., 13].set(gripper_from_angular_inv(actions[..., 13]))
 
     return actions

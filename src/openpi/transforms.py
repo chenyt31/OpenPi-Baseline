@@ -3,13 +3,11 @@ import dataclasses
 from typing import Protocol, TypeAlias, TypeVar
 
 import flax.traverse_util as traverse_util
-import jax
-import jax.numpy as jnp
 import numpy as np
+from openpi_client import image_tools
 
 from openpi.models import tokenizer as _tokenizer
 from openpi.shared import array_typing as at
-from openpi.shared import image_tools
 from openpi.shared import normalize as _normalize
 
 Batch: TypeAlias = at.PyTree
@@ -128,7 +126,7 @@ class TokenizePrompt(DataTransformFn):
             tokens = tokens[0]
             token_masks = token_masks[0]
 
-        return {**data, "tokenized_prompt": jnp.asarray(tokens), "tokenized_prompt_mask": jnp.asarray(token_masks)}
+        return {**data, "tokenized_prompt": np.asarray(tokens), "tokenized_prompt_mask": np.asarray(token_masks)}
 
 
 def apply_tree(
@@ -150,10 +148,10 @@ def apply_tree(
     return traverse_util.unflatten_dict({k: transform(k, v) for k, v in tree.items()}, sep="/")
 
 
-def pad_to_dim(x: jax.Array, target_dim: int, axis: int = -1) -> jax.Array:
+def pad_to_dim(x: np.ndarray, target_dim: int, axis: int = -1) -> np.ndarray:
     current_dim = x.shape[axis]
     if current_dim < target_dim:
         pad_width = [(0, 0)] * len(x.shape)
         pad_width[axis] = (0, target_dim - current_dim)
-        return jnp.pad(x, pad_width)
+        return np.pad(x, pad_width)
     return x

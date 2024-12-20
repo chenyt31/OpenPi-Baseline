@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 import dataclasses
 import difflib
+import getpass
 import os
 import pathlib
 from typing import Annotated, Any, Protocol, Union
@@ -23,7 +24,7 @@ import openpi.transforms as _transforms
 def default_dataset_root() -> str | None:
     # TODO(ury): Temporary, remove this once the default works well.
     if os.path.exists("/mnt/weka"):  # noqa: PTH110
-        return "/mnt/weka/lerobot"
+        return f"/mnt/weka/{getpass.getuser()}/.cache/lerobot"
     return None
 
 

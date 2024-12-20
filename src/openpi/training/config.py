@@ -122,12 +122,18 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 
 @dataclasses.dataclass(frozen=True)
 class TrainConfig:
+    # Name of the config. Must be unique. Will be used to reference this config.
     name: tyro.conf.Suppress[str]
+    # Project name.
     project_name: str = "openpi"
+    # Experiment name. Will be used to name the metadata and checkpoint directories.
     exp_name: str = namer.generate(category=["food", "technology"], suffix_length=3)  # noqa: RUF009
 
+    # Number of action dimensions.
     action_dim: int = 24
+    # Number of action steps in the horizon.
     action_horizon: int = 50
+    # Maximum token length for the prompt.
     max_token_len: int = 48
 
     module: common.BaseModule = dataclasses.field(default_factory=pi0.Module)
@@ -137,20 +143,32 @@ class TrainConfig:
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
     ema_decay: float | None = None
 
+    # Data config factory.
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)
 
+    # Base directories for metadata and checkpoints.
     metadata_base_dir: str = "./assets"
     checkpoint_base_dir: str = "./checkpoints"
 
+    # Random seed that will be used by random generators during training.
     seed: int = 42
+    # Global batch size.
     batch_size: int = 16
+    # Number of workers to use for the data loader.
+    num_workers: int = 2
+    # Number of train steps (batches) to run.
     num_train_steps: int = 100_000
 
+    # How often to log training metrics.
     log_interval: int = 100
+    # How often to save checkpoints.
     save_interval: int = 1000
+    # How often to keep checkpoints.
     keep_interval: int = 5000
 
+    # If true, will overwrite the checkpoint directory if it already exists.
     overwrite: bool = False
+    # If true, will resume training from the last checkpoint.
     resume: bool = False
 
     # Keyword arguments to pass to the policy's sample method.
@@ -167,6 +185,7 @@ class TrainConfig:
         return (pathlib.Path(self.checkpoint_base_dir) / self.name / self.exp_name).resolve()
 
     def create_model(self) -> _model.Model:
+        """Create a model for this config."""
         return _model.Model(
             module=self.module,
             action_dim=self.action_dim,

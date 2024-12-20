@@ -32,7 +32,6 @@ dependencies = [
     "tqdm-loggable>=0.2",
     "typing-extensions>=4.12.2",
     "tyro>=0.8.14",
-    "unique-namer>=1.6.1",
     "wandb>=0.19.1",
 ]
 

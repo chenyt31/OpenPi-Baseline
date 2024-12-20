@@ -6,7 +6,6 @@ import os
 import pathlib
 from typing import Annotated, Any, Protocol, Union
 
-import namer
 import tyro
 
 import openpi.models.common as common
@@ -126,8 +125,8 @@ class TrainConfig:
     name: tyro.conf.Suppress[str]
     # Project name.
     project_name: str = "openpi"
-    # Experiment name. Will be used to name the metadata and checkpoint directories.
-    exp_name: str = namer.generate(category=["food", "technology"], suffix_length=3)  # noqa: RUF009
+    # Experiment name. Will be used to name the metadata and checkpoint directories. Can't be empty.
+    exp_name: str = ""
 
     # Number of action dimensions.
     action_dim: int = 24
@@ -185,6 +184,8 @@ class TrainConfig:
     @property
     def checkpoint_dir(self) -> pathlib.Path:
         """Get the checkpoint directory for this config."""
+        if not self.exp_name:
+            raise ValueError("--exp_name must be set")
         return (pathlib.Path(self.checkpoint_base_dir) / self.name / self.exp_name).resolve()
 
     def create_model(self) -> _model.Model:

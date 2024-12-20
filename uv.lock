@@ -1,7 +1,6 @@
 version = 1
 requires-python = ">=3.11"
 resolution-markers = [
-    "python_version < '0'",
     "python_full_version < '3.12' and platform_system == 'Darwin' and sys_platform != 'linux'",
     "python_full_version < '3.12' and platform_machine == 'aarch64' and platform_system == 'Linux' and sys_platform == 'linux'",
     "python_full_version < '3.12' and platform_machine == 'aarch64' and platform_system == 'Linux' and sys_platform != 'linux'",
@@ -225,6 +224,20 @@ wheels = [
 ]
 
 [[package]]
+name = "boto3"
+version = "1.35.81"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "jmespath", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "s3transfer", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d9/a5/8e610a7c230326b6a766758ce290233a8d0ec88bef4f5afe09e2313d2def/boto3-1.35.81.tar.gz", hash = "sha256:d2e95fa06f095b8e0c545dd678c6269d253809b2997c30f5ce8a956c410b4e86", size = 111013 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b4/db/e6bf2a34d7e8440800fcd11f2b42efd4ba18cce56d5a213bb93bd62aaa0e/boto3-1.35.81-py3-none-any.whl", hash = "sha256:742941b2424c0223d2d94a08c3485462fa7c58d816b62ca80f08e555243acee1", size = 139178 },
+]
+
+[[package]]
 name = "botocore"
 version = "1.35.81"
 source = { registry = "https://pypi.org/simple" }
@@ -236,6 +249,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3d/a8/b44d94c14ee4eb13db6dc549269c79199b43bddd70982e192aefd6ca6279/botocore-1.35.81.tar.gz", hash = "sha256:564c2478e50179e0b766e6a87e5e0cdd35e1bc37eb375c1cf15511f5dd13600d", size = 13460205 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/ad/00dfec368dd4e957063ed1126b5511238b0900c1014dfe539af93fc0ac29/botocore-1.35.81-py3-none-any.whl", hash = "sha256:a7b13bbd959bf2d6f38f681676aab408be01974c46802ab997617b51399239f7", size = 13265330 },
+]
+
+[[package]]
+name = "botocore-stubs"
+version = "1.35.86"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "types-awscrt", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/05/96/c4eed091b22d5db2a91fc337450d0d3cbd52c822c27541e6ad915c95a1fa/botocore_stubs-1.35.86.tar.gz", hash = "sha256:db69e737707664e6756167fe93afe8a14c9f59b0db4882e0ee68a92096710405", size = 40781 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c6/2c/bc10f1574653ab329f19cc4e683bec505329e4606e05e77698d858bf1b8f/botocore_stubs-1.35.86-py3-none-any.whl", hash = "sha256:f8d305ab92f730c1d01ad1f56db084b5e2e5943895255df458ca4ba11250d576", size = 63286 },
 ]
 
 [[package]]
@@ -1274,7 +1299,7 @@ wheels = [
 
 [[package]]
 name = "ipython"
-version = "8.30.0"
+version = "8.31.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "(platform_machine != 'aarch64' and platform_system == 'Linux' and sys_platform == 'win32') or (platform_system != 'Darwin' and platform_system != 'Linux' and sys_platform == 'win32')" },
@@ -1288,9 +1313,9 @@ dependencies = [
     { name = "traitlets", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "typing-extensions", marker = "(python_full_version < '3.12' and platform_system != 'Darwin') or (python_full_version < '3.12' and sys_platform != 'linux')" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/8b/710af065ab8ed05649afa5bd1e07401637c9ec9fb7cfda9eac7e91e9fbd4/ipython-8.30.0.tar.gz", hash = "sha256:cb0a405a306d2995a5cbb9901894d240784a9f341394c6ba3f4fe8c6eb89ff6e", size = 5592205 }
+sdist = { url = "https://files.pythonhosted.org/packages/01/35/6f90fdddff7a08b7b715fccbd2427b5212c9525cd043d26fdc45bee0708d/ipython-8.31.0.tar.gz", hash = "sha256:b6a2274606bec6166405ff05e54932ed6e5cfecaca1fc05f2cacde7bb074d70b", size = 5501011 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/f3/1332ba2f682b07b304ad34cad2f003adcfeb349486103f4b632335074a7c/ipython-8.30.0-py3-none-any.whl", hash = "sha256:85ec56a7e20f6c38fce7727dcca699ae4ffc85985aa7b23635a8008f918ae321", size = 820765 },
+    { url = "https://files.pythonhosted.org/packages/04/60/d0feb6b6d9fe4ab89fe8fe5b47cbf6cd936bfd9f1e7ffa9d0015425aeed6/ipython-8.31.0-py3-none-any.whl", hash = "sha256:46ec58f8d3d076a61d128fe517a51eb730e3aaf0c184ea8c17d16e366660c6a6", size = 821583 },
 ]
 
 [[package]]
@@ -2506,9 +2531,11 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "augmax", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "boto3", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "dm-tree", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "einops", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "equinox", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "filelock", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "flatbuffers", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "flax", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "fsspec", extra = ["gcs"], marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
@@ -2529,6 +2556,7 @@ dependencies = [
     { name = "sentencepiece", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "torch", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "tqdm-loggable", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "types-boto3", extra = ["boto3", "s3"], marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "typing-extensions", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "tyro", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
     { name = "wandb", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
@@ -2546,9 +2574,11 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "augmax", specifier = ">=0.3.4" },
+    { name = "boto3", specifier = ">=1.35.7" },
     { name = "dm-tree", specifier = ">=0.1.8" },
     { name = "einops", specifier = ">=0.8.0" },
     { name = "equinox", specifier = ">=0.11.8" },
+    { name = "filelock", specifier = ">=3.16.1" },
     { name = "flatbuffers", specifier = ">=24.3.25" },
     { name = "flax", specifier = "==0.9.0" },
     { name = "fsspec", extras = ["gcs"], specifier = ">=2024.6.0" },
@@ -2569,6 +2599,7 @@ requires-dist = [
     { name = "sentencepiece", specifier = ">=0.2.0" },
     { name = "torch", specifier = ">=2.5.1" },
     { name = "tqdm-loggable", specifier = ">=0.2" },
+    { name = "types-boto3", extras = ["boto3", "s3"], specifier = ">=1.35.7" },
     { name = "typing-extensions", specifier = ">=4.12.2" },
     { name = "tyro", specifier = ">=0.8.14" },
     { name = "wandb", specifier = ">=0.19.1" },
@@ -3504,6 +3535,18 @@ wheels = [
 ]
 
 [[package]]
+name = "s3transfer"
+version = "0.10.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c0/0a/1cdbabf9edd0ea7747efdf6c9ab4e7061b085aa7f9bfc36bb1601563b069/s3transfer-0.10.4.tar.gz", hash = "sha256:29edc09801743c21eb5ecbc617a152df41d3c287f67b615f73e5f750583666a7", size = 145287 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/05/7957af15543b8c9799209506df4660cba7afc4cf94bfb60513827e96bed6/s3transfer-0.10.4-py3-none-any.whl", hash = "sha256:244a76a24355363a68164241438de1b72f8781664920260c48465896b712a41e", size = 83175 },
+]
+
+[[package]]
 name = "safetensors"
 version = "0.4.5"
 source = { registry = "https://pypi.org/simple" }
@@ -3927,6 +3970,58 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/3a/38/c61bfcf62a7b572b5e9363a802ff92559cb427ee963048e1442e3aef7490/typeguard-2.13.3.tar.gz", hash = "sha256:00edaa8da3a133674796cf5ea87d9f4b4c367d77476e185e80251cc13dfbb8c4", size = 40604 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9a/bb/d43e5c75054e53efce310e79d63df0ac3f25e34c926be5dffb7d283fb2a8/typeguard-2.13.3-py3-none-any.whl", hash = "sha256:5e3e3be01e887e7eafae5af63d1f36c849aaa94e3a0112097312aabfa16284f1", size = 17605 },
+]
+
+[[package]]
+name = "types-awscrt"
+version = "0.23.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/97/c62253e8ed65562c67b2138339444cc77507c8ee01c091e02ead1311e4b8/types_awscrt-0.23.6.tar.gz", hash = "sha256:405bce8c281f9e7c6c92a229225cc0bf10d30729a6a601123213389bd524b8b1", size = 15124 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/21/f1/0f0869d35c1b746df98d60016f898eb49db208747a4ed2de81b58f48ecd8/types_awscrt-0.23.6-py3-none-any.whl", hash = "sha256:fbf9c221af5607b24bf17f8431217ce8b9a27917139edbc984891eb63fd5a593", size = 19025 },
+]
+
+[[package]]
+name = "types-boto3"
+version = "1.35.81"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore-stubs", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "types-s3transfer", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+    { name = "typing-extensions", marker = "(python_full_version < '3.12' and platform_system != 'Darwin') or (python_full_version < '3.12' and sys_platform != 'linux')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/3e/2b2c45005a377391a1f01db81565f410516c20e9ca5ff0c36b9e57dfbd7a/types_boto3-1.35.81.tar.gz", hash = "sha256:dfb08fbd236fbd6e748f3f884169a191ccffc86ba781470d69990d8a02c68148", size = 95952 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/95/54/ab47077be12caab4206b5d01693c87baeda1713c96d58d54876af5c9d6b8/types_boto3-1.35.81-py3-none-any.whl", hash = "sha256:d302a9b7b4461fd7b5970cfbaa180d604d655310c770a835d5cec941ce1dc9f8", size = 65081 },
+]
+
+[package.optional-dependencies]
+boto3 = [
+    { name = "boto3", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+]
+s3 = [
+    { name = "types-boto3-s3", marker = "platform_system != 'Darwin' or sys_platform != 'linux'" },
+]
+
+[[package]]
+name = "types-boto3-s3"
+version = "1.35.81"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "(python_full_version < '3.12' and platform_system != 'Darwin') or (python_full_version < '3.12' and sys_platform != 'linux')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/aa/52d905b2d2ace8e6edcec92e87439a8a1c01f7a4cc4821d8c8d579d2796e/types_boto3_s3-1.35.81.tar.gz", hash = "sha256:fdb6f6c0f9056edca04298983f3172995f13bb1c3e2b8041bb907d60026243a9", size = 71762 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/18/90/0d013648f89109dde28c5f4e4369574be2ceb4c769f1a3c6e95b4d3911c5/types_boto3_s3-1.35.81-py3-none-any.whl", hash = "sha256:d9babf9ae39a0ab4c6f31ed415f4947cc2027aa162a557ab67aba753eb964174", size = 78472 },
+]
+
+[[package]]
+name = "types-s3transfer"
+version = "0.10.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/8f/5cf8bea1470f9d0af8a8a8e232bc9d94eb2b8c040f1c19e673fcd3ba488c/types_s3transfer-0.10.4.tar.gz", hash = "sha256:03123477e3064c81efe712bf9d372c7c72f2790711431f9baa59cf96ea607267", size = 13791 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/73/de/38872bc9414018e223a4c7193bc2f7ed5ef8ab7a01ab3bb8d7de4f3c2720/types_s3transfer-0.10.4-py3-none-any.whl", hash = "sha256:22ac1aabc98f9d7f2928eb3fb4d5c02bf7435687f0913345a97dd3b84d0c217d", size = 18744 },
 ]
 
 [[package]]

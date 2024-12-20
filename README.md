@@ -37,25 +37,7 @@ During the first run of any example, docker will build the images. Go grab a cof
 
 ### Downloading checkpoints
 
-Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html). For linux, this means running the following commands:
-
-```bash
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
-```
-
-Run the following from the cloned `openpi` directory:
-
-```bash
-# Set AWS credentials. These will no longer be needed after openpi graduates from beta.
-export AWS_ACCESS_KEY_ID=AKIA4MTWIIQIZBO44C62
-export AWS_SECRET_ACCESS_KEY=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
-
-# Download the `pi0_sim` checkpoint.
-export CHECKPOINT_NAME=pi0_sim
-aws s3 sync s3://openpi-assets/checkpoints/$CHECKPOINT_NAME ./checkpoints/$CHECKPOINT_NAME
-```
+By default checkpoint are cached in `~/.cache/openpi` when running fine-tuning or eval, you can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
 
 Available checkpoints:
 

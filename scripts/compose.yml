@@ -9,10 +9,15 @@ services:
     init: true
     tty: true
     network_mode: host
+    # Populate configured openpi data home to /openpi_assets inside the container.
+    # Populate aws credential inside the container.
     volumes:
       - $PWD:/app
+      - ${OPENPI_DATA_HOME:-~/.cache/openpi}:/openpi_assets
+      - ~/.aws/:/root/.aws/
     environment:
       - SERVER_ARGS
+      - OPENPI_DATA_HOME=/openpi_assets
 
     # Comment out this block if not running on a machine with GPUs.
     deploy:

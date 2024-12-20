@@ -9,7 +9,7 @@ Currently, it is focused on the `pi0` model described in [this blog post](https:
 When cloning this repo, make sure to update submodules:
 
 ```bash
-git clone --recurse-submodules https://github.com/Physical-Intelligence/openpi.git
+git clone --recurse-submodules git@github.com:Physical-Intelligence/openpi.git
 
 # Or if you already cloned the repo:
 git submodule update --init --recursive

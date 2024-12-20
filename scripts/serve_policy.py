@@ -13,6 +13,7 @@ from openpi.policies import libero_policy
 from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.serving import websocket_policy_server
+from openpi.shared import download
 from openpi.training import config as _config
 
 
@@ -49,7 +50,7 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
     match env:
         case EnvMode.ALOHA:
             logging.info("Loading model...")
-            ckpt_path = "checkpoints/pi0_real/model"
+            ckpt_path = download.download_openpi("s3://openpi-assets-internal/checkpoints/pi0_real/model")
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
@@ -76,7 +77,7 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             )
         case EnvMode.ALOHA_SIM:
             logging.info("Loading model...")
-            ckpt_path = "checkpoints/pi0_sim/model"
+            ckpt_path = download.download_openpi("s3://openpi-assets-internal/checkpoints/pi0_sim/model")
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
@@ -102,7 +103,9 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             )
         case EnvMode.DROID:
             logging.info("Loading model...")
-            ckpt_path = "checkpoints/gemmamix_nov4_droid_no22_1056am/290000/model"
+            ckpt_path = download.download_openpi(
+                "s3://openpi-assets-internal/checkpoints/gemmamix_nov4_droid_no22_1056am/290000/model"
+            )
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
@@ -126,7 +129,9 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             )
         case EnvMode.CALVIN:
             logging.info("Loading model...")
-            ckpt_path = "checkpoints/release_gemmamix_calvin_nov24_2053/40000/model"
+            ckpt_path = download.download_openpi(
+                "s3://openpi-assets-internal/checkpoints/release_gemmamix_calvin_nov24_2053/40000/model"
+            )
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
@@ -144,7 +149,9 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             )
         case EnvMode.LIBERO:
             logging.info("Loading model...")
-            ckpt_path = "checkpoints/release_gemmamix_libero_nov23_1443/40000/model"
+            ckpt_path = download.download_openpi(
+                "s3://openpi-assets-internal/checkpoints/release_gemmamix_libero_nov23_1443/40000/model"
+            )
             model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")

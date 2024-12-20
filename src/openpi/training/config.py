@@ -126,7 +126,7 @@ class TrainConfig:
     # Project name.
     project_name: str = "openpi"
     # Experiment name. Will be used to name the metadata and checkpoint directories. Can't be empty.
-    exp_name: str = ""
+    exp_name: str = tyro.MISSING
 
     # Number of action dimensions.
     action_dim: int = 24

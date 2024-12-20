@@ -44,6 +44,15 @@ Available checkpoints:
 - `pi0_sim`: TODO
 - `pi0_droid`: TODO
 
+
+## Running Training
+
+Below example shows how to run training with a config defined in `openpi/training/config.py`. Note that JAX by default pre-allocates 75% GPU memory, in practice we have found allocating 90% of GPU memory with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` is a good default for training pi0.
+
+```
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py <config name (eg. pi0 / pi0_small / debug)> 
+```
+
 ## Running Examples
 
 We provide example integrations with several robotics platforms. See the README in each example for more details:

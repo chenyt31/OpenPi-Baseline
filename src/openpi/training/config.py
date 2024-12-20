@@ -174,6 +174,9 @@ class TrainConfig:
     # Keyword arguments to pass to the policy's sample method.
     sample_kwargs: dict[str, Any] | None = None
 
+    # If true, will enable wandb logging.
+    wandb_enabled: bool = True
+
     @property
     def metadata_dir(self) -> pathlib.Path:
         """Get the metadata directory for this config."""
@@ -241,6 +244,7 @@ _CONFIGS = [
         overwrite=True,
         exp_name="debug",
         num_train_steps=10,
+        wandb_enabled=False,
     ),
     TrainConfig(
         name="debug_restore",
@@ -249,6 +253,7 @@ _CONFIGS = [
         resume=True,
         exp_name="debug",
         num_train_steps=10,
+        wandb_enabled=False,
     ),
 ]
 

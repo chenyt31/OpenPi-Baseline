@@ -1,3 +1,4 @@
+# ruff: noqa
 """
 Script courtesy of Raziel90 https://github.com/huggingface/lerobot/pull/586/files
 
@@ -385,10 +386,9 @@ def str2bool(value):
     value = value.lower()
     if value in ("yes", "true", "t", "y", "1"):
         return True
-    elif value in ("no", "false", "f", "n", "0"):
+    if value in ("no", "false", "f", "n", "0"):
         return False
-    else:
-        raise argparse.ArgumentTypeError("Boolean value expected.")
+    raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 def main():

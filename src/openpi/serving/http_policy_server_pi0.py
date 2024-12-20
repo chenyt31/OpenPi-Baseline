@@ -25,8 +25,18 @@ def create_model(mode: Mode) -> tuple[_model.BaseModel, dict]:
             norm_stats = aloha_policy.make_aloha_norm_stats()
         case Mode.REF:
             ckpt_path = epath.Path("checkpoints/pi0_real/model").resolve()
+            # ckpt_path = epath.Path("checkpoints/myckpt/30000/model").resolve()
+            # ckpt_path = epath.Path("checkpoints/gemmamix_scratch_aloha_delta_actions30k/model").resolve() 
+            ckpt_path = epath.Path("checkpoints/gemmamix_all_aloha_tasks_delta_actions70k/model").resolve()
+            # ckpt_path = epath.Path("checkpoints/gemmamix_finetuned_towelfold20k/model").resolve()
+            # ckpt_path = epath.Path("checkpoints/gemmamix_finetuned_buildabox20k/model").resolve()
             model = _exported.PiModel.from_checkpoint(ckpt_path)
-            norm_stats = _exported.import_norm_stats(ckpt_path, "trossen_biarm_single_base_cam_24dim")
+            # norm_stats = _exported.import_norm_stats(ckpt_path, "trossen_biarm_single_base_cam_24dim")
+            # norm_stats = _exported.import_norm_stats(ckpt_path, "berkeley_aloha")
+            # norm_stats = _exported.import_norm_stats(ckpt_path, "all_berkeley_aloha_data") # works great
+            norm_stats = _exported.import_norm_stats(ckpt_path, "all_berkeley_aloha_data_delta_actions")
+            # norm_stats = _exported.import_norm_stats(ckpt_path, "trossen_bimanual_diverse_small_towel_folding_random_None_joint")
+            # norm_stats = _exported.import_norm_stats(ckpt_path, "trossen_bimanual_build_a_box_random_None")
         case Mode.SIM:
             ckpt_path = epath.Path("checkpoints/pi0_sim/model").resolve()
             model = _exported.PiModel.from_checkpoint(ckpt_path)
@@ -38,9 +48,11 @@ def create_model(mode: Mode) -> tuple[_model.BaseModel, dict]:
 def main(
     port: int = 8000,
     *,
-    record: bool = True,
+    record: bool = False,
     mode: Mode = Mode.REF,
-    default_prompt: str = "toast_out_of_toaster",
+    default_prompt: str = "uncap the pen",
+    # default_prompt: str = "place corn on the pink tray",
+    # default_prompt: str = "toast_out_of_toaster",
 ) -> None:
 
     logging.info("Loading model...")

@@ -70,7 +70,7 @@ class HttpPolicyServer:
         content_length = int(handler.headers["Content-Length"])
         data = handler.rfile.read(content_length)
         obs = pickle.loads(data)
-        print(f"Time to deserialize: {time.time() - start_time}")
+        # print(f"Time to deserialize: {time.time() - start_time}")
 
         # print(f'Obs: {obs}')
 

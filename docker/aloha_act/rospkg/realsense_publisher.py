@@ -8,13 +8,16 @@ import time
 import numpy as np
 
 TIMEOUT_MS = 100
-FPS = 60 #30
+FPS = 30 #30
 
 cv_bridge = CvBridge()
 rospy.init_node('realsense_publisher')
 
 camera_names = ['cam_left_wrist', 'cam_high', 'cam_low', 'cam_right_wrist']
-camera_sns = ['130322271036', '218722270088', '130322272196', '218622270083'] #'218622270083', '127122270166']
+# camera_sns = ['130322271036', '218722270088', '130322272196', '218622270083'] #'218622270083', '127122270166']
+camera_sns = ['130322274175', '218722270088', '130322272196', '218622270083']
+
+
 cam_dict = dict(zip(camera_sns,camera_names))
 mean_intensity_set_point_config = { # NOTE these numbers are specific to your lighting setup
     'cam_left_wrist': 500,
@@ -59,7 +62,7 @@ def get_profiles():
                     else:
                         depth_profiles.append((w, h, fps, fmt))
 
-missing_cams = [camera_names[i] for i, c in enumerate(camera_sns) if c not in device_ids]
+missing_cams = [(camera_names[i], c) for i, c in enumerate(camera_sns) if c not in device_ids]
 if missing_cams:
     raise Exception(f"Cameras missing:{missing_cams}")
 
@@ -147,6 +150,8 @@ while not rospy.is_shutdown():
             break
 
         color_frame = np.array(frameset.get_color_frame().get_data())
+        # Conver to RGB
+        color_frame = color_frame[..., ::-1]
         # depth_frame = np.array(frameset.get_depth_frame().get_data())
         
         rgb_imgs.append(color_frame)

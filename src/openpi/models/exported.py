@@ -159,12 +159,10 @@ def import_norm_stats(ckpt_path: epath.Path, processor_name: str) -> dict[str, _
 
         # This is the new Normalize processor.
         if "input_norms" in norm_stats:
-            state = norm_stats["input_norms"]["state"]
-            outputs.append(_normalize.NormStats(mean=state["mean"], std=state["std"]))
-
             actions = norm_stats["output_norms"]["actions"]
             outputs.append(_normalize.NormStats(mean=actions["mean"], std=actions["std"]))
-
+            state = norm_stats["input_norms"]["state"]
+            outputs.append(_normalize.NormStats(mean=state["mean"], std=state["std"]))
         # This is to support the old NormalizeActions / NormalizeState processor combo.
         else:
             outputs.append(_normalize.NormStats(mean=norm_stats["mean"], std=norm_stats["std"]))

@@ -68,7 +68,7 @@ services:
       - |
         sed -i 's/CAM_HIGH_SERIAL/218722270088/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
         sed -i 's/CAM_LOW_SERIAL/130322272196/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
-        sed -i 's/CAM_LEFT_WRIST_SERIAL/130322271036/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
+        sed -i 's/CAM_LEFT_WRIST_SERIAL/13032227415/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
         sed -i 's/CAM_RIGHT_WRIST_SERIAL/218622270083/g' /root/interbotix_ws/src/aloha/launch/ros_nodes.launch
         roslaunch --wait aloha ros_nodes.launch
       # - tail

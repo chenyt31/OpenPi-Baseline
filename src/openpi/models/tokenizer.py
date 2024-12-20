@@ -23,7 +23,7 @@ class PaligemmaTokenizer(Tokenizer):
         self._max_len = max_len
         # TODO(ury): Replace with a caching mechanism that downloads from S3.
         self._tokenizer = sentencepiece.SentencePieceProcessor(
-            "checkpoints/pi0_base/tokenizer/paligemma_tokenizer.model"
+            "checkpoints/pi0_real/tokenizer/paligemma_tokenizer.model"
         )
 
     @override

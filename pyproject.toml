@@ -15,7 +15,6 @@ dependencies = [
     "fsspec[gcs]>=2024.6.0",
     "gym-aloha>=0.1.1",
     "imageio>=2.36.1",
-    "ipykernel>=6.29.5",
     "jax[cuda12]==0.4.34",
     "jaxtyping==0.2.34",
     "lerobot",
@@ -29,6 +28,7 @@ dependencies = [
     "ruff>=0.7.1",
     "s3fs>=2024.9.0",
     "sentencepiece>=0.2.0",
+    "torch>=2.5.1",
     "tqdm-loggable>=0.2",
     "typing-extensions>=4.12.2",
     "tyro>=0.8.14",
@@ -41,7 +41,13 @@ dependencies = [
 Repository = "https://github.com/Physical-Intelligence/openpi"
 
 [dependency-groups]
-dev = ["pytest>=8.3.4", "ruff>=0.8.3", "pre-commit>=4.0.1"]
+dev = [
+    "pytest>=8.3.4",
+    "ruff>=0.8.3",
+    "pre-commit>=4.0.1",
+    "ipykernel>=6.29.5",
+    "ipywidgets>=8.1.5",
+]
 
 
 [tool.uv.sources]

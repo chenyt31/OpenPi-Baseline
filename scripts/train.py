@@ -204,7 +204,9 @@ def main(config: _config.TrainConfig):
 
     model = config.create_model()
 
-    data_loader = _data_loader.create_data_loader(config, model, sharding=data_parallel_sharding)
+    data_loader = _data_loader.create_data_loader(
+        config, model, sharding=data_parallel_sharding, num_workers=config.num_workers
+    )
     data_iter = iter(data_loader)
     batch = next(data_iter)
     logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")

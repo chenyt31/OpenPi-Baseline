@@ -141,7 +141,7 @@ class TrainConfig:
 
     lr_schedule: _optimizer.LRScheduleConfig = dataclasses.field(default_factory=_optimizer.CosineDecaySchedule)
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
-    ema_decay: float | None = None
+    ema_decay: float | None = 0.99
 
     # Data config factory.
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)
@@ -153,11 +153,11 @@ class TrainConfig:
     # Random seed that will be used by random generators during training.
     seed: int = 42
     # Global batch size.
-    batch_size: int = 16
+    batch_size: int = 32
     # Number of workers to use for the data loader.
     num_workers: int = 2
     # Number of train steps (batches) to run.
-    num_train_steps: int = 100_000
+    num_train_steps: int = 30_000
 
     # How often to log training metrics.
     log_interval: int = 100
@@ -217,7 +217,7 @@ _CONFIGS = [
             delta_action_mask=None,
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base"),
-        num_train_steps=20_000,
+        num_train_steps=30_000,
     ),
     TrainConfig(
         name="pi0_paligemma",

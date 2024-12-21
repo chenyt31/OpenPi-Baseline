@@ -205,7 +205,11 @@ def main(config: _config.TrainConfig):
     model = config.create_model()
 
     data_loader = _data_loader.create_data_loader(
-        config, model, sharding=data_parallel_sharding, num_workers=config.num_workers
+        config,
+        model,
+        sharding=data_parallel_sharding,
+        num_workers=config.num_workers,
+        shuffle=True,
     )
     data_iter = iter(data_loader)
     batch = next(data_iter)

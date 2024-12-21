@@ -1,6 +1,6 @@
+import pathlib
 from typing import Any
 
-import etils.epath as epath
 import flax.serialization
 import flax.struct as struct
 import jax
@@ -14,6 +14,7 @@ from openpi.models import model as _model
 from openpi.shared import image_tools
 from openpi.shared import normalize as _normalize
 import openpi.shared.array_typing as at
+import openpi.shared.download as download
 
 # TODO(ury): Remove before open sourcing and consider replacing with an official export API.
 
@@ -27,11 +28,12 @@ class PiModel(_model.BaseModel):
     exported: jax.export.Exported = struct.field(pytree_node=False)
     example_spec: Any = struct.field(pytree_node=False)
     sample_spec: Any = struct.field(pytree_node=False)
+    ckpt_path: pathlib.Path = struct.field(pytree_node=False)
 
     @classmethod
-    def from_checkpoint(cls, ckpt_path: epath.Path | str) -> "PiModel":
-        """Load a model from a monopi checkpoint model directory."""
-        ckpt_path = epath.Path(ckpt_path).resolve()
+    def from_checkpoint(cls, ckpt_path: pathlib.Path | str) -> "PiModel":
+        """Load a model from a monopi model checkpoint directory."""
+        ckpt_path = download.download(str(ckpt_path))
         with (ckpt_path / "graph").open("rb") as f:
             exported = jax.export.deserialize(f.read())
 
@@ -52,6 +54,7 @@ class PiModel(_model.BaseModel):
             exported=exported,
             example_spec=example_spec,
             sample_spec=sample_spec,
+            ckpt_path=ckpt_path,
             action_horizon=action_horizon,
             action_dim=action_dim,
             max_token_len=max_token_len,
@@ -104,8 +107,11 @@ class PiModel(_model.BaseModel):
         example = jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), self.example_spec)
         return _example_to_obs(_make_batch(example))
 
+    def norm_stats(self, processor_name: str) -> dict[str, _normalize.NormStats]:
+        return import_norm_stats(self.ckpt_path, processor_name)
 
-def model_from_checkpoint(module: common.BaseModule, ckpt_path: epath.Path | str, param_path: str) -> _model.Model:
+
+def model_from_checkpoint(module: common.BaseModule, ckpt_path: pathlib.Path | str, param_path: str) -> _model.Model:
     """Create a model using a monopi checkpoint.
 
     Args:
@@ -133,7 +139,7 @@ def model_from_checkpoint(module: common.BaseModule, ckpt_path: epath.Path | str
     )
 
 
-def _load_params(path: epath.Path, params_spec: at.PyTree, sharding: jax.sharding.Sharding | None = None):
+def _load_params(path: pathlib.Path, params_spec: at.PyTree, sharding: jax.sharding.Sharding | None = None):
     if sharding is None:
         sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
 
@@ -213,8 +219,8 @@ def _example_to_obs(example: dict) -> common.Observation:
     )
 
 
-def import_norm_stats(ckpt_path: epath.Path | str, processor_name: str) -> dict[str, _normalize.NormStats]:
-    ckpt_path = epath.Path(ckpt_path).resolve()
+def import_norm_stats(ckpt_path: pathlib.Path | str, processor_name: str) -> dict[str, _normalize.NormStats]:
+    ckpt_path = pathlib.Path(ckpt_path).resolve()
     path = ckpt_path / "processors" / processor_name
     if not path.exists():
         raise FileNotFoundError(f"Processor {processor_name} not found in {ckpt_path}")

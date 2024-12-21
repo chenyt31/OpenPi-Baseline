@@ -1,10 +1,10 @@
 import abc
-import os
 
-import fsspec
 import numpy as np
 import sentencepiece
 from typing_extensions import override
+
+import openpi.shared.download as download
 
 
 class Tokenizer(abc.ABC):
@@ -24,12 +24,8 @@ class PaligemmaTokenizer(Tokenizer):
     def __init__(self, max_len: int = 48):
         self._max_len = max_len
 
-        cache_path = os.path.expanduser("~/.cache/openpi/paligemma_tokenizer.model")  # noqa: PTH111
-        with fsspec.open(
-            "filecache::gs://big_vision/paligemma_tokenizer.model",
-            gs={"token": "anon"},
-            filecache={"cache_storage": cache_path},
-        ) as f:
+        path = download.download("gs://big_vision/paligemma_tokenizer.model", gs={"token": "anon"})
+        with path.open("rb") as f:
             self._tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
     @override

@@ -11,11 +11,12 @@ from openpi.training import data_loader as _data_loader
 
 def test_torch_data_loader():
     model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
-    dataset = _data_loader.FakeDataset(model, 10)
+    dataset = _data_loader.FakeDataset(model, 16)
 
     loader = _data_loader.TorchDataLoader(
         dataset,
         local_batch_size=4,
+        num_batches=2,
         transforms=[lambda x: {**x, "test_item": np.array([1, 2, 3])}],
     )
     batches = list(loader)
@@ -25,6 +26,17 @@ def test_torch_data_loader():
     for batch in batches:
         assert all(x.shape[0] == 4 for x in jax.tree.leaves(batch))
         assert batch["test_item"].shape == (4, 3)
+
+
+def test_torch_data_loader_infinite():
+    model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
+    dataset = _data_loader.FakeDataset(model, 4)
+
+    loader = _data_loader.TorchDataLoader(dataset, local_batch_size=4)
+    data_iter = iter(loader)
+
+    for _ in range(10):
+        _ = next(data_iter)
 
 
 def test_torch_data_loader_parallel():

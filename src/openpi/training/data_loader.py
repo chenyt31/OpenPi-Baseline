@@ -1,5 +1,4 @@
 from collections.abc import Iterator, Sequence
-import itertools
 import multiprocessing
 import os
 import typing
@@ -115,7 +114,7 @@ def create_data_loader(
         skip_norm_stats: Whether to skip data normalization.
         num_batches: Determines the number of batches to return. If the number exceeds the
             number of batches in the dataset, the data loader will loop over the dataset.
-            If not provided, will iterate over the dataset once.
+            If not provided, will iterate over the dataset indefinitely.
         num_workers: The number of worker processes to use. If zero, the data loader will
             execute in the main process.
     """
@@ -181,7 +180,8 @@ class TorchDataLoader:
             shuffle: Whether to shuffle the data.
             num_batches: If provided, determines the number of returned batches. If the
                 number is larger than the number of batches in the dataset, the data loader
-                will loop over the dataset.
+                will loop over the dataset. If not provided, will iterate over the dataset
+                indefinitely.
             num_workers: The number of worker processes to use. If zero, the data loader will
                 execute in the main process.
             seed: The seed to use for shuffling the data.
@@ -189,16 +189,17 @@ class TorchDataLoader:
         if jax.process_count() > 1:
             raise NotImplementedError("Data loading with multiple processes is not supported.")
 
+        if len(dataset) < local_batch_size:
+            raise ValueError(f"Local batch size ({local_batch_size}) is larger than the dataset size ({len(dataset)}).")
+
         if sharding is None:
             sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
         self._sharding = sharding
         self._num_batches = num_batches
 
         mp_context = None
-        persistent_workers = False
         if num_workers > 0:
             mp_context = multiprocessing.get_context("spawn")
-            persistent_workers = num_batches is not None
 
         dataset = TransformedDataset(dataset, transforms)
         generator = torch.Generator()
@@ -209,7 +210,7 @@ class TorchDataLoader:
             shuffle=shuffle,
             num_workers=num_workers,
             multiprocessing_context=mp_context,
-            persistent_workers=persistent_workers,
+            persistent_workers=num_workers > 0,
             collate_fn=_collate_fn,
             worker_init_fn=_worker_init_fn,
             drop_last=True,
@@ -221,14 +222,18 @@ class TorchDataLoader:
         return self._data_loader
 
     def __iter__(self):
-        if self._num_batches is not None:
-            data_iter = itertools.islice(itertools.cycle(self._data_loader), self._num_batches)
-        else:
+        num_items = 0
+        while True:
             data_iter = iter(self._data_loader)
-
-        for batch in data_iter:
-            # We can't combine this with _collate_fn since the sharding object is not picklable.
-            yield jax.tree.map(lambda x: jax.make_array_from_process_local_data(self._sharding, x), batch)
+            while True:
+                if self._num_batches is not None and num_items >= self._num_batches:
+                    return
+                try:
+                    batch = next(data_iter)
+                except StopIteration:
+                    break  # We've exhausted the dataset. Create a new iterator and start over.
+                num_items += 1
+                yield jax.tree.map(lambda x: jax.make_array_from_process_local_data(self._sharding, x), batch)
 
 
 def _collate_fn(items):

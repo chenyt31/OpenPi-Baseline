@@ -15,10 +15,10 @@ import tyro
 class Args:
     out_path: pathlib.Path = pathlib.Path("out.mp4")
 
-    task: str = "gym_aloha/AlohaInsertion-v0"
+    task: str = "gym_aloha/AlohaTransferCube-v0"
     seed: int = 0
 
-    action_horizon: int = 25
+    action_horizon: int = 10
 
     host: str = "0.0.0.0"
     port: int = 8000

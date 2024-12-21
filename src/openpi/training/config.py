@@ -134,7 +134,7 @@ class TrainConfig:
 
     lr_schedule: _optimizer.LRScheduleConfig = dataclasses.field(default_factory=_optimizer.CosineDecaySchedule)
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
-    ema_decay: float | None = None
+    ema_decay: float | None = 0.99
 
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)
 
@@ -142,8 +142,8 @@ class TrainConfig:
     checkpoint_base_dir: str = "./checkpoints"
 
     seed: int = 42
-    batch_size: int = 16
-    num_train_steps: int = 100_000
+    batch_size: int = 32
+    num_train_steps: int = 30_000
 
     log_interval: int = 100
     save_interval: int = 1000
@@ -192,7 +192,7 @@ _CONFIGS = [
             delta_action_mask=None,
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("checkpoints/pi0_base"),
-        num_train_steps=20_000,
+        num_train_steps=30_000,
     ),
     TrainConfig(
         name="pi0_paligemma",

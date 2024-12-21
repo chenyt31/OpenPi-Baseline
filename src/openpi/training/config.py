@@ -1,11 +1,11 @@
 from collections.abc import Sequence
 import dataclasses
 import difflib
+import getpass
 import os
 import pathlib
 from typing import Annotated, Any, Protocol, Union
 
-import namer
 import tyro
 
 import openpi.models.common as common
@@ -23,7 +23,7 @@ import openpi.transforms as _transforms
 def default_dataset_root() -> str | None:
     # TODO(ury): Temporary, remove this once the default works well.
     if os.path.exists("/mnt/weka"):  # noqa: PTH110
-        return "/mnt/weka/lerobot"
+        return f"/mnt/weka/{getpass.getuser()}/.cache/lerobot"
     return None
 
 
@@ -58,15 +58,6 @@ class FakeDataConfig(DataConfigFactory):
         return DataConfig(repo_id="fake")
 
 
-class LeRobotRepack(_transforms.DataTransformFn):
-    def __call__(self, item) -> dict:
-        return {
-            "images": {"cam_high": item["observation.images.top"]},
-            "state": item["observation.state"],
-            "actions": item["action"],
-        }
-
-
 @dataclasses.dataclass(frozen=True)
 class LeRobotAlohaDataConfig(DataConfigFactory):
     # The LeRobot repo id.
@@ -79,19 +70,29 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
     # fine-tuning a pretrained model.
     adapt_to_pi: bool = False
+    # Repack transforms. Default is used if not provided.
+    repack_transforms: _transforms.Group | None = None
 
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
         norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
         norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
 
+        repack_transforms = self.repack_transforms or _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {"cam_high": "observation.images.top"},
+                        "state": "observation.state",
+                        "actions": "action",
+                    }
+                )
+            ]
+        )
+
         return DataConfig(
             repo_id=self.repo_id,
             norm_stats=norm_stats,
-            repack_transforms=_transforms.Group(
-                inputs=[
-                    LeRobotRepack(),
-                ]
-            ),
+            repack_transforms=repack_transforms,
             data_transforms=_transforms.Group(
                 inputs=[
                     aloha_policy.AlohaInputs(
@@ -121,12 +122,18 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 
 @dataclasses.dataclass(frozen=True)
 class TrainConfig:
+    # Name of the config. Must be unique. Will be used to reference this config.
     name: tyro.conf.Suppress[str]
+    # Project name.
     project_name: str = "openpi"
-    exp_name: str = namer.generate(category=["food", "technology"], suffix_length=3)  # noqa: RUF009
+    # Experiment name. Will be used to name the metadata and checkpoint directories. Can't be empty.
+    exp_name: str = tyro.MISSING
 
+    # Number of action dimensions.
     action_dim: int = 24
+    # Number of action steps in the horizon.
     action_horizon: int = 50
+    # Maximum token length for the prompt.
     max_token_len: int = 48
 
     module: common.BaseModule = dataclasses.field(default_factory=pi0.Module)
@@ -136,24 +143,39 @@ class TrainConfig:
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
     ema_decay: float | None = 0.99
 
+    # Data config factory.
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)
 
+    # Base directories for metadata and checkpoints.
     metadata_base_dir: str = "./assets"
     checkpoint_base_dir: str = "./checkpoints"
 
+    # Random seed that will be used by random generators during training.
     seed: int = 42
+    # Global batch size.
     batch_size: int = 32
+    # Number of workers to use for the data loader.
+    num_workers: int = 2
+    # Number of train steps (batches) to run.
     num_train_steps: int = 30_000
 
+    # How often to log training metrics.
     log_interval: int = 100
+    # How often to save checkpoints.
     save_interval: int = 1000
+    # How often to keep checkpoints.
     keep_interval: int = 5000
 
+    # If true, will overwrite the checkpoint directory if it already exists.
     overwrite: bool = False
+    # If true, will resume training from the last checkpoint.
     resume: bool = False
 
     # Keyword arguments to pass to the policy's sample method.
     sample_kwargs: dict[str, Any] | None = None
+
+    # If true, will enable wandb logging.
+    wandb_enabled: bool = True
 
     @property
     def metadata_dir(self) -> pathlib.Path:
@@ -163,9 +185,12 @@ class TrainConfig:
     @property
     def checkpoint_dir(self) -> pathlib.Path:
         """Get the checkpoint directory for this config."""
+        if not self.exp_name:
+            raise ValueError("--exp_name must be set")
         return (pathlib.Path(self.checkpoint_base_dir) / self.name / self.exp_name).resolve()
 
     def create_model(self) -> _model.Model:
+        """Create a model for this config."""
         return _model.Model(
             module=self.module,
             action_dim=self.action_dim,
@@ -221,6 +246,7 @@ _CONFIGS = [
         overwrite=True,
         exp_name="debug",
         num_train_steps=10,
+        wandb_enabled=False,
     ),
     TrainConfig(
         name="debug_restore",
@@ -229,6 +255,7 @@ _CONFIGS = [
         resume=True,
         exp_name="debug",
         num_train_steps=10,
+        wandb_enabled=False,
     ),
 ]
 

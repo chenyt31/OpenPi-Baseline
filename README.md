@@ -1,6 +1,6 @@
 # openpi
 
-OpenPI holds open-source models and packages for robotics, published by the [Physical Intelligence team](https://www.physicalintelligence.company/).
+openpi holds open-source models and packages for robotics, published by the [Physical Intelligence team](https://www.physicalintelligence.company/).
 
 Currently, it is focused on the `pi0` model described in [this blog post](https://www.physicalintelligence.company/blog/pi0).
 
@@ -9,17 +9,17 @@ Currently, it is focused on the `pi0` model described in [this blog post](https:
 When cloning this repo, make sure to update submodules:
 
 ```bash
-git clone --recurse-submodules https://github.com/Physical-Intelligence/openpi.git
+git clone --recurse-submodules git@github.com:Physical-Intelligence/openpi.git
 
 # Or if you already cloned the repo:
 git submodule update --init --recursive
 ```
 
-### Using UV
+### Using uv
 
-We use [UV](https://docs.astral.sh/uv/) to manage Python dependencies. See the [UV installation instructions](https://docs.astral.sh/uv/getting-started/installation/) to set it up.
+We use [uv](https://docs.astral.sh/uv/) to manage Python dependencies. See the [uv installation instructions](https://docs.astral.sh/uv/getting-started/installation/) to set it up.
 
-Once UV is installed, run the following to set up the environment:
+Once uv is installed, run the following to set up the environment:
 
 ```bash
 GIT_LFS_SKIP_SMUDGE=1 uv sync
@@ -33,34 +33,25 @@ All of the examples in this repo provide instructions for being run normally, an
 
 Docker installation instructions are [here](https://docs.docker.com/engine/install/). If using a GPU you must also install the [NVIDIA container toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If your host machine is Ubuntu 22.04, you can use the convenience scripts `scripts/install_docker_ubuntu22.sh` and `scripts/install_nvidia_container_toolkit.sh`.
 
-During the first run of any example, docker will build the images. Go grab a coffee while this happens. Subsequent runs will be faster since the images are cached.
+During the first run of any example, Docker will build the images. Go grab a coffee while this happens. Subsequent runs will be faster since the images are cached.
 
 ### Downloading checkpoints
 
-Install the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html). For linux, this means running the following commands:
-
-```bash
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
-```
-
-Run the following from the cloned `openpi` directory:
-
-```bash
-# Set AWS credentials. These will no longer be needed after openpi graduates from beta.
-export AWS_ACCESS_KEY_ID=AKIA4MTWIIQIZBO44C62
-export AWS_SECRET_ACCESS_KEY=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
-
-# Download the `pi0_sim` checkpoint.
-export CHECKPOINT_NAME=pi0_sim
-aws s3 sync s3://openpi-assets/checkpoints/$CHECKPOINT_NAME ./checkpoints/$CHECKPOINT_NAME
-```
+By default checkpoints are downloaded and cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
 
 Available checkpoints:
 
 - `pi0_sim`: TODO
 - `pi0_droid`: TODO
+
+
+## Running Training
+
+The below example shows how to run training with a config defined in `openpi/training/config.py`. Note that JAX by default pre-allocates 75% of GPU memory, in practice we have found allocating 90% of GPU memory with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` is a good default for training pi0.
+
+```
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py <config name (eg. pi0 / pi0_small / debug)> 
+```
 
 ## Running Examples
 
@@ -71,9 +62,9 @@ We provide example integrations with several robotics platforms. See the README 
 - [CALVIN](examples/calvin)
 - [LIBERO](examples/libero)
 
-## Running the OpenPI Server
+## Running the openpi Server
 
-The OpenPI server hosts model inference for an OpenPI policy. 
+The openpi server hosts model inference for an openpi policy. 
 
 The server can be configured using the folllowing commands line arguments:
 

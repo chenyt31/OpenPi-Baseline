@@ -1,14 +1,18 @@
 from collections.abc import Iterator, Sequence
+import itertools
+import multiprocessing
+import os
+import typing
 from typing import Protocol, SupportsIndex, TypeVar
 
 import jax
 import jax.numpy as jnp
 import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import numpy as np
+import torch
 
 import openpi.models.common as _common
 import openpi.models.model as _model
-import openpi.shared.array_typing as at
 import openpi.training.config as _config
 import openpi.transforms as _transforms
 
@@ -34,6 +38,18 @@ class DataLoader(Protocol[T_co]):
 
     def __iter__(self) -> Iterator[T_co]:
         raise NotImplementedError("Subclasses of DataLoader should implement __iter__.")
+
+
+class TransformedDataset(Dataset[T_co]):
+    def __init__(self, dataset: Dataset, transforms: Sequence[_transforms.DataTransformFn]):
+        self._dataset = dataset
+        self._transform = _transforms.compose(transforms)
+
+    def __getitem__(self, index: SupportsIndex) -> T_co:
+        return self._transform(self._dataset[index])
+
+    def __len__(self) -> int:
+        return len(self._dataset)
 
 
 class FakeDataset(Dataset):
@@ -86,9 +102,23 @@ def create_data_loader(
     *,
     sharding: jax.sharding.Sharding | None = None,
     skip_norm_stats: bool = False,
-    max_batches: int | None = None,
+    num_batches: int | None = None,
+    num_workers: int = 0,
 ) -> DataLoader[tuple[_common.Observation, _common.Actions]]:
-    """Create a data loader for training."""
+    """Create a data loader for training.
+
+    Args:
+        config: The training configuration.
+        model: The model to use for the data loader.
+        sharding: The sharding to use for the data loader. If None, the data loader will
+            use a single device sharding.
+        skip_norm_stats: Whether to skip data normalization.
+        num_batches: Determines the number of batches to return. If the number exceeds the
+            number of batches in the dataset, the data loader will loop over the dataset.
+            If not provided, will iterate over the dataset once.
+        num_workers: The number of worker processes to use. If zero, the data loader will
+            execute in the main process.
+    """
     data_config = config.data.create(config.metadata_dir, model)
     dataset = create_dataset(data_config, model)
 
@@ -98,87 +128,119 @@ def create_data_loader(
             raise ValueError("Normalization stats not found. Make sure to run `compute_norm_stats.py` first.")
         norm_stats = data_config.norm_stats
 
-    class DataLoaderImpl(DataLoader):
-        def __init__(self, data_config: _config.DataConfig, transforms: Sequence[_transforms.DataTransformFn]):
-            self._data_config = data_config
-            self._transforms = transforms
-
-        def data_config(self) -> _config.DataConfig:
-            return self._data_config
-
-        def __iter__(self):
-            for batch in simple_data_loader(
-                dataset,
-                local_batch_size=config.batch_size // jax.process_count(),
-                sharding=sharding,
-                transforms=self._transforms,
-                max_batches=max_batches,
-            ):
-                # Perform this after the batch has been sharded.
-                yield _common.Observation.from_dict(batch), batch["actions"]
-
-    return DataLoaderImpl(
-        data_config,
+    data_loader = TorchDataLoader(
+        dataset,
+        local_batch_size=config.batch_size // jax.process_count(),
+        sharding=sharding,
         transforms=[
             *data_config.repack_transforms.inputs,
             *data_config.data_transforms.inputs,
             _transforms.Normalize(norm_stats),
             *data_config.model_transforms.inputs,
         ],
+        num_batches=num_batches,
+        num_workers=num_workers,
+        seed=config.seed,
     )
 
+    class DataLoaderImpl(DataLoader):
+        def __init__(self, data_config: _config.DataConfig, data_loader: TorchDataLoader):
+            self._data_config = data_config
+            self._data_loader = data_loader
 
-def simple_data_loader(
-    dataset: Dataset,
-    local_batch_size: int,
-    *,
-    sharding: jax.sharding.Sharding | None = None,
-    transforms: Sequence[_transforms.DataTransformFn] = (),
-    shuffle: bool = False,
-    max_batches: int | None = None,
-) -> Iterator[at.PyTree[jax.Array]]:
-    """Simple single-threaded data loader. Will be replaced with a proper one in the future."""
-    if jax.process_count() > 1:
-        # TODO: Update the sampler to support multiple processes.
-        raise NotImplementedError("Data loader with multiple processes is not supported.")
+        def data_config(self) -> _config.DataConfig:
+            return self._data_config
 
-    num_samples = len(dataset)
-    if sharding is None:
-        sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
+        def __iter__(self):
+            for batch in self._data_loader:
+                yield _common.Observation.from_dict(batch), batch["actions"]
 
-    def sampler() -> Iterator[int]:
-        rng = jax.random.key(0)
-        while True:
-            if not shuffle:
-                yield from range(num_samples)
-            else:
-                rng, data_rng = jax.random.split(rng)
-                yield from jax.random.permutation(data_rng, num_samples)
+    return DataLoaderImpl(data_config, data_loader)
 
-    def batch_sampler() -> Iterator[list[int]]:
-        sampler_iter = iter(sampler())
-        while True:
-            yield [next(sampler_iter) for _ in range(local_batch_size)]
 
-    def to_global_array(local_arr) -> jax.Array:
-        global_shape = (local_arr.shape[0] * jax.process_count(), *local_arr.shape[1:])
-        return jax.make_array_from_process_local_data(sharding, np.asarray(local_arr), global_shape)
+class TorchDataLoader:
+    def __init__(
+        self,
+        dataset,
+        local_batch_size: int,
+        *,
+        sharding: jax.sharding.Sharding | None = None,
+        transforms: Sequence[_transforms.DataTransformFn] = (),
+        shuffle: bool = False,
+        num_batches: int | None = None,
+        num_workers: int = 0,
+        seed: int = 0,
+    ):
+        """Create a PyTorch data loader.
 
-    def transform(item):
-        for transform in transforms:
-            item = transform(item)
-        return item
+        Args:
+            dataset: The dataset to load.
+            local_batch_size: The local batch size for each process.
+            sharding: The sharding to use for the data loader.
+            transforms: The transforms to apply to the data.
+            shuffle: Whether to shuffle the data.
+            num_batches: If provided, determines the number of returned batches. If the
+                number is larger than the number of batches in the dataset, the data loader
+                will loop over the dataset.
+            num_workers: The number of worker processes to use. If zero, the data loader will
+                execute in the main process.
+            seed: The seed to use for shuffling the data.
+        """
+        if jax.process_count() > 1:
+            raise NotImplementedError("Data loading with multiple processes is not supported.")
 
-    def data_loader():
-        batch_sampler_iter = iter(batch_sampler())
-        num_batches = 0
-        while True:
-            if max_batches is not None and num_batches >= max_batches:
-                break
-            items = [transform(dataset[i]) for i in next(batch_sampler_iter)]
-            batch = jax.tree.map(lambda *x: jnp.stack(jnp.asarray(x), axis=0), *items)
-            batch = jax.tree.map(to_global_array, batch)
-            yield batch
-            num_batches += 1
+        if sharding is None:
+            sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
+        self._sharding = sharding
+        self._num_batches = num_batches
 
-    return data_loader()
+        mp_context = None
+        persistent_workers = False
+        if num_workers > 0:
+            mp_context = multiprocessing.get_context("spawn")
+            persistent_workers = num_batches is not None
+
+        dataset = TransformedDataset(dataset, transforms)
+        generator = torch.Generator()
+        generator.manual_seed(seed)
+        self._data_loader = torch.utils.data.DataLoader(
+            typing.cast(torch.utils.data.Dataset, dataset),
+            batch_size=local_batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            multiprocessing_context=mp_context,
+            persistent_workers=persistent_workers,
+            collate_fn=_collate_fn,
+            worker_init_fn=_worker_init_fn,
+            drop_last=True,
+            generator=generator,
+        )
+
+    @property
+    def torch_loader(self) -> torch.utils.data.DataLoader:
+        return self._data_loader
+
+    def __iter__(self):
+        if self._num_batches is not None:
+            data_iter = itertools.islice(itertools.cycle(self._data_loader), self._num_batches)
+        else:
+            data_iter = iter(self._data_loader)
+
+        for batch in data_iter:
+            # We can't combine this with _collate_fn since the sharding object is not picklable.
+            yield jax.tree.map(lambda x: jax.make_array_from_process_local_data(self._sharding, x), batch)
+
+
+def _collate_fn(items):
+    """Collate the batch elements into batched numpy arrays."""
+    # Make sure to convert to numpy arrays before stacking since some of the incoming elements
+    # may be JAX arrays.
+    return jax.tree.map(lambda *x: np.stack(np.asarray(x), axis=0), *items)
+
+
+def _worker_init_fn(worker_id: int) -> None:
+    """Tell JAX inside the worker process not to preallocate the GPU memory."""
+    # NOTE: This is called after jax is imported inside the worker process. This
+    # means that this approach will not work for selecting the backend.
+    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"

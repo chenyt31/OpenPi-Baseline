@@ -32,7 +32,11 @@ class CheckpointWeightLoader(WeightLoader):
     ckpt_path: str
 
     def load(self, params: at.Params) -> at.Params:
-        return _model.restore_params(self.ckpt_path)
+        if download.is_openpi_url(self.ckpt_path):
+            path = download.download_openpi(self.ckpt_path)
+        else:
+            path = download.download(self.ckpt_path)
+        return _model.restore_params(path)
 
 
 def _recover_tree(d: dict) -> dict:

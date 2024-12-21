@@ -58,15 +58,6 @@ class FakeDataConfig(DataConfigFactory):
         return DataConfig(repo_id="fake")
 
 
-class LeRobotRepack(_transforms.DataTransformFn):
-    def __call__(self, item) -> dict:
-        return {
-            "images": {"cam_high": item["observation.images.top"]},
-            "state": item["observation.state"],
-            "actions": item["action"],
-        }
-
-
 @dataclasses.dataclass(frozen=True)
 class LeRobotAlohaDataConfig(DataConfigFactory):
     # The LeRobot repo id.
@@ -79,19 +70,29 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
     # fine-tuning a pretrained model.
     adapt_to_pi: bool = False
+    # Repack transforms. Default is used if not provided.
+    repack_transforms: _transforms.Group | None = None
 
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
         norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
         norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
 
+        repack_transforms = self.repack_transforms or _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {"cam_high": "observation.images.top"},
+                        "state": "observation.state",
+                        "actions": "action",
+                    }
+                )
+            ]
+        )
+
         return DataConfig(
             repo_id=self.repo_id,
             norm_stats=norm_stats,
-            repack_transforms=_transforms.Group(
-                inputs=[
-                    LeRobotRepack(),
-                ]
-            ),
+            repack_transforms=repack_transforms,
             data_transforms=_transforms.Group(
                 inputs=[
                     aloha_policy.AlohaInputs(

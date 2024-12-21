@@ -3,6 +3,7 @@ import dataclasses
 from typing import Protocol, TypeAlias, TypeVar
 
 import flax.traverse_util as traverse_util
+import jax
 import numpy as np
 from openpi_client import image_tools
 
@@ -41,6 +42,31 @@ class CompositeTransform(DataTransformFn):
 def compose(transforms: Sequence[DataTransformFn]) -> DataTransformFn:
     """Compose a sequence of transforms into a single transform."""
     return CompositeTransform(transforms)
+
+
+@dataclasses.dataclass(frozen=True)
+class RepackTransform(DataTransformFn):
+    """Repacks an input dictionary into a new dictionary.
+
+    Repacking is defined using a dictionary where the keys are the new keys and the values
+    are the flattened paths to the old keys. We use '/' as the separator during flattening.
+
+    Example:
+    {
+        "images": {
+            "cam_high": "observation.images.top",
+            "cam_low": "observation.images.bottom",
+        },
+        "state": "observation.state",
+        "actions": "action",
+    }
+    """
+
+    structure: at.PyTree[str]
+
+    def __call__(self, item) -> dict:
+        flat_item = flatten_dict(item)
+        return jax.tree.map(lambda k: flat_item[k], self.structure)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -129,11 +155,21 @@ class TokenizePrompt(DataTransformFn):
         return {**data, "tokenized_prompt": np.asarray(tokens), "tokenized_prompt_mask": np.asarray(token_masks)}
 
 
+def flatten_dict(tree: at.PyTree) -> dict:
+    """Flatten a nested dictionary. Uses '/' as the separator."""
+    return traverse_util.flatten_dict(tree, sep="/")
+
+
+def unflatten_dict(tree: dict) -> at.PyTree:
+    """Unflatten a flattened dictionary. Assumes that '/' was used as a separator."""
+    return traverse_util.unflatten_dict(tree, sep="/")
+
+
 def apply_tree(
     tree: at.PyTree[T], selector: at.PyTree[S], fn: Callable[[T, S], T], *, strict: bool = False
 ) -> at.PyTree[T]:
-    tree = traverse_util.flatten_dict(tree, sep="/")
-    selector = traverse_util.flatten_dict(selector, sep="/")
+    tree = flatten_dict(tree)
+    selector = flatten_dict(selector)
 
     def transform(k: str, v: T) -> T:
         if k in selector:
@@ -145,7 +181,7 @@ def apply_tree(
             if k not in tree:
                 raise ValueError(f"Selector key {k} not found in tree")
 
-    return traverse_util.unflatten_dict({k: transform(k, v) for k, v in tree.items()}, sep="/")
+    return unflatten_dict({k: transform(k, v) for k, v in tree.items()})
 
 
 def pad_to_dim(x: np.ndarray, target_dim: int, axis: int = -1) -> np.ndarray:

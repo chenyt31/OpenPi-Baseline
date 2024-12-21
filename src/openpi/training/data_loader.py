@@ -101,6 +101,7 @@ def create_data_loader(
     *,
     sharding: jax.sharding.Sharding | None = None,
     skip_norm_stats: bool = False,
+    shuffle: bool = False,
     num_batches: int | None = None,
     num_workers: int = 0,
 ) -> DataLoader[tuple[_common.Observation, _common.Actions]]:
@@ -112,6 +113,7 @@ def create_data_loader(
         sharding: The sharding to use for the data loader. If None, the data loader will
             use a single device sharding.
         skip_norm_stats: Whether to skip data normalization.
+        shuffle: Whether to shuffle the data.
         num_batches: Determines the number of batches to return. If the number exceeds the
             number of batches in the dataset, the data loader will loop over the dataset.
             If not provided, will iterate over the dataset indefinitely.
@@ -137,6 +139,7 @@ def create_data_loader(
             _transforms.Normalize(norm_stats),
             *data_config.model_transforms.inputs,
         ],
+        shuffle=shuffle,
         num_batches=num_batches,
         num_workers=num_workers,
         seed=config.seed,

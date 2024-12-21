@@ -80,6 +80,7 @@ def test_with_real_dataset():
         # Skip since we may not have the data available.
         skip_norm_stats=True,
         num_batches=2,
+        shuffle=True,
     )
     # Make sure that we can get the data config.
     assert loader.data_config().repo_id == config.data.repo_id

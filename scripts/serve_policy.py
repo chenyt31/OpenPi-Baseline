@@ -13,7 +13,6 @@ from openpi.policies import libero_policy
 from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.serving import websocket_policy_server
-from openpi.shared import download
 from openpi.training import config as _config
 
 
@@ -50,14 +49,13 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
     match env:
         case EnvMode.ALOHA:
             logging.info("Loading model...")
-            ckpt_path = download.download_openpi("s3://openpi-assets-internal/checkpoints/pi0_real/model")
-            model = _exported.PiModel.from_checkpoint(ckpt_path)
+            model = _exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_real/model")
 
             logging.info("Creating policy...")
             delta_action_mask = _policy_config.make_bool_mask(6, -1, 6, -1)
             config = _policy_config.PolicyConfig(
                 model=model,
-                norm_stats=_exported.import_norm_stats(ckpt_path, "trossen_biarm_single_base_cam_24dim"),
+                norm_stats=model.norm_stats("trossen_biarm_single_base_cam_24dim"),
                 default_prompt=default_prompt,
                 input_layers=[
                     aloha_policy.ActInputsRepack(),
@@ -77,13 +75,12 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             )
         case EnvMode.ALOHA_SIM:
             logging.info("Loading model...")
-            ckpt_path = download.download_openpi("s3://openpi-assets-internal/checkpoints/pi0_sim/model")
-            model = _exported.PiModel.from_checkpoint(ckpt_path)
+            model = _exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_sim/model")
 
             logging.info("Creating policy...")
             config = _policy_config.PolicyConfig(
                 model=model,
-                norm_stats=_exported.import_norm_stats(ckpt_path, "huggingface_aloha_sim_transfer_cube"),
+                norm_stats=model.norm_stats("huggingface_aloha_sim_transfer_cube"),
                 default_prompt=default_prompt,
                 input_layers=[
                     aloha_policy.ActInputsRepack(),
@@ -103,15 +100,14 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             )
         case EnvMode.DROID:
             logging.info("Loading model...")
-            ckpt_path = download.download_openpi(
+            model = _exported.PiModel.from_checkpoint(
                 "s3://openpi-assets-internal/checkpoints/gemmamix_nov4_droid_no22_1056am/290000/model"
             )
-            model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
             config = _policy_config.PolicyConfig(
                 model=model,
-                norm_stats=_exported.import_norm_stats(ckpt_path, "openx_droid"),
+                norm_stats=model.norm_stats("openx_droid"),
                 default_prompt=default_prompt,
                 input_layers=[
                     droid_policy.DroidInputs(
@@ -129,15 +125,14 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             )
         case EnvMode.CALVIN:
             logging.info("Loading model...")
-            ckpt_path = download.download_openpi(
+            model = _exported.PiModel.from_checkpoint(
                 "s3://openpi-assets-internal/checkpoints/release_gemmamix_calvin_nov24_2053/40000/model"
             )
-            model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
             config = _policy_config.PolicyConfig(
                 model=model,
-                norm_stats=_exported.import_norm_stats(ckpt_path, "calvin"),
+                norm_stats=model.norm_stats("calvin"),
                 default_prompt=default_prompt,
                 input_layers=[
                     calvin_policy.CalvinInputs(action_dim=model.action_dim),
@@ -149,15 +144,14 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             )
         case EnvMode.LIBERO:
             logging.info("Loading model...")
-            ckpt_path = download.download_openpi(
+            model = _exported.PiModel.from_checkpoint(
                 "s3://openpi-assets-internal/checkpoints/release_gemmamix_libero_nov23_1443/40000/model"
             )
-            model = _exported.PiModel.from_checkpoint(ckpt_path)
 
             logging.info("Creating policy...")
             config = _policy_config.PolicyConfig(
                 model=model,
-                norm_stats=_exported.import_norm_stats(ckpt_path, "libero"),
+                norm_stats=model.norm_stats("libero"),
                 default_prompt=default_prompt,
                 input_layers=[
                     libero_policy.LiberoInputs(action_dim=model.action_dim),

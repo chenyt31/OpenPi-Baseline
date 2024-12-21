@@ -19,13 +19,12 @@ def test_infer():
 
 
 def test_exported_aloha_sim():
-    ckpt_path = "checkpoints/pi0_sim/model"
-    model = _exported.PiModel.from_checkpoint(ckpt_path)
+    model = _exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_sim/model")
 
     policy = aloha_policy.create_aloha_policy(
         model,
         aloha_policy.PolicyConfig(
-            norm_stats=_exported.import_norm_stats(ckpt_path, "huggingface_aloha_sim_transfer_cube"),
+            norm_stats=model.norm_stats("huggingface_aloha_sim_transfer_cube"),
             adapt_to_pi=False,
         ),
     )

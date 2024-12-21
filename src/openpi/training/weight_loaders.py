@@ -11,8 +11,8 @@ import numpy as np
 import scipy.ndimage
 
 import openpi.models.model as _model
-from openpi.shared import download
 import openpi.shared.array_typing as at
+import openpi.shared.download as download
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,7 @@ class CheckpointWeightLoader(WeightLoader):
     ckpt_path: str
 
     def load(self, params: at.Params) -> at.Params:
-        if download.is_openpi_url(self.ckpt_path):
-            path = download.download_openpi(self.ckpt_path)
-        else:
-            path = download.download(self.ckpt_path)
-        return _model.restore_params(path)
+        return _model.restore_params(download.download(self.ckpt_path))
 
 
 def _recover_tree(d: dict) -> dict:

@@ -1,8 +1,6 @@
 from collections.abc import Sequence
 import dataclasses
 import difflib
-import getpass
-import os
 import pathlib
 from typing import Annotated, Any, Protocol, Union
 
@@ -13,18 +11,17 @@ import openpi.models.model as _model
 import openpi.models.pi0 as pi0
 import openpi.models.pi0_small as pi0_small
 import openpi.models.tokenizer as _tokenizer
-from openpi.policies import aloha_policy
+import openpi.policies.aloha_policy as aloha_policy
+import openpi.shared.download as download
 import openpi.shared.normalize as _normalize
 import openpi.training.optimizer as _optimizer
 import openpi.training.weight_loaders as weight_loaders
 import openpi.transforms as _transforms
 
 
-def default_dataset_root() -> str | None:
-    # TODO(ury): Temporary, remove this once the default works well.
-    if os.path.exists("/mnt/weka"):  # noqa: PTH110
-        return f"/mnt/weka/{getpass.getuser()}/.cache/lerobot"
-    return None
+def default_dataset_root() -> str:
+    """Default location for the dataset cache."""
+    return str(download.get_cache_dir() / "datasets")
 
 
 @dataclasses.dataclass
@@ -44,7 +41,6 @@ class DataConfig:
     model_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
 
     # Indicates where the cached dataset should be stored.
-    # This can also be controlled by setting the LEROBOT_HOME environment variable.
     dataset_root: str | None = dataclasses.field(default_factory=default_dataset_root)
 
 

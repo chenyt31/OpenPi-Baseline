@@ -18,7 +18,7 @@ class CosineDecaySchedule(LRScheduleConfig):
 
     warmup_steps: int = 1_000
     peak_lr: float = 2.5e-5
-    decay_steps: int = 30_0000
+    decay_steps: int = 30_000
     decay_lr: float = 2.5e-6
 
     def create(self) -> optax.Schedule:

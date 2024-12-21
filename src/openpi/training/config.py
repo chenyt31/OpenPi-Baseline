@@ -173,6 +173,12 @@ class TrainConfig:
     # If true, will enable wandb logging.
     wandb_enabled: bool = True
 
+    # If the value is greater than 1, FSDP will be enabled and shard across number of specified devices; overall
+    # device memory will be reduced but training could potentially be slower.
+    # eg. if total device is 4 and fsdp devices is 2; then the model will shard to 2 devices and run
+    # data parallel between 2 groups of devices.
+    fsdp_devices: int = 1
+
     @property
     def metadata_dir(self) -> pathlib.Path:
         """Get the metadata directory for this config."""

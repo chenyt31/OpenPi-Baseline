@@ -2,7 +2,7 @@ from collections.abc import Sequence
 import dataclasses
 import difflib
 import pathlib
-from typing import Annotated, Any, Protocol, Union
+from typing import Any, Protocol
 
 import tyro
 
@@ -255,23 +255,13 @@ _CONFIGS = [
     ),
 ]
 
+if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
+    raise ValueError("Config names must be unique.")
 _CONFIGS_DICT = {config.name: config for config in _CONFIGS}
 
 
 def cli() -> TrainConfig:
-    return tyro.cli(
-        Union.__getitem__(  # type: ignore
-            tuple(
-                Annotated.__class_getitem__(  # type: ignore
-                    (
-                        Annotated.__class_getitem__((type(v), tyro.conf.AvoidSubcommands)),  # type: ignore
-                        tyro.conf.subcommand(k, default=v),
-                    )
-                )
-                for k, v in _CONFIGS_DICT.items()
-            )
-        ),
-    )
+    return tyro.extras.overridable_config_cli({k: (k, v) for k, v in _CONFIGS_DICT.items()})
 
 
 def get_config(config_name: str) -> TrainConfig:

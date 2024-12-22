@@ -4,6 +4,7 @@ import logging
 import tyro
 
 from openpi import transforms
+from openpi.examples.aloha_real.constants import ResetMode
 from openpi.models import exported as _exported
 from openpi.models import model as _model
 from openpi.policies import aloha_policy
@@ -42,7 +43,11 @@ def repack_from_env(env: EnvMode) -> transforms.Group:
             return transforms.Group()
 
 
-def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.Policy:
+def create_default_policy(
+    env: EnvMode,
+    default_prompt: str | None,
+    reset_mode: ResetMode = ResetMode.PI,
+) -> _policy.Policy:
     model: _model.BaseModel
     config: _policy_config.PolicyConfig
 
@@ -63,6 +68,7 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
                         action_dim=model.action_dim,
                         delta_action_mask=delta_action_mask,
                         adapt_to_pi=True,
+                        reset_mode=reset_mode,
                     ),
                 ],
                 output_layers=[
@@ -177,6 +183,7 @@ def main(
     checkpoint_path: str | None = None,
     default_prompt: str | None = None,
     record: bool = False,
+    reset_mode: ResetMode = ResetMode.PI,
 ) -> None:
     """Serve a policy.
 
@@ -186,6 +193,7 @@ def main(
         checkpoint_path: Required if `config_name` is provided. Specifies the path to the checkpoint to load.
         default_prompt: If provided, overrides the default prompt for the policy.
         record: Whether to record the policy's behavior.
+        reset_mode: The reset mode to use for ALOHA_REAL environment (PI or ALOHA pose).
     """
     if config_name:
         if not checkpoint_path:
@@ -198,7 +206,7 @@ def main(
             sample_kwargs=config.sample_kwargs,
         )
     else:
-        policy = create_default_policy(env, default_prompt)
+        policy = create_default_policy(env, default_prompt, reset_mode=reset_mode)
 
     # Record the policy's behavior.
     if record:

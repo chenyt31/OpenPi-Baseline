@@ -10,6 +10,7 @@ import numpy as np
 
 from examples.aloha_real import constants
 from examples.aloha_real import robot_utils
+from examples.aloha_real.constants import ResetMode
 
 
 class RealEnv:
@@ -34,7 +35,7 @@ class RealEnv:
                                    "cam_right_wrist": (480x640x3)} # h, w, c, dtype='uint8'
     """
 
-    def __init__(self, init_node, *, setup_robots: bool = True):
+    def __init__(self, init_node, *, setup_robots: bool = True, reset_mode: ResetMode = ResetMode.PI):
         self.puppet_bot_left = InterbotixManipulatorXS(
             robot_model="vx300s",
             group_name="arm",
@@ -52,6 +53,13 @@ class RealEnv:
         self.recorder_right = robot_utils.Recorder("right", init_node=False)
         self.image_recorder = robot_utils.ImageRecorder(init_node=False)
         self.gripper_command = JointSingleCommand(name="gripper")
+
+        if reset_mode == ResetMode.PI:
+            self.reset_position = constants.PI_RESET_POSE
+        elif reset_mode == ResetMode.ALOHA:
+            self.reset_position = constants.ALOHA_RESET_POSE
+        else:
+            raise ValueError(f"Unknown reset_mode: {reset_mode}.")
 
     def setup_robots(self):
         robot_utils.setup_puppet_bot(self.puppet_bot_left)
@@ -101,10 +109,8 @@ class RealEnv:
         self.puppet_bot_right.gripper.core.pub_single.publish(self.gripper_command)
 
     def _reset_joints(self):
-        # reset_position = START_ARM_POSE[:6]
-        reset_position = [0, -1.5, 1.5, 0, 0, 0]
         robot_utils.move_arms(
-            [self.puppet_bot_left, self.puppet_bot_right], [reset_position, reset_position], move_time=1
+            [self.puppet_bot_left, self.puppet_bot_right], [self.reset_position, self.reset_position], move_time=1
         )
 
     def _reset_gripper(self):
@@ -163,5 +169,5 @@ def get_action(master_bot_left, master_bot_right):
     return action
 
 
-def make_real_env(init_node, *, setup_robots: bool = True) -> RealEnv:
-    return RealEnv(init_node, setup_robots=setup_robots)
+def make_real_env(init_node, *, setup_robots: bool = True, reset_mode: ResetMode = ResetMode.PI) -> RealEnv:
+    return RealEnv(init_node, setup_robots=setup_robots, reset_mode=reset_mode)

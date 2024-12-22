@@ -109,12 +109,15 @@ def init_train_state(
         params = jax.experimental.io_callback(
             partial(_load_weights_and_validate, config.weight_loader), params, params, ordered=True
         )
-        freeze_mask = None
         if config.weight_freeze_regex:
-            freeze_mask = training_utils.mask_from_regex(config.weight_freeze_regex, params)
-            logging.info(training_utils.to_readable_mask_info(freeze_mask, lambda x: "frozen" if x else "not frozen"))
+            freeze_weights_mask = training_utils.mask_from_regex(config.weight_freeze_regex, params)
+            logging.info(
+                training_utils.to_readable_mask_info(freeze_weights_mask, lambda x: "frozen" if x else "not frozen")
+            )
+        else:
+            freeze_weights_mask = None
         tx = _optimizer.create_optimizer(
-            config.optimizer, config.lr_schedule, weight_decay_mask=None, freeze_weights_mask=freeze_mask
+            config.optimizer, config.lr_schedule, weight_decay_mask=None, freeze_weights_mask=freeze_weights_mask
         )
         return training_utils.TrainState(
             step=0,
@@ -123,6 +126,7 @@ def init_train_state(
             tx=tx,
             ema_decay=config.ema_decay,
             ema_params=None if config.ema_decay is None else params,
+            freeze_weights_mask=freeze_weights_mask,
         )
 
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
@@ -166,12 +170,16 @@ def train_step(
             )
         )
 
+    # when computing the param norm, we only want to consider kernels (not biases, layernorms, etc.)
     kernel_mask = training_utils.mask_from_regex(r".*\['kernel'\]", state.params)
     kernel_params = jax.tree.map(lambda p, m: p if m else None, state.params, kernel_mask)
+    # when computing the grad norm, we do not want to include the gradients of frozen params, otherwise we will cause XLA
+    # to compute them
+    used_grads = jax.tree.map(lambda g, m: None if m else g, grads, state.freeze_weights_mask)
     info = {
         "loss": loss,
-        "grad_norm": optax.global_norm(grads),  # TODO: do not compute norm for frozen params
         "param_norm": optax.global_norm(kernel_params),
+        "grad_norm": optax.global_norm(used_grads),
     }
     return new_state, info
 

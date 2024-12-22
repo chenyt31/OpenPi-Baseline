@@ -19,6 +19,8 @@ class TrainState:
     ema_decay: float | None = struct.field(pytree_node=False)
     ema_params: at.Params | None
 
+    freeze_weights_mask: at.PyTree[bool] | None = struct.field(pytree_node=False)
+
 
 @at.typecheck
 def mask_from_regex(regex: str, pytree: at.PyTree) -> at.PyTree[bool]:

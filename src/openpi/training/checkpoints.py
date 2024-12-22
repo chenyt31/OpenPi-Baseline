@@ -82,10 +82,9 @@ def restore_state(
     step: int | None = None,
 ) -> training_utils.TrainState:
     del data_loader
-    items = {
-        "train_state": ocp.args.PyTreeRestore(state),
-    }
-    return checkpoint_manager.restore(step, items)
+    return checkpoint_manager.restore(step, args=ocp.args.Composite(train_state=ocp.args.PyTreeRestore(state)))[
+        "train_state"
+    ]
 
 
 def load_norm_stats(checkpoint_step_dir: epath.Path | str) -> dict[str, _normalize.NormStats]:

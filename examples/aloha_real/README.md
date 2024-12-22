@@ -71,3 +71,20 @@ Run the training script:
 ```bash
 python scripts/train.py <your-config-name>
 ```
+
+## Image Settings
+
+The PI camera mount is slightly different from the ALOHA camera mount, so if you are using a PI model but have a standard ALOHA setup, it is recommended to crop the base images to more closely resemble the base view of the PI camera mount. 
+
+You can specify this when running the policy server with the `--crop-ratio` flag. The `crop-ratio` parameter controls how much of the base camera image is used for the policy input. A value of 1.0 uses the full image, while smaller values crop the image more tightly around the center. We recommend using a value of 0.8 for testing models trained on the PI dataset if you are using a standard ALOHA setup.
+
+```bash
+uv run scripts/serve_policy.py --env ALOHA --default_prompt='fold the towel' --crop-ratio 0.8
+```
+
+or with Docker:
+
+```bash
+export SERVER_ARGS="--env ALOHA --default_prompt='fold the towel' --crop-ratio 0.8"
+docker compose -f examples/aloha_real/compose.yml up --build
+```

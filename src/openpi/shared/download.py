@@ -58,7 +58,7 @@ def maybe_download(url: str, **kwargs) -> pathlib.Path:
         path = pathlib.Path(url)
         if not path.exists():
             raise FileNotFoundError(f"File not found at {url}")
-        return path
+        return path.resolve()
 
     local_path = get_cache_dir() / parsed.netloc / parsed.path.strip("/")
     local_path = local_path.resolve()

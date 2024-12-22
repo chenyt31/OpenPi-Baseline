@@ -1,3 +1,8 @@
+"""Functionality to handle internal pi checkpoints.
+
+Used to test internal pi checkpoints and provides utilities to convert them to openpi checkpoints.
+"""
+
 import pathlib
 from typing import Any
 
@@ -16,7 +21,36 @@ from openpi.shared import normalize as _normalize
 import openpi.shared.array_typing as at
 import openpi.shared.download as download
 
-# TODO(ury): Remove before open sourcing and consider replacing with an official export API.
+
+def convert_to_openpi(
+    ckpt_dir: pathlib.Path | str, processor: str, out_dir: pathlib.Path | str, param_path: str = "decoder"
+) -> None:
+    """Convert a monopi checkpoint to an openpi checkpoint."""
+    out_dir = pathlib.Path(out_dir)
+    if out_dir.exists():
+        raise FileExistsError(f"Output directory already exists: {out_dir}")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load params and norm stats.
+    ckpt_dir = download.maybe_download(str(ckpt_dir))
+    sharding = jax.sharding.SingleDeviceSharding(jax.devices("cpu")[0])
+    params = _load_params(ckpt_dir, sharding=sharding)
+    norm_stats = _import_norm_stats(ckpt_dir, processor)
+
+    for part in param_path.split("/"):
+        if part not in params:
+            raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
+        params = params[part]
+
+    # Load the monopi model.
+    # Save params.
+    ckpt = ocp.StandardCheckpointer()
+    ckpt.save(out_dir / "params", params)
+    ckpt.wait_until_finished()
+
+    # Save norm stats.
+    _normalize.save(out_dir / "assets", norm_stats)
 
 
 @struct.dataclass
@@ -28,17 +62,17 @@ class PiModel(_model.BaseModel):
     exported: jax.export.Exported = struct.field(pytree_node=False)
     example_spec: Any = struct.field(pytree_node=False)
     sample_spec: Any = struct.field(pytree_node=False)
-    ckpt_path: pathlib.Path = struct.field(pytree_node=False)
+    ckpt_dir: pathlib.Path = struct.field(pytree_node=False)
 
     @classmethod
-    def from_checkpoint(cls, ckpt_path: pathlib.Path | str) -> "PiModel":
-        """Load a model from a monopi model checkpoint directory."""
-        ckpt_path = download.maybe_download(str(ckpt_path))
-        with (ckpt_path / "graph").open("rb") as f:
+    def from_checkpoint(cls, ckpt_dir: pathlib.Path | str) -> "PiModel":
+        """Load a model from a monopi model checkpoint directory. Must point at the "model" sub-directory."""
+        ckpt_dir = download.maybe_download(str(ckpt_dir))
+        with (ckpt_dir / "graph").open("rb") as f:
             exported = jax.export.deserialize(f.read())
 
         input_spec = jax.tree.unflatten(exported.in_tree, exported.in_avals)[0]
-        params = _load_params(ckpt_path, input_spec[0])
+        params = _load_params(ckpt_dir, input_spec[0])
         example_spec = input_spec[2]
         sample_spec = input_spec[3]
 
@@ -54,7 +88,7 @@ class PiModel(_model.BaseModel):
             exported=exported,
             example_spec=example_spec,
             sample_spec=sample_spec,
-            ckpt_path=ckpt_path,
+            ckpt_dir=ckpt_dir,
             action_horizon=action_horizon,
             action_dim=action_dim,
             max_token_len=max_token_len,
@@ -62,14 +96,12 @@ class PiModel(_model.BaseModel):
 
     @jax.jit
     @override
-    def sample_actions(
-        self, rng: at.KeyArrayLike, obs: common.Observation, **sample_kwargs
-    ) -> at.Float[at.Array, "b ah ad"]:
-        if obs.state.ndim == 2 and obs.state.shape[0] != 1:
+    def sample_actions(self, rng: at.KeyArrayLike, observation: common.Observation, **sample_kwargs) -> common.Actions:
+        if observation.state.ndim == 2 and observation.state.shape[0] != 1:
             raise ValueError("Only batch_size=1 is supported.")
 
         # Convert to the example format.
-        example = _obs_to_example(obs, self.example_spec)
+        example = _obs_to_example(observation, self.example_spec)
         example = _unbatch(example)
 
         # Resize the input images if needed.
@@ -96,7 +128,7 @@ class PiModel(_model.BaseModel):
         self,
         rng: at.KeyArrayLike,
         observation: common.Observation,
-        actions: at.Float[at.Array, "*b ah ad"],
+        actions: common.Actions,
         *,
         train: bool = False,
         params: at.Params | None = None,
@@ -108,38 +140,36 @@ class PiModel(_model.BaseModel):
         return _example_to_obs(_make_batch(example))
 
     def norm_stats(self, processor_name: str) -> dict[str, _normalize.NormStats]:
-        return import_norm_stats(self.ckpt_path, processor_name)
+        return _import_norm_stats(self.ckpt_dir, processor_name)
+
+    def set_module(self, module: common.BaseModule, param_path: str) -> _model.Model:
+        """Creates a new model that uses the same parameters but a different module.
+
+        Args:
+            module: The module to use for the model.
+            param_path: Location of the parameter sub-tree that should be loaded (e.g., decoder).
+                Can include "/" to support nesting.
+
+        Returns:
+            A new model with the parameters loaded from the checkpoint.
+        """
+        params = self.params
+        for part in param_path.split("/"):
+            if part not in params:
+                raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
+            params = params[part]
+        return _model.Model(
+            module=module,
+            params=params,
+            action_dim=self.action_dim,
+            action_horizon=self.action_horizon,
+            max_token_len=self.max_token_len,
+        )
 
 
-def model_from_checkpoint(module: common.BaseModule, ckpt_path: pathlib.Path | str, param_path: str) -> _model.Model:
-    """Create a model using a monopi checkpoint.
-
-    Args:
-        module: The module to use for the model.
-        ckpt_path: The path to the monopi checkpoint.
-        param_path: Location of the model parameters inside the checkpoint. Can include "/" to support nesting.
-
-    Returns:
-        A model with the parameters loaded from the checkpoint.
-    """
-    pi_model = PiModel.from_checkpoint(ckpt_path)
-
-    params = pi_model.params
-    for part in param_path.split("/"):
-        if part not in params:
-            raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
-        params = params[part]
-
-    return _model.Model(
-        module=module,
-        params=params,
-        action_dim=pi_model.action_dim,
-        action_horizon=pi_model.action_horizon,
-        max_token_len=pi_model.max_token_len,
-    )
-
-
-def _load_params(path: pathlib.Path, params_spec: at.PyTree, sharding: jax.sharding.Sharding | None = None):
+def _load_params(
+    path: pathlib.Path, params_spec: at.PyTree | None = None, sharding: jax.sharding.Sharding | None = None
+):
     if sharding is None:
         sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
 
@@ -147,6 +177,8 @@ def _load_params(path: pathlib.Path, params_spec: at.PyTree, sharding: jax.shard
         return jax.tree.map(lambda x: ocp.ArrayRestoreArgs(dtype=x.dtype, sharding=sharding), tree)
 
     with ocp.PyTreeCheckpointer() as ckptr:
+        if params_spec is None:
+            params_spec = ckptr.metadata(path)["params"]
         item = {"params": params_spec}
         return ckptr.restore(
             path,
@@ -219,11 +251,11 @@ def _example_to_obs(example: dict) -> common.Observation:
     )
 
 
-def import_norm_stats(ckpt_path: pathlib.Path | str, processor_name: str) -> dict[str, _normalize.NormStats]:
-    ckpt_path = pathlib.Path(ckpt_path).resolve()
-    path = ckpt_path / "processors" / processor_name
+def _import_norm_stats(ckpt_dir: pathlib.Path | str, processor_name: str) -> dict[str, _normalize.NormStats]:
+    ckpt_dir = pathlib.Path(ckpt_dir).resolve()
+    path = ckpt_dir / "processors" / processor_name
     if not path.exists():
-        raise FileNotFoundError(f"Processor {processor_name} not found in {ckpt_path}")
+        raise FileNotFoundError(f"Processor {processor_name} not found in {ckpt_dir}")
 
     if not (found_files := list(path.glob("*/norm_stats.msgpack"))):
         raise FileNotFoundError(f"norm_stats.msgpack not found in {path}")

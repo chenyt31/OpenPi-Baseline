@@ -106,7 +106,7 @@ class BaseModel(abc.ABC):
         self,
         rng: at.KeyArrayLike,
         observation: common.Observation,
-        actions: at.Float[at.Array, "*b ah ad"],
+        actions: common.Actions,
         *,
         train: bool = False,
         params: at.Params | None = None,
@@ -118,7 +118,7 @@ class BaseModel(abc.ABC):
         rng: at.KeyArrayLike,
         observation: common.Observation,
         **sample_kwargs,
-    ) -> at.Float[at.Array, "*b ah ad"]: ...
+    ) -> common.Actions: ...
 
 
 @struct.dataclass
@@ -197,8 +197,17 @@ class Model(BaseModel):
         observation_spec, _ = create_inputs_spec(self, batch_size=batch_size)
         return jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), observation_spec)
 
+    def fake_act(self, batch_size: int = 1) -> common.Actions:
+        _, action_spec = create_inputs_spec(self, batch_size=batch_size)
+        return jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), action_spec)
 
-def restore_params(params_path: pathlib.Path | str, *, sharding: jax.sharding.Sharding | None = None) -> at.Params:
+
+def restore_params(
+    params_path: pathlib.Path | str,
+    *,
+    dtype: jnp.dtype | None = None,
+    sharding: jax.sharding.Sharding | None = None,
+) -> at.Params:
     """Restores unstructured params PyTree from a checkpoint. This works with checkpoints saved with `save_state` during
     openpi training (see `training/checkpoints.py`) as well as pre-trained checkpoints released for openpi.
     """
@@ -219,7 +228,7 @@ def restore_params(params_path: pathlib.Path | str, *, sharding: jax.sharding.Sh
             ocp.args.PyTreeRestore(
                 item=item,
                 restore_args=jax.tree.map(
-                    lambda _: ocp.ArrayRestoreArgs(sharding=sharding, restore_type=restore_type), item
+                    lambda _: ocp.ArrayRestoreArgs(sharding=sharding, restore_type=restore_type, dtype=dtype), item
                 ),
                 transforms={},  # required to load a partial PyTree (e.g., only params from a full TrainState)
             ),

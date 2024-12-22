@@ -8,12 +8,12 @@ from openpi.training import config as _config
 from . import train
 
 
-@pytest.mark.parametrize("config_name", ["debug", "pi0_small"])
+@pytest.mark.parametrize("config_name", ["debug"])
 def test_train(tmp_path: pathlib.Path, config_name: str):
     config = dataclasses.replace(
-        _config.CONFIGS[config_name],
+        _config._CONFIGS_DICT[config_name],  # noqa: SLF001
         batch_size=2,
-        checkpoint_dir=tmp_path / "checkpoint",
+        checkpoint_base_dir=tmp_path / "checkpoint",
         exp_name="test",
         overwrite=False,
         resume=False,
@@ -22,5 +22,6 @@ def test_train(tmp_path: pathlib.Path, config_name: str):
     )
     train.main(config)
 
+    # test resuming
     config = dataclasses.replace(config, resume=True, num_train_steps=4)
     train.main(config)

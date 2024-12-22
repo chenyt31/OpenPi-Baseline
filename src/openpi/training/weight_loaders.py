@@ -29,6 +29,10 @@ class NoOpWeightLoader(WeightLoader):
 
 @dataclasses.dataclass(frozen=True)
 class CheckpointWeightLoader(WeightLoader):
+    """Loads an entire set of weights from a checkpoint. Compatible with both officially released Pi checkpoints and
+    checkpoints saved during training by openpi itself. Will use EMA parameters if available.
+    """
+
     ckpt_path: str
 
     def load(self, params: at.Params) -> at.Params:
@@ -89,6 +93,10 @@ def _fix_groupnorm(params: at.Params) -> at.Params:
 
 @dataclasses.dataclass(frozen=True)
 class PaliGemmaWeightLoader(WeightLoader):
+    """Loads weights from the official PaliGemma checkpoint. Compatible with the Pi0 model. Weights from the PaliGemma
+    expert will be overwritten whereas weights from the action expert will remain untouched.
+    """
+
     def load(self, params: at.Params) -> at.Params:
         path = download.download("gs://vertex-model-garden-paligemma-us/paligemma/pt_224.npz", gs={"token": "anon"})
         with path.open("rb") as f:
@@ -110,6 +118,10 @@ class PaliGemmaWeightLoader(WeightLoader):
 
 @dataclasses.dataclass(frozen=True)
 class GoogleViTWeightLoader(WeightLoader):
+    """Loads weights from a Google ViT checkpoint. Compatible with the Pi0-small model. Only overwrites weights from the
+    image backbones in the encoder.
+    """
+
     # The Google ViT can take any resolution, including non-square ones. The resolution specified here must match the
     # resolution of the images passed into the model.
     target_resolution: tuple[int, int] = (224, 224)

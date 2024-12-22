@@ -63,7 +63,7 @@ def posemb_sincos(
 
 
 class Module(common.BaseModule):
-    """Pi-0 module (transfusion-style decoder-only diffusion)."""
+    """Pi0 module (transfusion-style decoder-only flow matching)."""
 
     dtype: str = "bfloat16"
     paligemma_variant: _gemma.Variant = "gemma_2b"
@@ -101,6 +101,8 @@ class Module(common.BaseModule):
         noise: at.Float[at.Array, "b ah ad"] | None = None,
         num_steps: int | at.Int[at.Array, ""] = 10,
     ) -> at.Float[at.Array, "b ah ad"]:
+        # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
+        # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
         dt = -1.0 / num_steps
         batch_size = obs.state.shape[0]
         if noise is None:
@@ -147,8 +149,8 @@ class Module(common.BaseModule):
 
         1. mode="train": This is full forward pass, used during training.
         2. mode="fill_cache": This is used to compute the KV cache for the prefix (image + language inputs).
-        3. mode="decode": This is used to perform a diffusion decoding step; it uses the KV cache computed during the
-            fill_cache step.
+        3. mode="decode": This is used to perform a flow matching integration step; it uses the KV cache computed in the
+            fill_cache mode.
         """
         paligemma_scope = self.scope.push("PaliGemma")
         llm_scope = paligemma_scope.push("llm")

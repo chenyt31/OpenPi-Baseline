@@ -127,6 +127,7 @@ class Model(BaseModel):
     params: at.Params | None = None
 
     def init_params(self, rng: at.KeyArrayLike, observation: common.Observation, actions: common.Actions) -> at.Params:
+        """Initialize and return the parameters by tracing the module's `compute_loss` function."""
         preprocess_rng, init_rng = jax.random.split(rng)
         obs = preprocess_observation(preprocess_rng, observation)
 
@@ -145,7 +146,9 @@ class Model(BaseModel):
     ) -> at.Float[at.Array, ""]:
         if params is None:
             if self.params is None:
-                raise ValueError("Model is missing parameters.")
+                raise ValueError(
+                    "No parameters found. Either bind the model to parameters using `set_params` or provide params directly."
+                )
             params = self.params
 
         loss_rng, preprocess_rng = jax.random.split(rng)
@@ -167,7 +170,9 @@ class Model(BaseModel):
         **sample_kwargs,
     ) -> common.Actions:
         if self.params is None:
-            raise ValueError("Model is missing parameters.")
+            raise ValueError(
+                "No parameters found. Bind the model to parameters using `set_params` before calling `sample_actions`."
+            )
 
         preprocess_rng, sample_rng = jax.random.split(rng)
 
@@ -185,6 +190,7 @@ class Model(BaseModel):
         return actions
 
     def set_params(self, params: at.Params) -> "Model":
+        """Returns a copy of the model bound to `params`."""
         return dataclasses.replace(self, params=params)
 
     def fake_obs(self, batch_size: int = 1) -> common.Observation:
@@ -196,7 +202,7 @@ def restore_params(ckpt_path: pathlib.Path | str, *, sharding: jax.sharding.Shar
     """Restores unstructured params PyTree from a checkpoint. This works with checkpoints saved with `save_state` during
     openpi training (see `training/checkpoints.py`) as well as pre-trained checkpoints released for openpi.
     """
-    ckpt_path = pathlib.Path(ckpt_path).resolve() / "model"
+    ckpt_path = pathlib.Path(ckpt_path).resolve()
     if not ckpt_path.exists():
         raise FileNotFoundError(f"Checkpoint not found at: {ckpt_path}")
 

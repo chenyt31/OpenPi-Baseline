@@ -1,5 +1,6 @@
 from collections.abc import Callable
 import re
+from typing import Any
 
 from flax import struct
 import jax
@@ -22,6 +23,11 @@ class TrainState:
 
 @at.typecheck
 def mask_from_regex(regex: str, pytree: at.PyTree) -> at.PyTree[bool]:
+    """Returns a PyTree of the same structure as `pytree` where each leaf is `True` if the leaf's keypath matches the regex.
+
+    Keypaths are generated using `jax.tree_util.keystr`, so they'll typically look something like `['a']['b']['c']['d']`
+    (for a plain dictionary).
+    """
     compiled = re.compile(regex)
     return jax.tree_util.tree_map_with_path(
         lambda path, _: compiled.fullmatch(jax.tree_util.keystr(path)) is not None, pytree
@@ -29,12 +35,15 @@ def mask_from_regex(regex: str, pytree: at.PyTree) -> at.PyTree[bool]:
 
 
 @at.typecheck
-def to_readable_mask_info(mask: at.PyTree[bool], interp_func: Callable[[bool], str]) -> str:
-    tree, _ = jax.tree_util.tree_flatten_with_path(mask)
+def tree_to_info(tree: at.PyTree, interp_func: Callable[[Any], str] = str) -> str:
+    """Converts a PyTree into a human-readable string for logging. Optionally, `interp_func` can be provided to convert
+    the leaf values to more meaningful strings.
+    """
+    tree, _ = jax.tree_util.tree_flatten_with_path(tree)
     return "\n".join(f"{jax.tree_util.keystr(path)}: {interp_func(value)}" for path, value in tree)
 
 
 @at.typecheck
-def to_tree_info(tree: at.PyTree) -> str:
-    tree, _ = jax.tree_util.tree_flatten_with_path(tree)
-    return "\n".join(f"{jax.tree_util.keystr(path)}: {value.shape}@{value.dtype}" for path, value in tree)
+def array_tree_to_info(tree: at.PyTree) -> str:
+    """Converts a PyTree of arrays into a human-readable string for logging."""
+    return tree_to_info(tree, lambda x: f"{x.shape}@{x.dtype}")

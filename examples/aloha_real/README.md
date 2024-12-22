@@ -54,8 +54,9 @@ While we strongly recommend fine-tuning the model to your own data to adapt it t
 
 ## Training on your own Aloha dataset
 
-OpenPI suppports training on data collected in the default aloha hdf5 format. To do so you must first convert the data to the huggingface format. We include `scripts/aloha_hd5.py` to help you do this. Once the dataset is converted, add a new `TrainConfig` to `src/openpi/training/configs.py` and replace repo id with the id assigned to your dataset during conversion.
+OpenPI suppports training on data collected in the default aloha hdf5 format. To do so you must first convert the data to the huggingface format. We include `scripts/aloha_hd5.py` to help you do this. Once the dataset is converted, add a new `TrainConfig` to `src/openpi/training/configs.py` and replace repo id with the id assigned to your dataset during conversion. Before you run the training script, you must first run `python scripts/compute_norm_stats.py --config-name <your-config-name>` to compute the normalization statistics for your dataset.
 
+Example config:
 ```python
 TrainConfig(
     name=<your-config-name>,
@@ -66,8 +67,7 @@ TrainConfig(
 ),
 ```
 
-Run the training script:
-
+Example command for kicking off training:
 ```bash
 uv run scripts/train.py <your-config-name>
 ```

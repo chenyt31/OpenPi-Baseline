@@ -33,7 +33,7 @@ class PiModel(_model.BaseModel):
     @classmethod
     def from_checkpoint(cls, ckpt_path: pathlib.Path | str) -> "PiModel":
         """Load a model from a monopi model checkpoint directory."""
-        ckpt_path = download.download(str(ckpt_path))
+        ckpt_path = download.maybe_download(str(ckpt_path))
         with (ckpt_path / "graph").open("rb") as f:
             exported = jax.export.deserialize(f.read())
 

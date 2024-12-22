@@ -37,7 +37,7 @@ class CheckpointWeightLoader(WeightLoader):
     ckpt_path: str
 
     def load(self, params: at.Params) -> at.Params:
-        return _model.restore_params(download.download(self.ckpt_path))
+        return _model.restore_params(download.maybe_download(self.ckpt_path))
 
 
 def _recover_tree(d: dict) -> dict:
@@ -99,7 +99,9 @@ class PaliGemmaWeightLoader(WeightLoader):
     """
 
     def load(self, params: at.Params) -> at.Params:
-        path = download.download("gs://vertex-model-garden-paligemma-us/paligemma/pt_224.npz", gs={"token": "anon"})
+        path = download.maybe_download(
+            "gs://vertex-model-garden-paligemma-us/paligemma/pt_224.npz", gs={"token": "anon"}
+        )
         with path.open("rb") as f:
             flat_params = dict(np.load(f, allow_pickle=False))
         # The weights are stored in a special big_vision format, so we need a special function to unflatten them.
@@ -128,7 +130,7 @@ class GoogleViTWeightLoader(WeightLoader):
     target_resolution: tuple[int, int] = (224, 224)
 
     def load(self, params: at.Params) -> at.Params:
-        path = download.download(
+        path = download.maybe_download(
             "gs://vit_models/augreg/R26_S_32-i21k-300ep-lr_0.001-aug_light1-wd_0.1-do_0.0-sd_0.0.npz",
             gs={"token": "anon"},
         )

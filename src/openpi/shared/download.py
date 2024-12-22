@@ -35,8 +35,10 @@ def get_cache_dir() -> pathlib.Path:
     return cache_dir
 
 
-def download(url: str, **kwargs) -> pathlib.Path:
+def maybe_download(url: str, **kwargs) -> pathlib.Path:
     """Download a file or directoryfrom a remote filesystem to the local cache, and return the local path.
+
+    If the local file already exists, it will be returned directly.
 
     It is safe to call this function concurrently from multiple processes.
     See `get_cache_dir` for more details on the cache directory.

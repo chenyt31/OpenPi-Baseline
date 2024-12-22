@@ -61,7 +61,7 @@ class BaseModule(nn.Module, abc.ABC):
     def compute_loss(
         self,
         obs: Observation,
-        target_actions: at.Float[at.Array, "b ah ad"],
+        target_actions: Actions,
         *,
         timestep: at.Float[at.Array, " b"] | None = None,
     ) -> at.Float[at.Array, "b ah"]: ...
@@ -74,4 +74,4 @@ class BaseModule(nn.Module, abc.ABC):
         action_dim: int,
         obs: Observation,
         **sample_kwargs,
-    ) -> at.Float[at.Array, "b ah ad"]: ...
+    ) -> Actions: ...

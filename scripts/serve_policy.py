@@ -13,6 +13,7 @@ from openpi.policies import libero_policy
 from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.serving import websocket_policy_server
+from openpi.shared import delta_actions
 from openpi.training import config as _config
 
 
@@ -52,7 +53,7 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
             model = _exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_real/model")
 
             logging.info("Creating policy...")
-            delta_action_mask = _policy_config.make_bool_mask(6, -1, 6, -1)
+            delta_action_mask = delta_actions.make_bool_mask(6, -1, 6, -1)
             config = _policy_config.PolicyConfig(
                 model=model,
                 norm_stats=model.norm_stats("trossen_biarm_single_base_cam_24dim"),

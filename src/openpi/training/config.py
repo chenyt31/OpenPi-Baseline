@@ -12,6 +12,7 @@ import openpi.models.pi0 as pi0
 import openpi.models.pi0_small as pi0_small
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
+import openpi.shared.delta_actions as delta_actions
 import openpi.shared.download as download
 import openpi.shared.normalize as _normalize
 import openpi.training.optimizer as _optimizer
@@ -230,6 +231,65 @@ _CONFIGS = [
             delta_action_mask=None,
         ),
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),
+    ),
+    # export LEROBOT_HOME=/mnt/weka/michael/lerobot
+    TrainConfig(
+        name="pi0_pretrained_aloha_play_data_50",
+        data=LeRobotAlohaDataConfig(
+            repo_id="michaelequi01/aloha_play_data_50",
+            delta_action_mask=delta_actions.make_bool_mask(6, -1, 6, -1),
+            adapt_to_pi=True,
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observations.images.cam_high",
+                                "cam_left_wrist": "observations.images.cam_left_wrist",
+                                "cam_right_wrist": "observations.images.cam_right_wrist",
+                            },
+                            "state": "observations.qpos",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base"),
+        num_train_steps=10_000,
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000, peak_lr=2.5e-5, decay_steps=10_000, decay_lr=2.5e-6
+        ),
+    ),
+    TrainConfig(
+        name="aloha_pen_uncap_diverse",
+        data=LeRobotAlohaDataConfig(
+            repo_id="michaelequi01/aloha_pen_uncap_diverse",
+            delta_action_mask=delta_actions.make_bool_mask(6, -1, 6, -1),
+            adapt_to_pi=True,
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observations.images.cam_high",
+                                "cam_left_wrist": "observations.images.cam_left_wrist",
+                                "cam_right_wrist": "observations.images.cam_right_wrist",
+                            },
+                            "state": "observations.qpos",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base"),
+        num_train_steps=10_000,
+        batch_size=512,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000, peak_lr=2.5e-5, decay_steps=10_000, decay_lr=2.5e-6
+        ),
     ),
     #
     # pi0_small configs.

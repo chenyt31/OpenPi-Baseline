@@ -53,10 +53,10 @@ def create_dataset(config: _config.TrainConfig) -> tuple[_config.DataConfig, _da
     return data_config, _data_loader.create_dataset(data_config, model)
 
 
-def main(config_name: str, chunk_size: int = 1000):
+def main(config_name: str, chunk_size: int = 1000, max_frames: int = 1000000):
     config = _config.get_config(config_name)
     data_config, dataset = create_dataset(config)
-    num_frames = len(dataset)
+    num_frames = min(max_frames, len(dataset))
     del dataset
 
     keys = ["state", "actions"]

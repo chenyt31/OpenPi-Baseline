@@ -71,3 +71,20 @@ Run the training script:
 ```bash
 python scripts/train.py <your-config-name>
 ```
+
+## Reset Positions
+
+The robot can be initialized in two different reset positions. By default, the robot is initialized in the reset position of the data collected at PI. If you collect data with the standard ALOHA reset position or are using a model fine-tuned on ALOHA data, it is recommended to use the `aloha` reset mode to initialize the robot in the standard ALOHA reset position. 
+
+You can specify this when running the policy server with the `--reset-mode` flag.
+
+```bash
+uv run scripts/serve_policy.py --env ALOHA --default_prompt='uncap the pen' --reset-mode aloha
+```
+
+or with Docker:
+
+```bash
+export SERVER_ARGS="--env ALOHA --default_prompt='uncap the pen' --reset-mode aloha"
+docker compose -f examples/aloha_real/compose.yml up --build
+```

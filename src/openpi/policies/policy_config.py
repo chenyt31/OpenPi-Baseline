@@ -3,6 +3,8 @@ import dataclasses
 import logging
 from typing import Any
 
+import jax.numpy as jnp
+
 from openpi.models import tokenizer
 import openpi.models.model as _model
 import openpi.policies.policy as _policy
@@ -56,7 +58,7 @@ def create_trained_policy(
 
     logging.info("Loading model...")
     model = train_config.create_model()
-    model = model.set_params(_model.restore_params(checkpoint_path))
+    model = model.set_params(_model.restore_params(checkpoint_path, dtype=jnp.bfloat16))
 
     data_config = train_config.data.create(train_config.metadata_dir, model)
     norm_stats = _checkpoints.load_norm_stats(checkpoint_path)

@@ -68,7 +68,7 @@ def save_state(
         # Save the normalization stats.
         norm_stats = data_loader.data_config().norm_stats
         if norm_stats is not None:
-            (directory / "norm_stats.json").write_text(_normalize.serialize_json(norm_stats))
+            _normalize.save(directory, norm_stats)
 
     # Split params that can be used for inference into a separate item.
     train_state, params = _split_params(state)
@@ -103,10 +103,7 @@ def restore_state(
 
 def load_norm_stats(checkpoint_step_dir: epath.Path | str) -> dict[str, _normalize.NormStats]:
     checkpoint_step_dir = epath.Path(checkpoint_step_dir)
-    json_path = checkpoint_step_dir / "assets" / "norm_stats.json"
-    if not json_path.exists():
-        raise FileNotFoundError(f"Norm stats file not found at: {json_path}")
-    return _normalize.deserialize_json(json_path.read_text())
+    return _normalize.load(checkpoint_step_dir / "assets")
 
 
 class Callback(Protocol):

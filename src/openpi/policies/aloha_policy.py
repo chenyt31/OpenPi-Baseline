@@ -9,11 +9,13 @@ from openpi.models import model as _model
 from openpi.models import pi0
 from openpi.models import tokenizer
 from openpi.policies import policy as _policy
+from openpi.shared import download
 
 
 def load_pi0_model() -> _model.Model:
     model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
-    return model.set_params(_model.restore_params("checkpoints/pi0_base"))
+    params_path = download.maybe_download("s3://openpi-assets-internal/checkpoints/pi0_base/model")
+    return model.set_params(_model.restore_params(params_path))
 
 
 @dataclasses.dataclass

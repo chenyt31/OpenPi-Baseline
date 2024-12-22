@@ -2,6 +2,7 @@ import contextlib
 import functools as ft
 import inspect
 
+import beartype
 import jax
 import jax.core
 from jaxtyping import Array  # noqa: F401
@@ -19,7 +20,6 @@ from jaxtyping import UInt8  # noqa: F401
 from jaxtyping import config
 from jaxtyping import jaxtyped
 import jaxtyping._decorator
-import typeguard
 
 # patch jaxtyping to handle https://github.com/patrick-kidger/jaxtyping/issues/277.
 # the problem is that custom PyTree nodes are sometimes initialized with arbitrary types (e.g., `jax.ShapeDtypeStruct`,
@@ -41,7 +41,7 @@ Params = PyTree[Float[ArrayLike, "..."]]
 Batch = PyTree[Shaped[ArrayLike, "b ..."]]
 
 # runtime type-checking decorator
-typecheck = ft.partial(jaxtyped, typechecker=typeguard.typechecked)
+typecheck = ft.partial(jaxtyped, typechecker=beartype.beartype)
 
 
 @contextlib.contextmanager

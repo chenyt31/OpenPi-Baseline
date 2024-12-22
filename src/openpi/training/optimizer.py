@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -8,6 +8,7 @@ import optax
 import openpi.shared.array_typing as at
 
 
+@runtime_checkable
 class LRScheduleConfig(Protocol):
     def create(self) -> optax.Schedule: ...
 
@@ -53,12 +54,12 @@ class RsqrtDecaySchedule(LRScheduleConfig):
         )
 
 
+@runtime_checkable
 class OptimizerConfig(Protocol):
     def create(
         self,
         lr: optax.ScalarOrSchedule,
         weight_decay_mask: at.PyTree | None = None,
-        freeze_weights_mask: at.PyTree | None = None,
     ) -> optax.GradientTransformation: ...
 
 

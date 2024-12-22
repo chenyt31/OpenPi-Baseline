@@ -3,6 +3,7 @@ import dataclasses
 
 import einops
 import numpy as np
+from scipy.ndimage import zoom
 
 from openpi import transforms
 from openpi.models import model as _model
@@ -25,6 +26,8 @@ class PolicyConfig:
     delta_action_mask: Sequence[bool] | None = None
     # If true, will adapt the joint and gripper values to match the pi runtime.
     adapt_to_pi: bool = True
+    # Ratio of base image cropped area relative to original image size (e.g. 0.8 for 80%).
+    crop_ratio: float = 1.0
 
 
 def create_aloha_policy(model: _model.BaseModel, config: PolicyConfig) -> _policy.Policy:
@@ -36,6 +39,7 @@ def create_aloha_policy(model: _model.BaseModel, config: PolicyConfig) -> _polic
                 action_dim=model.action_dim,
                 delta_action_mask=config.delta_action_mask,
                 adapt_to_pi=config.adapt_to_pi,
+                crop_ratio=config.crop_ratio,
             ),
             transforms.Normalize(config.norm_stats),
             transforms.TokenizePrompt(
@@ -223,14 +227,23 @@ class AlohaInputs(transforms.DataTransformFn):
         action_dim: The dimension of the action space.
         delta_action_mask: A boolean mask for the action dimensions. If None, absolute actions are used.
         adapt_to_pi: If true, will adapt the joint and gripper values to match the pi runtime.
+        crop_ratio: Ratio of base image cropped area relative to original image size (e.g. 0.8 for 80%). If None, no cropping is applied.
     """
 
     EXPECTED_CAMERAS = ("cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist")
 
-    def __init__(self, action_dim: int, *, delta_action_mask: Sequence[bool] | None = None, adapt_to_pi: bool = False):
+    def __init__(
+        self,
+        action_dim: int,
+        *,
+        delta_action_mask: Sequence[bool] | None = None,
+        adapt_to_pi: bool = False,
+        crop_ratio: float | None = None,
+    ):
         self._action_dim = action_dim
         self._delta_action_mask = delta_action_mask
         self._adapt_to_pi = adapt_to_pi
+        self._crop_ratio = crop_ratio
 
     def __call__(self, data: dict) -> dict:
         data = _decode_aloha(data, adapt_to_pi=self._adapt_to_pi)
@@ -244,6 +257,8 @@ class AlohaInputs(transforms.DataTransformFn):
 
         # Assume that base image always exists.
         base_image = in_images["cam_high"]
+        if self._crop_ratio is not None:
+            base_image = _crop_and_resize(base_image, self._crop_ratio)
         batch_size = base_image.shape[:-3]
 
         images = {
@@ -420,3 +435,51 @@ def _encode_actions_inv(actions: np.ndarray, *, adapt_to_pi: bool = False) -> np
         actions[..., 13] = gripper_from_angular_inv(actions[..., 13])
 
     return actions
+
+
+def _crop_and_resize(image: np.ndarray, crop_ratio: float) -> np.ndarray:
+    """
+    Crops the image centered horizontally and aligned to the bottom vertically,
+    then resizes it back to the original size.
+    Args:
+        image: The input image array [..., height, width, channel].
+        crop_ratio: The ratio of the crop area to the original image size.
+    Returns:
+        The cropped and resized image with the same dimensions as the input.
+    """
+    assert 0 < crop_ratio < 1, f"Invalid crop ratio: {crop_ratio}. Expected (0, 1)."
+    original_dtype = image.dtype
+    original_min, original_max = image.min(), image.max()
+    if not (0 <= original_min <= 255 and 0 <= original_max <= 255):
+        raise ValueError(f"Image out of expected range: min={original_min}, max={original_max}. Expected [0, 255].")
+
+    height, width, channels = image.shape[-3:]
+    crop_height, crop_width = int(height * crop_ratio), int(width * crop_ratio)
+
+    # Compute cropping bounds
+    start_h = height - crop_height
+    end_h = height
+    start_w = (width - crop_width) // 2
+    end_w = start_w + crop_width
+
+    # Validate bounds
+    if start_h < 0 or start_w < 0 or end_h > height or end_w > width:
+        raise ValueError("Cropping bounds exceed the image dimensions.")
+
+    cropped_image = image[..., start_h:end_h, start_w:end_w, :]
+    zoom_factors = [1] * (cropped_image.ndim - 3) + [height / crop_height, width / crop_width, 1]
+    resized_image = zoom(cropped_image, zoom_factors, order=1)
+
+    # Check that the resized image is still within the range [0, 255]
+    resized_min, resized_max = resized_image.min(), resized_image.max()
+    if not (0 <= resized_min <= 255 and 0 <= resized_max <= 255):
+        raise ValueError(
+            f"Resized image out of expected range: min={resized_min}, max={resized_max}. Expected [0, 255]."
+        )
+    # Check data type consistency
+    if resized_image.dtype != original_dtype:
+        raise TypeError(
+            f"Data type mismatch: original image dtype is {original_dtype}, but resized image dtype is {resized_image.dtype}."
+        )
+
+    return resized_image

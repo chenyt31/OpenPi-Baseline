@@ -122,7 +122,7 @@ class TrainConfig:
     name: tyro.conf.Suppress[str]
     # Project name.
     project_name: str = "openpi"
-    # Experiment name. Will be used to name the metadata and checkpoint directories. Can't be empty.
+    # Experiment name. Will be used to name the metadata and checkpoint directories.
     exp_name: str = tyro.MISSING
 
     # Number of action dimensions.
@@ -132,18 +132,22 @@ class TrainConfig:
     # Maximum token length for the prompt.
     max_token_len: int = 48
 
+    # The Flax module representing the neural network implementation; must adhere to the BaseModule interface. We can put
+    # it directly into the config like this because unbound Flax modules are just dataclasses.
     module: common.BaseModule = dataclasses.field(default_factory=pi0.Module)
+    # A weight loader can optionally load (possibly partial) weights from disk after the model is initialized.
     weight_loader: weight_loaders.WeightLoader = dataclasses.field(default_factory=weight_loaders.NoOpWeightLoader)
 
     lr_schedule: _optimizer.LRScheduleConfig = dataclasses.field(default_factory=_optimizer.CosineDecaySchedule)
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
     ema_decay: float | None = 0.99
 
-    # Data config factory.
+    # Determines the data to be trained on.
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)
 
-    # Base directories for metadata and checkpoints.
+    # Base directory for metadata (e.g., norm stats).
     metadata_base_dir: str = "./assets"
+    # Base directory for checkpoints.
     checkpoint_base_dir: str = "./checkpoints"
 
     # Random seed that will be used by random generators during training.
@@ -194,6 +198,10 @@ class TrainConfig:
             max_token_len=self.max_token_len,
         )
 
+    def __post_init__(self) -> None:
+        if self.resume and self.overwrite:
+            raise ValueError("Cannot resume and overwrite at the same time.")
+
 
 _CONFIGS = [
     #
@@ -212,7 +220,7 @@ _CONFIGS = [
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             delta_action_mask=None,
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base/model"),
         num_train_steps=30_000,
     ),
     TrainConfig(
@@ -248,7 +256,7 @@ _CONFIGS = [
         name="debug_restore",
         batch_size=2,
         module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
-        resume=True,
+        weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/debug/debug/9/train_state"),
         exp_name="debug",
         num_train_steps=10,
         wandb_enabled=False,

@@ -12,7 +12,7 @@ import openpi.training.data_loader as _data_loader
 import openpi.training.utils as training_utils
 
 
-def initialize_checkpoint(
+def initialize_checkpoint_dir(
     checkpoint_dir: epath.Path | str, keep_interval: int, *, overwrite: bool, resume: bool
 ) -> tuple[ocp.CheckpointManager, bool]:
     checkpoint_dir = epath.Path(checkpoint_dir).resolve()
@@ -36,7 +36,7 @@ def initialize_checkpoint(
         checkpoint_dir,
         item_handlers={
             "assets": CallbackHandler(),
-            "model": ocp.PyTreeCheckpointHandler(),
+            "train_state": ocp.PyTreeCheckpointHandler(),
         },
         options=ocp.CheckpointManagerOptions(
             max_to_keep=1,
@@ -70,7 +70,7 @@ def save_state(
 
     items = {
         "assets": save_assets,
-        "model": state,
+        "train_state": state,
     }
     checkpoint_manager.save(step, items)
 
@@ -83,7 +83,7 @@ def restore_state(
 ) -> training_utils.TrainState:
     del data_loader
     items = {
-        "model": ocp.args.PyTreeRestore(state),
+        "train_state": ocp.args.PyTreeRestore(state),
     }
     return checkpoint_manager.restore(step, items)
 

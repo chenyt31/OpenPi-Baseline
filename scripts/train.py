@@ -68,6 +68,7 @@ def init_wandb(config: _config.TrainConfig, *, resuming: bool, log_code: bool = 
 
 
 def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader, params: at.Params) -> at.Params:
+    """Runs the weight loader and validates that the params structure, shapes, and dtypes are unchanged."""
     new_params = weight_loader.load(jax.tree.map(lambda x: x, params))
 
     if errors := list(private_tree_util.equality_errors(params, new_params)):
@@ -194,7 +195,7 @@ def main(config: _config.TrainConfig):
     data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
-    checkpoint_manager, resuming = _checkpoints.initialize_checkpoint(
+    checkpoint_manager, resuming = _checkpoints.initialize_checkpoint_dir(
         config.checkpoint_dir,
         keep_interval=config.keep_interval,
         overwrite=config.overwrite,
@@ -213,11 +214,11 @@ def main(config: _config.TrainConfig):
     )
     data_iter = iter(data_loader)
     batch = next(data_iter)
-    logging.info(f"Data loader initialized: {training_utils.to_tree_info(batch)}")
+    logging.info(f"Initialized data loader:\n{training_utils.array_tree_to_info(batch)}")
 
     train_state, train_state_sharding = init_train_state(config, model, init_rng, batch, mesh, resume=resuming)
     jax.block_until_ready(train_state)
-    logging.info(f"Initialized train state:\n{training_utils.to_tree_info(train_state.params)}")
+    logging.info(f"Initialized train state:\n{training_utils.array_tree_to_info(train_state.params)}")
 
     if resuming:
         train_state = _checkpoints.restore_state(checkpoint_manager, train_state, data_loader)

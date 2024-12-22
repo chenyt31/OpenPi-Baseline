@@ -40,6 +40,7 @@ KeyArrayLike = jax.typing.ArrayLike
 Params = PyTree[Float[ArrayLike, "..."]]
 Batch = PyTree[Shaped[ArrayLike, "b ..."]]
 
+# runtime type-checking decorator
 typecheck = ft.partial(jaxtyped, typechecker=typeguard.typechecked)
 
 

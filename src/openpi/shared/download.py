@@ -21,6 +21,8 @@ from types_boto3_s3.service_resource import ObjectSummary
 # Environment variable to control cache directory path, ~/.cache/openpi will be used by default.
 _OPENPI_DATA_HOME = "OPENPI_DATA_HOME"
 
+logger = logging.getLogger(__name__)
+
 
 def get_cache_dir() -> pathlib.Path:
     default_dir = "~/.cache/openpi"
@@ -64,7 +66,7 @@ def download(url: str, **kwargs) -> pathlib.Path:
         return local_path
 
     # Download file from remote file system.
-    print(f"Downloading {url} to {local_path}")
+    logger.info(f"Downloading {url} to {local_path}")
     with filelock.FileLock(local_path.with_suffix(".lock")):
         scratch_path = local_path.with_suffix(".partial")
 
@@ -87,7 +89,7 @@ def _download_fsspec(url: str, local_path: pathlib.Path, **kwargs) -> None:
         total_size = fs.du(url)
     else:
         total_size = info["size"]
-    with tqdm.tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024) as pbar:
+    with tqdm.tqdm(total=total_size, unit="iB", unit_scale=True, unit_divisor=1024) as pbar:
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         future = executor.submit(fs.get, url, local_path, recursive=is_dir)
         while not future.done():
@@ -151,7 +153,7 @@ def _download_boto3(
         )
 
     try:
-        with tqdm.tqdm(total=total_size, unit="B", unit_scale=True, unit_divisor=1024) as pbar:
+        with tqdm.tqdm(total=total_size, unit="iB", unit_scale=True, unit_divisor=1024) as pbar:
             futures = []
             for obj in objects:
                 relative_path = pathlib.Path(obj.key).relative_to(prefix)
@@ -177,10 +179,10 @@ def _get_s3_transfer_manager(session: boto3.Session, workers: int) -> s3_transfe
 def _set_permission(path: pathlib.Path, target_permission: int):
     """chmod requires executable permission to be set, so we skip if the permission is already match with the target."""
     if path.stat().st_mode & target_permission == target_permission:
-        logging.debug(f"Skipping {path} because it already has correct permissions")
+        logger.debug(f"Skipping {path} because it already has correct permissions")
         return
     path.chmod(target_permission)
-    logging.debug(f"Set {path} to {target_permission}")
+    logger.debug(f"Set {path} to {target_permission}")
 
 
 def _set_folder_permission(folder_path: pathlib.Path) -> None:

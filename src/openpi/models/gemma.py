@@ -23,9 +23,6 @@ We follow this einsum axis naming convention:
   G: num query heads per k/v head
   H: head dim
   D: d_model ("features")
-
-Notes:
-- init seems to be variance(1.0, fan_in, trunc_normal) everywhere.
 """
 
 import dataclasses
@@ -501,9 +498,9 @@ class Block(nn.Module):
 
 @at.typecheck
 class Module(nn.Module):
-    """Transformer model."""
+    """Transformer model, supporting a mixture of different weights for different tokens."""
 
-    configs: Sequence[Config]
+    configs: Sequence[Config]  # list of configs, one for each expert
     embed_dtype: str
 
     dropout: float = 0.0
@@ -515,6 +512,7 @@ class Module(nn.Module):
         self,
         *,
         tokens: at.Int[at.Array, "b t"] | None,
+        # list of token arrays, one for each expert, or None if that expert should not be run
         embedded: Sequence[at.Float[at.Array, "b _t _d"] | None] | None,
         positions: at.Int[at.Array, "b t"] | None = None,
         mask: at.Bool[at.Array, "b t s"] | None = None,
@@ -592,6 +590,10 @@ def _apply_rope(x, *, positions, max_wavelength=10_000):
 
 
 def _name(name, i):
+    # we name layers like this because we want the first expert's weights to have no suffix (e.g., "attn"), so that they
+    # can be loaded seamlessly from the existing PaliGemma checkpoint. subsequent experts will have a suffix (e.g.,
+    # "attn_1") and their weights will be initialized from scratch. in practice, we only use two experts -- PaliGemma,
+    # and the action expert.
     if i == 0:
         return name
     return f"{name}_{i}"

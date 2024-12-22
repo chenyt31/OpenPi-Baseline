@@ -109,7 +109,7 @@ def init_train_state(
         params = jax.experimental.io_callback(
             partial(_load_weights_and_validate, config.weight_loader), params, params, ordered=True
         )
-        if config.weight_freeze_regex:
+        if config.weight_freeze_regex is not None:
             freeze_weights_mask = training_utils.mask_from_regex(config.weight_freeze_regex, params)
             logging.info(
                 training_utils.to_readable_mask_info(freeze_weights_mask, lambda x: "frozen" if x else "not frozen")

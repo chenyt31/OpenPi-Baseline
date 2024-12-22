@@ -34,10 +34,10 @@ class CheckpointWeightLoader(WeightLoader):
     checkpoints saved during training by openpi itself. Will use EMA parameters if available.
     """
 
-    ckpt_path: str
+    params_path: str
 
     def load(self, params: at.Params) -> at.Params:
-        return _model.restore_params(download.maybe_download(self.ckpt_path))
+        return _model.restore_params(download.maybe_download(self.params_path))
 
 
 def _recover_tree(d: dict) -> dict:

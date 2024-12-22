@@ -7,6 +7,7 @@ from etils import epath
 import jax
 import orbax.checkpoint as ocp
 
+from openpi.shared import array_typing as at
 import openpi.shared.normalize as _normalize
 import openpi.training.data_loader as _data_loader
 import openpi.training.utils as training_utils
@@ -37,6 +38,7 @@ def initialize_checkpoint_dir(
         item_handlers={
             "assets": CallbackHandler(),
             "train_state": ocp.PyTreeCheckpointHandler(),
+            "params": ocp.PyTreeCheckpointHandler(),
         },
         options=ocp.CheckpointManagerOptions(
             max_to_keep=1,
@@ -68,9 +70,12 @@ def save_state(
         if norm_stats is not None:
             (directory / "norm_stats.json").write_text(_normalize.serialize_json(norm_stats))
 
+    # Split params that can be used for inference into a separate item.
+    train_state, params = _split_params(state)
     items = {
         "assets": save_assets,
-        "train_state": state,
+        "train_state": train_state,
+        "params": {"params": params},
     }
     checkpoint_manager.save(step, items)
 
@@ -82,9 +87,18 @@ def restore_state(
     step: int | None = None,
 ) -> training_utils.TrainState:
     del data_loader
-    return checkpoint_manager.restore(step, args=ocp.args.Composite(train_state=ocp.args.PyTreeRestore(state)))[
-        "train_state"
-    ]
+
+    with at.disable_typechecking():
+        # Split params that can be used for inference into a separate item.
+        train_state, params = _split_params(state)
+        restored = checkpoint_manager.restore(
+            step,
+            items={
+                "train_state": train_state,
+                "params": {"params": params},
+            },
+        )
+    return _merge_params(restored["train_state"], restored["params"])
 
 
 def load_norm_stats(checkpoint_step_dir: epath.Path | str) -> dict[str, _normalize.NormStats]:
@@ -127,3 +141,20 @@ class CallbackSave(ocp.args.CheckpointArgs):
 
 @ocp.args.register_with_handler(CallbackHandler, for_restore=True)
 class CallbackRestore(ocp.args.CheckpointArgs): ...
+
+
+def _split_params(state: training_utils.TrainState) -> tuple[training_utils.TrainState, at.Params]:
+    if state.ema_params is not None:
+        params = state.ema_params
+        train_state = dataclasses.replace(state, ema_params=None)
+    else:
+        params = state.params
+        train_state = dataclasses.replace(state, params={})
+    return train_state, params
+
+
+def _merge_params(train_state: training_utils.TrainState, params: dict[str, at.Params]) -> training_utils.TrainState:
+    # Revert the logic inside `_split_params`. Assumes that existence of `params` means that EMA params were used during the split.
+    if train_state.params:
+        return dataclasses.replace(train_state, ema_params=params["params"])
+    return dataclasses.replace(train_state, params=params["params"])

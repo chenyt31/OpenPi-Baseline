@@ -102,16 +102,19 @@ def init_train_state(
     *,
     resume: bool,
 ) -> tuple[training_utils.TrainState, Any]:
-    weight_decay_mask = None
-    freeze_mask = None
-    tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask, freeze_mask)
-
     def init(rng: at.KeyArrayLike, data: tuple[_common.Observation, _common.Actions]) -> training_utils.TrainState:
         rng, model_rng = jax.random.split(rng)
         observation, actions = data
         params = model.init_params(model_rng, observation, actions)
         params = jax.experimental.io_callback(
             partial(_load_weights_and_validate, config.weight_loader), params, params, ordered=True
+        )
+        freeze_mask = None
+        if config.weight_freeze_regex:
+            freeze_mask = training_utils.mask_from_regex(config.weight_freeze_regex, params)
+            logging.info(training_utils.to_readable_mask_info(freeze_mask, lambda x: "frozen" if x else "not frozen"))
+        tx = _optimizer.create_optimizer(
+            config.optimizer, config.lr_schedule, weight_decay_mask=None, freeze_weights_mask=freeze_mask
         )
         return training_utils.TrainState(
             step=0,

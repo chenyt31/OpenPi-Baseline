@@ -134,6 +134,7 @@ class TrainConfig:
 
     module: common.BaseModule = dataclasses.field(default_factory=pi0.Module)
     weight_loader: weight_loaders.WeightLoader = dataclasses.field(default_factory=weight_loaders.NoOpWeightLoader)
+    weight_freeze_regex: str | None = None
 
     lr_schedule: _optimizer.LRScheduleConfig = dataclasses.field(default_factory=_optimizer.CosineDecaySchedule)
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
@@ -252,6 +253,18 @@ _CONFIGS = [
         exp_name="debug",
         num_train_steps=10,
         wandb_enabled=False,
+    ),
+    TrainConfig(
+        name="debug_lora",
+        batch_size=2,
+        module=pi0.Module(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m"),
+        save_interval=100,
+        overwrite=True,
+        exp_name="debug_lora",
+        num_train_steps=10,
+        wandb_enabled=False,
+        # Only freeze Gemma weights (attention, mlp, norm) through regex reverse lookahead.
+        weight_freeze_regex=r"(?!(.*lora.*|.*img.*|.*_1.*|.*action_.*|.*state_proj.*)).*",
     ),
 ]
 

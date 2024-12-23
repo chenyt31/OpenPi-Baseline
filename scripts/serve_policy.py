@@ -43,9 +43,9 @@ class Exported:
 class Checkpoint:
     """Load a policy from a trained checkpoint."""
 
-    # Training config name (e.g., "pi0_pretrained").
+    # Training config name (e.g., "pi0_aloha_sim").
     config: str
-    # Checkpoint directory (e.g., "checkpoints/pi0_pretrained/exp/10000").
+    # Checkpoint directory (e.g., "checkpoints/pi0_aloha_sim/exp/10000").
     dir: str
 
 

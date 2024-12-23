@@ -43,16 +43,19 @@ By default checkpoints are downloaded from `s3://openpi-assets` and are cached i
 
 Training configs are defined in [src/openpi/training/config.py](src/openpi/training/config.py) and the training script is in [scripts/train.py](scripts/train.py).
 
-Each registered config is available as a command line argument to `scripts/train.py`. For example, to train with the `pi0` config, run:
+Each registered config is available as a command line argument to `scripts/train.py`. To find all available command line arguments for your config, run `uv run scripts/train.py <config-name> --help`, or look at the `TrainConfig` class in [src/openpi/training/config.py](src/openpi/training/config.py).
+
+
+For example, to train with the `pi0_aloha_sim` config, run:
 
 ```bash
-uv run scripts/train.py pi0 --exp-name=my_experiment --overwrite
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_aloha_sim --exp-name=my_experiment --overwrite
 ```
 
-To find the available command line options for your config, run `uv run scripts/train.py <config-name> --help`, or look at the `TrainConfig` class in [src/openpi/training/config.py](src/openpi/training/config.py).
+The `pi0_aloha_sim` config was optimized to run on a single H100 GPU with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9`. JAX pre-allocates 75% of GPU memory by default. However, in practice we found that we can train with larger batch sizes if we increase this to a larger number (e.g., 90%).
 
-TIP: JAX pre-allocates 75% of GPU memory by default. However, in practice we have found that allocating 90% of GPU memory with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` is a good default for training pi0 models.
-
+We currently only support training on a single H100 node. The training script will utilize all available GPUs on the node. However, multi-node training is currently not supported.
+  
 ## Running examples
 
 We provide example integrations with several robotics platforms. See the README in each example for more details:
@@ -73,13 +76,13 @@ The server can be configured to serve openpi policies in the following ways:
 ### Serve the default policy for the LIBERO environment
 
 ```bash
-uv run scripts/serve_policy.py --env LIBERO
+uv run scripts/serve_policy.py --env LIBERO --default_prompt "my task"
 ```
 
 ### Serve a trained policy from an openpi checkpoint
 
 ```bash
-uv run scripts/serve_policy.py --env ALOHA_SIM policy:checkpoint --policy.config=pi0_pretrained --policy.dir=checkpoints/pi0_pretrained/exp_name/10000
+uv run scripts/serve_policy.py --env ALOHA_SIM policy:checkpoint --policy.config=pi0_aloha_sim --policy.dir=checkpoints/pi0_aloha_sim/exp_name/10000
 ```
 
 The training config us used to determine which data transformations should be applied to the runtime data before feeding into the model. The norm stats, which are used to normalize the transformed data, are loaded from the checkpoint directory.

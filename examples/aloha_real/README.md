@@ -54,38 +54,4 @@ While we strongly recommend fine-tuning the model to your own data to adapt it t
 
 ## Training on your own Aloha dataset
 
-OpenPI suppports training on data collected in the default aloha hdf5 format using the `scripts/aloha_hd5.py` conversion script. Once the dataset is converted, add a new `TrainConfig` to `src/openpi/training/configs.py` and replace repo id with the id assigned to your dataset during conversion. Before training, you must compute the normalization stats using `scripts/compute_norm_stats.py`.
-
-```python
-TrainConfig(
-    name="<your-config-name>",
-    data=LeRobotAlohaDataConfig(
-        repo_id="<repo-id>",
-        delta_action_mask=delta_actions.make_bool_mask(6, -1, 6, -1),
-        adapt_to_pi=True,
-        repack_transforms=_transforms.Group(
-            inputs=[
-                _transforms.RepackTransform(
-                    {
-                        "images": {
-                            "cam_high": "observations.images.cam_high",
-                            "cam_left_wrist": "observations.images.cam_left_wrist",
-                            "cam_right_wrist": "observations.images.cam_right_wrist",
-                        },
-                        "state": "observations.qpos",
-                        "actions": "action",
-                    }
-                )
-            ]
-        ),
-        # Optional to avoid syncing with huggingface hub.
-        local_files_only=True,
-    ),
-    weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base"),
-    num_train_steps=<your-num-train-steps>,
-    batch_size=<your-batch-size>,
-    lr_schedule=_optimizer.CosineDecaySchedule(
-        warmup_steps=1_000, peak_lr=2.5e-5, decay_steps=<your-num-train-steps>, decay_lr=2.5e-6
-    ),
-),
-```
+OpenPI suppports training on data collected in the default aloha hdf5 format using the `scripts/aloha_hd5.py` conversion script. Once the dataset is converted, add a new `TrainConfig` to `src/openpi/training/configs.py` (see the `aloha_static_cups_open` example config) and replace repo id with the id assigned to your dataset during conversion. Before training on a new dataset, you must first compute the norm stats using `scripts/compute_norm_stats.py`.

@@ -54,20 +54,38 @@ While we strongly recommend fine-tuning the model to your own data to adapt it t
 
 ## Training on your own Aloha dataset
 
-OpenPI suppports training on data collected in the default aloha hdf5 format. To do so you must first convert the data to the huggingface format. We include `scripts/aloha_hd5.py` to help you do this. Once the dataset is converted, add a new `TrainConfig` to `src/openpi/training/configs.py` and replace repo id with the id assigned to your dataset during conversion. Before you run the training script, you must first run `python scripts/compute_norm_stats.py --config-name <your-config-name>` to compute the normalization statistics for your dataset.
+OpenPI suppports training on data collected in the default aloha hdf5 format. To do so you must first convert the data to the huggingface format. We include `scripts/aloha_hd5.py` to help you do this. Once the dataset is converted, add a new `TrainConfig` to `src/openpi/training/configs.py` and replace repo id with the id assigned to your dataset during conversion. An example config is shown below. Before you run the training script, you must first run `python scripts/compute_norm_stats.py --config-name <your-config-name>` to compute the normalization statistics for your dataset.
 
-Example config:
 ```python
 TrainConfig(
-    name=<your-config-name>,
+    name="<your-config-name>",
     data=LeRobotAlohaDataConfig(
-        repo_id=<your-repo-id>,
-        delta_action_mask=[True] * 6 + [False] + [True] * 6 + [False],
+        repo_id="<repo-id>",
+        delta_action_mask=delta_actions.make_bool_mask(6, -1, 6, -1),
+        adapt_to_pi=True,
+        repack_transforms=_transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {
+                            "cam_high": "observations.images.cam_high",
+                            "cam_left_wrist": "observations.images.cam_left_wrist",
+                            "cam_right_wrist": "observations.images.cam_right_wrist",
+                        },
+                        "state": "observations.qpos",
+                        "actions": "action",
+                    }
+                )
+            ]
+        ),
+        # Optional to avoid syncing with huggingface hub.
+        local_files_only=True,
+    ),
+    weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base"),
+    num_train_steps=<your-num-train-steps>,
+    batch_size=<your-batch-size>,
+    lr_schedule=_optimizer.CosineDecaySchedule(
+        warmup_steps=1_000, peak_lr=2.5e-5, decay_steps=<your-num-train-steps>, decay_lr=2.5e-6
     ),
 ),
-```
-
-Example command for kicking off training:
-```bash
-uv run scripts/train.py <your-config-name>
 ```

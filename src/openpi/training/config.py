@@ -46,6 +46,9 @@ class DataConfig:
     # Indicates where the cached dataset should be stored.
     dataset_root: str | None = dataclasses.field(default_factory=default_dataset_root)
 
+    # Disables downloading or sycning the dataset from the huggingface hub. Allows training on local-only datasets.
+    local_files_only: bool = False
+
 
 class DataConfigFactory(Protocol):
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:

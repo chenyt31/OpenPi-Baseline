@@ -21,6 +21,7 @@ import openpi.training.checkpoints as _checkpoints
 import openpi.training.config as _config
 import openpi.training.data_loader as _data_loader
 import openpi.training.optimizer as _optimizer
+import openpi.training.sharding as sharding
 import openpi.training.utils as training_utils
 import openpi.training.weight_loaders as _weight_loaders
 
@@ -100,6 +101,7 @@ def init_train_state(
     init_rng: at.KeyArrayLike,
     batch: tuple[_common.Observation, _common.Actions],
     mesh: jax.sharding.Mesh,
+    data_sharding: jax.sharding.Sharding,
     *,
     resume: bool,
 ) -> tuple[training_utils.TrainState, Any]:
@@ -107,13 +109,27 @@ def init_train_state(
     freeze_mask = None
     tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask, freeze_mask)
 
-    def init(rng: at.KeyArrayLike, data: tuple[_common.Observation, _common.Actions]) -> training_utils.TrainState:
+    def init(
+        rng: at.KeyArrayLike,
+        data: tuple[_common.Observation, _common.Actions],
+        params_sharding: jax.sharding.Sharding | None = None,
+    ) -> training_utils.TrainState:
         rng, model_rng = jax.random.split(rng)
         observation, actions = data
         params = model.init_params(model_rng, observation, actions)
+        # jax.experimental.io_callback raises spmd partitioning warnings, setting constraints
+        # to replicate params to avoid the warnings. the returned train state will be sharded still
+        # since fsdp sharding is specified as output_sharding when jitting this function.
+        if params_sharding is not None:
+            params = jax.lax.with_sharding_constraint(params, params_sharding)
         params = jax.experimental.io_callback(
-            partial(_load_weights_and_validate, config.weight_loader), params, params, ordered=True
+            partial(_load_weights_and_validate, config.weight_loader),
+            params,
+            params,
+            ordered=True,
         )
+        if params_sharding is not None:
+            params = jax.lax.with_sharding_constraint(params, params_sharding)
         return training_utils.TrainState(
             step=0,
             params=params,
@@ -124,18 +140,19 @@ def init_train_state(
         )
 
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
-    data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
 
     train_state_shape = jax.eval_shape(init, init_rng, batch)
-    # This is where we may want to shard the train state (e.g., FSDP).
-    state_sharding = jax.tree.map(lambda _: replicated_sharding, train_state_shape)
+    state_sharding = sharding.fsdp_sharding(train_state_shape, mesh, log=True)
 
     if resume:
         return train_state_shape, state_sharding
 
     train_state = jax.jit(
-        init, in_shardings=(replicated_sharding, data_parallel_sharding), out_shardings=state_sharding
-    )(init_rng, batch)
+        init,
+        in_shardings=(replicated_sharding, data_sharding),
+        out_shardings=state_sharding,
+        static_argnums=(2,),
+    )(init_rng, batch, replicated_sharding)
     return train_state, state_sharding
 
 
@@ -189,10 +206,13 @@ def main(config: _config.TrainConfig):
     rng = jax.random.key(config.seed)
     train_rng, init_rng = jax.random.split(rng)
 
-    # data parallel only
-    # TODO: replace with jax.make_mesh when available
-    mesh = jax.sharding.Mesh(jax.devices(), ("batch",))
-    data_parallel_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch",)))
+    if jax.device_count() % config.fsdp_devices != 0:
+        raise ValueError(
+            f"Number of devices {jax.device_count()} must be divisible by the number of FSDP devices {config.fsdp_devices}."
+        )
+    mesh_shape = (jax.device_count() // config.fsdp_devices, config.fsdp_devices)
+    mesh = jax.make_mesh(mesh_shape, ("batch", "model"))
+    data_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch", "model")))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint_dir(
@@ -208,7 +228,7 @@ def main(config: _config.TrainConfig):
     data_loader = _data_loader.create_data_loader(
         config,
         model,
-        sharding=data_parallel_sharding,
+        sharding=data_sharding,
         num_workers=config.num_workers,
         shuffle=True,
     )
@@ -216,7 +236,9 @@ def main(config: _config.TrainConfig):
     batch = next(data_iter)
     logging.info(f"Initialized data loader:\n{training_utils.array_tree_to_info(batch)}")
 
-    train_state, train_state_sharding = init_train_state(config, model, init_rng, batch, mesh, resume=resuming)
+    train_state, train_state_sharding = init_train_state(
+        config, model, init_rng, batch, mesh, data_sharding, resume=resuming
+    )
     jax.block_until_ready(train_state)
     logging.info(f"Initialized train state:\n{training_utils.array_tree_to_info(train_state.params)}")
 
@@ -225,7 +247,7 @@ def main(config: _config.TrainConfig):
 
     ptrain_step = jax.jit(
         train_step,
-        in_shardings=(replicated_sharding, train_state_sharding, None, data_parallel_sharding),
+        in_shardings=(replicated_sharding, train_state_sharding, None, data_sharding),
         out_shardings=(train_state_sharding, replicated_sharding),
         donate_argnums=(1,),
     )

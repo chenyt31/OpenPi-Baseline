@@ -89,19 +89,23 @@ uv run scripts/serve_policy.py --env LIBERO --default_prompt "my task"
 
 ### Serve a trained policy from an openpi checkpoint
 
+This option allows serving a model that was trained using the openpi training code.
+
 ```bash
 uv run scripts/serve_policy.py --env ALOHA_SIM policy:checkpoint --policy.config=pi0_aloha_sim --policy.dir=checkpoints/pi0_aloha_sim/exp_name/10000
 ```
 
-The training config us used to determine which data transformations should be applied to the runtime data before feeding into the model. The norm stats, which are used to normalize the transformed data, are loaded from the checkpoint directory.
+The training config is used to determine which data transformations should be applied to the runtime data before feeding into the model. The norm stats, which are used to normalize the transformed data, are loaded from the checkpoint directory.
 
 ### Serve an exported model
+
+There are also a number of checkpoints that are available as exported JAX graphs, which we trained ourselves using our internal training code. These can be served using the following command:
 
 ```bash
 uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_aloha/model --policy.processor=trossen_biarm_single_base_cam_24dim
 ```
 
-In this case, the data transformations are taken from the default policy. However, the processor name will be used to determine which norms stats should be used to normalize the transformed data.
+In this case, the data transformations are taken from the default policy and the processor name will be used to determine which norms stats should be used to normalize the transformed data.
 
 
 ### Running with Docker:

@@ -220,7 +220,7 @@ _CONFIGS = [
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             delta_action_mask=None,
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base/model"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/exported/pi0_base/model"),
         num_train_steps=30_000,
     ),
     TrainConfig(

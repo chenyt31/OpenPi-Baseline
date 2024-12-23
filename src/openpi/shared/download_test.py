@@ -17,7 +17,7 @@ def test_download_local(tmp_path: pathlib.Path):
 
 
 def test_download_s3():
-    remote_path = "s3://openpi-assets-internal/checkpoints/pi0_base"
+    remote_path = "s3://openpi-assets/exported/pi0_aloha_sim/model"
 
     local_path = download.maybe_download(remote_path)
     assert local_path.exists()

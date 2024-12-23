@@ -101,9 +101,8 @@ def restore_state(
     return _merge_params(restored["train_state"], restored["params"])
 
 
-def load_norm_stats(checkpoint_step_dir: epath.Path | str) -> dict[str, _normalize.NormStats]:
-    checkpoint_step_dir = epath.Path(checkpoint_step_dir)
-    return _normalize.load(checkpoint_step_dir / "assets")
+def load_norm_stats(assets_dir: epath.Path | str) -> dict[str, _normalize.NormStats]:
+    return _normalize.load(assets_dir)
 
 
 class Callback(Protocol):

@@ -30,8 +30,17 @@ class NoOpWeightLoader(WeightLoader):
 
 @dataclasses.dataclass(frozen=True)
 class CheckpointWeightLoader(WeightLoader):
-    """Loads an entire set of weights from a checkpoint. Compatible with both officially released Pi checkpoints and
-    checkpoints saved during training by openpi itself. Will use EMA parameters if available.
+    """Loads an entire set of weights from a checkpoint.
+
+    Compatible with:
+      trained checkpoints:
+        example: "./checkpoints/pi0_pretrained/exp/1000/params"
+      released checkpoints:
+        example: "s3://openpi-assets/checkpoints/pi0_base/params"
+      released exported models:
+        example: "s3://openpi-assets/exported/pi0_aloha/model"
+
+    Will use EMA parameters if available.
     """
 
     params_path: str

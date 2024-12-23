@@ -46,7 +46,7 @@ def convert_to_openpi(
     # Load the monopi model.
     # Save params.
     ckpt = ocp.StandardCheckpointer()
-    ckpt.save(out_dir / "params", params)
+    ckpt.save(out_dir / "params", {"params": params})
     ckpt.wait_until_finished()
 
     # Save norm stats.

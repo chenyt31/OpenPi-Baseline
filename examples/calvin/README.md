@@ -43,5 +43,5 @@ Terminal window 2:
 
 ```bash
 # Run the server
-uv run scripts/serve_policy.py --mode CALVIN
+uv run scripts/serve_policy.py --env CALVIN
 ```

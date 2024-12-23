@@ -40,16 +40,16 @@ roslaunch --wait aloha ros_nodes.launch
 Terminal window 3:
 
 ```bash
-uv run scripts/serve_policy.py --mode REF --default_prompt='toast out of toaster'
+uv run scripts/serve_policy.py --env ALOHA --default_prompt='toast out of toaster'
 ```
 
 ## Model Guide
-The Pi0 Base Model is an out-of-the-box model for general tasks. You can find more details in the [technical report](https://www.physicalintelligence.company/download/pi0.pdf). To use this model, download the pi0_real checkpoint from the [AWS bucket](todo).
+The Pi0 Base Model is an out-of-the-box model for general tasks. You can find more details in the [technical report](https://www.physicalintelligence.company/download/pi0.pdf).
 
 While we strongly recommend fine-tuning the model to your own data to adapt it to particular tasks, it may be possible to prompt the model to attempt some tasks that were in the pre-training data. For example, below is a video of the model attempting the "toast out of toaster" task.
 
 <p align="center"> 
-  <img src="https://github.com/Physical-Intelligence/openpi/blob/main/examples/aloha_real/data/toast.gif" alt="toast out of toaster"/> 
+  <img src="https://github.com/Physical-Intelligence/openpi/blob/main/examples/aloha_real/toast.gif" alt="toast out of toaster"/> 
 </p>
 
 ## Training on your own Aloha dataset
@@ -69,5 +69,5 @@ TrainConfig(
 Run the training script:
 
 ```bash
-python scripts/train.py <your-config-name>
+uv run scripts/train.py <your-config-name>
 ```

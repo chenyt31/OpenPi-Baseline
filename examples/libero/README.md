@@ -35,5 +35,5 @@ Terminal window 2:
 
 ```bash
 # Run the server
-uv run scripts/serve_policy.py --mode LIBERO
+uv run scripts/serve_policy.py --env LIBERO
 ```

@@ -46,15 +46,23 @@ Training configs are defined in [src/openpi/training/config.py](src/openpi/train
 Each registered config is available as a command line argument to `scripts/train.py`. To find all available command line arguments for your config, run `uv run scripts/train.py <config-name> --help`, or look at the `TrainConfig` class in [src/openpi/training/config.py](src/openpi/training/config.py).
 
 
-For example, to train with the `pi0_aloha_sim` config, run:
+For example, to train with the `pi0_aloha_sim` config, run the following;
+
+(one time only) Compute the norm stats for the training data:
 
 ```bash
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_aloha_sim --exp-name=my_experiment --overwrite
+uv run scripts/compute_norm_stats.py --config-name pi0_aloha_sim
 ```
 
-The `pi0_aloha_sim` config was optimized to run on a single H100 GPU with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9`. JAX pre-allocates 75% of GPU memory by default. However, in practice we found that we can train with larger batch sizes if we increase this to a larger number (e.g., 90%).
+Run training:
 
-We currently only support training on a single H100 node. The training script will utilize all available GPUs on the node. However, multi-node training is currently not supported.
+```bash
+uv run scripts/train.py pi0_aloha_sim --exp-name=my_experiment --overwrite
+```
+
+The `pi0_aloha_sim` config is optimized for training on a single H100 GPU. By default, JAX pre-allocates 75% of available GPU memory. We set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` to allow JAX to use up to 90% of GPU memory, which enables training with larger batch sizes while maintaining stability.
+
+The training script automatically utilizes all available GPUs on a single node. Currently, distributed training across multiple nodes is not supported.
   
 ## Running examples
 

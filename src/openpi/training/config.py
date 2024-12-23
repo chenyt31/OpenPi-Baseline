@@ -14,7 +14,6 @@ import openpi.models.pi0 as pi0
 import openpi.models.pi0_small as pi0_small
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
-import openpi.shared.delta_actions as delta_actions
 import openpi.shared.download as download
 import openpi.shared.normalize as _normalize
 import openpi.training.optimizer as _optimizer

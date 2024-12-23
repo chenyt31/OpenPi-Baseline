@@ -107,6 +107,11 @@ uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://ope
 
 In this case, the data transformations are taken from the default policy and the processor name will be used to determine which norms stats should be used to normalize the transformed data.
 
+For example, here's how you can serve the towel folding policy:
+
+```bash
+uv run scripts/serve_policy.py --env=ALOHA --default-prompt="fold the towel" policy:exported --policy.dir=s3://openpi-assets/exported/pi0_aloha_towel/model --policy.processor=trossen_bimanual_diverse_small_towel_folding_random_None_joint
+```
 
 ### Running with Docker:
 

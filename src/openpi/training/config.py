@@ -1,3 +1,5 @@
+"""See _CONFIGS for the list of available configs."""
+
 from collections.abc import Sequence
 import dataclasses
 import difflib

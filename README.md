@@ -41,11 +41,17 @@ By default checkpoints are downloaded from `s3://openpi-assets` and are cached i
 
 ## Running Training
 
-The below example shows how to run training with a config defined in `openpi/training/config.py`. Note that JAX by default pre-allocates 75% of GPU memory, in practice we have found allocating 90% of GPU memory with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` is a good default for training pi0.
+Training configs are defined in [src/openpi/training/config.py](src/openpi/training/config.py) and the training script is in [scripts/train.py](scripts/train.py).
 
+Each registered config is available as a command line argument to `scripts/train.py`. For example, to train with the `pi0` config, run:
+
+```bash
+uv run scripts/train.py pi0 --exp-name=my_experiment --overwrite
 ```
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py <config name (eg. pi0 / pi0_small / debug)> 
-```
+
+To find the available command line options for your config, run `uv run scripts/train.py <config-name> --help`, or look at the `TrainConfig` class in [src/openpi/training/config.py](src/openpi/training/config.py).
+
+TIP: JAX pre-allocates 75% of GPU memory by default. However, in practice we have found that allocating 90% of GPU memory with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` is a good default for training pi0 models.
 
 ## Running examples
 
@@ -58,10 +64,7 @@ We provide example integrations with several robotics platforms. See the README 
 
 ## Running the openpi server
 
-The openpi server hosts model inference for an openpi policy. 
-
-
-The server can be configured to serve policies in the following ways:
+The server can be configured to serve openpi policies in the following ways:
 
 - Serve a default policy for the given environment.
 - Serve a trained policy from a checkpoint.
@@ -73,19 +76,22 @@ The server can be configured to serve policies in the following ways:
 uv run scripts/serve_policy.py --env LIBERO
 ```
 
-### Serve an exported model
-
-> [!NOTE] This uses the same code path as the default policy, including how the runtime data will be processed before feeding into the model.
-
-```bash
-uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_aloha/model --policy.processor=trossen_biarm_single_base_cam_24dim
-```
-
 ### Serve a trained policy from an openpi checkpoint
 
 ```bash
 uv run scripts/serve_policy.py --env ALOHA_SIM policy:checkpoint --policy.config=pi0_pretrained --policy.dir=checkpoints/pi0_pretrained/exp_name/10000
 ```
+
+The training config us used to determine which data transformations should be applied to the runtime data before feeding into the model. The norm stats, which are used to normalize the transformed data, are loaded from the checkpoint directory.
+
+### Serve an exported model
+
+```bash
+uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_aloha/model --policy.processor=trossen_biarm_single_base_cam_24dim
+```
+
+In this case, the data transformations are taken from the default policy. However, the processor name will be used to determine which norms stats should be used to normalize the transformed data.
+
 
 ### Running with Docker:
 

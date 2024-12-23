@@ -210,32 +210,21 @@ _CONFIGS = [
     # pi0 configs.
     #
     TrainConfig(
-        name="pi0",
+        name="pi0_aloha_sim",
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
-            delta_action_mask=None,
-        ),
-    ),
-    TrainConfig(
-        name="pi0_pretrained",
-        data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_sim_transfer_cube_human",
-            delta_action_mask=None,
+            default_prompt="Transfer cube",
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
+    #
+    # Additional configs.
+    #
     TrainConfig(
         name="pi0_paligemma",
-        data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_sim_transfer_cube_human",
-            delta_action_mask=None,
-        ),
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),
     ),
-    #
-    # pi0_small configs.
-    #
     TrainConfig(
         name="pi0_small",
         module=pi0_small.Module(),

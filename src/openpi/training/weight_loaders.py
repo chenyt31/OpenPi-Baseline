@@ -34,7 +34,7 @@ class CheckpointWeightLoader(WeightLoader):
 
     Compatible with:
       trained checkpoints:
-        example: "./checkpoints/pi0_pretrained/exp/1000/params"
+        example: "./checkpoints/pi0_aloha_sim/exp/1000/params"
       released checkpoints:
         example: "s3://openpi-assets/checkpoints/pi0_base/params"
 

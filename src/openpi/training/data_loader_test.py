@@ -65,7 +65,7 @@ def test_with_fake_dataset():
 
 
 def test_with_real_dataset():
-    config = _config.get_config("pi0_pretrained")
+    config = _config.get_config("pi0_aloha_sim")
     config = dataclasses.replace(config, batch_size=4)
 
     model = config.create_model()

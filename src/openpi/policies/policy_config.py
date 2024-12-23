@@ -54,8 +54,21 @@ def create_trained_policy(
     repack_transforms: transforms.Group | None = None,
     sample_kwargs: dict[str, Any] | None = None,
     default_prompt: str | None = None,
+    norm_stats: dict[str, transforms.NormStats] | None = None,
 ) -> _policy.Policy:
-    """Create a policy from a trained model."""
+    """Create a policy from a trained checkpoint.
+
+    Args:
+        train_config: The training config to use to create the model.
+        checkpoint_dir: The directory to load the model from.
+        repack_transforms: Optional transforms that will be applied before any other transforms.
+        sample_kwargs: The kwargs to pass to the `sample_actions` method. If not provided, the default
+            kwargs will be used.
+        default_prompt: The default prompt to use for the policy. Will inject the prompt into the input
+            data if it doesn't already exist.
+        norm_stats: The norm stats to use for the policy. If not provided, the norm stats will be loaded
+            from the checkpoint directory.
+    """
     repack_transforms = repack_transforms or transforms.Group()
     checkpoint_dir = download.maybe_download(str(checkpoint_dir))
 
@@ -64,9 +77,10 @@ def create_trained_policy(
     model = model.set_params(_model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16))
 
     data_config = train_config.data.create(train_config.metadata_dir, model)
-    # We are loading the norm stats from the checkpoint, instead of the metadata dir to make sure
-    # that the policy is using the same normalization stats as the original training process.
-    norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets")
+    if norm_stats is None:
+        # We are loading the norm stats from the checkpoint, instead of the metadata dir to make sure
+        # that the policy is using the same normalization stats as the original training process.
+        norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets")
 
     return _policy.Policy(
         model,

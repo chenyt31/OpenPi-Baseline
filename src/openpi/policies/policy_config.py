@@ -1,11 +1,15 @@
 from collections.abc import Sequence
 import dataclasses
 import logging
+import pathlib
 from typing import Any
+
+import jax.numpy as jnp
 
 from openpi.models import tokenizer
 import openpi.models.model as _model
 import openpi.policies.policy as _policy
+import openpi.shared.download as download
 from openpi.training import checkpoints as _checkpoints
 from openpi.training import config as _config
 import openpi.transforms as transforms
@@ -13,7 +17,7 @@ import openpi.transforms as transforms
 
 @dataclasses.dataclass
 class PolicyConfig:
-    model: _model.Model
+    model: _model.BaseModel
 
     norm_stats: dict[str, transforms.NormStats]
 
@@ -45,21 +49,38 @@ def create_policy(config: PolicyConfig) -> _policy.Policy:
 
 def create_trained_policy(
     train_config: _config.TrainConfig,
-    checkpoint_path: str,
+    checkpoint_dir: pathlib.Path | str,
     *,
     repack_transforms: transforms.Group | None = None,
     sample_kwargs: dict[str, Any] | None = None,
     default_prompt: str | None = None,
+    norm_stats: dict[str, transforms.NormStats] | None = None,
 ) -> _policy.Policy:
-    """Create a policy from a trained model."""
+    """Create a policy from a trained checkpoint.
+
+    Args:
+        train_config: The training config to use to create the model.
+        checkpoint_dir: The directory to load the model from.
+        repack_transforms: Optional transforms that will be applied before any other transforms.
+        sample_kwargs: The kwargs to pass to the `sample_actions` method. If not provided, the default
+            kwargs will be used.
+        default_prompt: The default prompt to use for the policy. Will inject the prompt into the input
+            data if it doesn't already exist.
+        norm_stats: The norm stats to use for the policy. If not provided, the norm stats will be loaded
+            from the checkpoint directory.
+    """
     repack_transforms = repack_transforms or transforms.Group()
+    checkpoint_dir = download.maybe_download(str(checkpoint_dir))
 
     logging.info("Loading model...")
     model = train_config.create_model()
-    model = model.set_params(_model.restore_params(checkpoint_path))
+    model = model.set_params(_model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16))
 
     data_config = train_config.data.create(train_config.metadata_dir, model)
-    norm_stats = _checkpoints.load_norm_stats(checkpoint_path)
+    if norm_stats is None:
+        # We are loading the norm stats from the checkpoint, instead of the metadata dir to make sure
+        # that the policy is using the same normalization stats as the original training process.
+        norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets")
 
     return _policy.Policy(
         model,

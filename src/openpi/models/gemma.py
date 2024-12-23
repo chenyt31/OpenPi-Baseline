@@ -25,10 +25,11 @@ We follow this einsum axis naming convention:
   D: d_model ("features")
 """
 
+from collections.abc import Callable, Sequence
 import dataclasses
 import logging
 import math
-from typing import Callable, Literal, Sequence  # noqa: UP035
+from typing import Literal
 
 import einops
 import flax.linen as nn

@@ -74,7 +74,7 @@ class Module(common.BaseModule):
     def compute_loss(
         self,
         obs: common.Observation,
-        target_actions: at.Float[at.Array, "b ah ad"],
+        target_actions: common.Actions,
         *,
         timestep: at.Float[at.Array, " b"] | None = None,
     ) -> at.Float[at.Array, "b ah"]:
@@ -100,7 +100,7 @@ class Module(common.BaseModule):
         *,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
         num_steps: int | at.Int[at.Array, ""] = 10,
-    ) -> at.Float[at.Array, "b ah ad"]:
+    ) -> common.Actions:
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
         # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
         dt = -1.0 / num_steps

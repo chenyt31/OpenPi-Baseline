@@ -1,7 +1,6 @@
 import dataclasses
 
 import jax
-import numpy as np
 
 from openpi.models import model as _model
 from openpi.models import pi0
@@ -17,15 +16,12 @@ def test_torch_data_loader():
         dataset,
         local_batch_size=4,
         num_batches=2,
-        transforms=[lambda x: {**x, "test_item": np.array([1, 2, 3])}],
     )
     batches = list(loader)
 
     assert len(batches) == 2
-
     for batch in batches:
         assert all(x.shape[0] == 4 for x in jax.tree.leaves(batch))
-        assert batch["test_item"].shape == (4, 3)
 
 
 def test_torch_data_loader_infinite():
@@ -69,7 +65,7 @@ def test_with_fake_dataset():
 
 
 def test_with_real_dataset():
-    config = _config.get_config("pi0_pretrained")
+    config = _config.get_config("pi0_aloha_sim")
     config = dataclasses.replace(config, batch_size=4)
 
     model = config.create_model()

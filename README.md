@@ -37,23 +37,34 @@ During the first run of any example, Docker will build the images. Go grab a cof
 
 ### Downloading checkpoints
 
-By default checkpoints are downloaded and cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
-
-Available checkpoints:
-
-- `pi0_sim`: TODO
-- `pi0_droid`: TODO
-
+By default checkpoints are downloaded from `s3://openpi-assets` and are cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
 
 ## Running Training
 
-The below example shows how to run training with a config defined in `openpi/training/config.py`. Note that JAX by default pre-allocates 75% of GPU memory, in practice we have found allocating 90% of GPU memory with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` is a good default for training pi0.
+Training configs are defined in [src/openpi/training/config.py](src/openpi/training/config.py) and the training script is in [scripts/train.py](scripts/train.py).
 
-```
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py <config name (eg. pi0 / pi0_small / debug)> 
+Each registered config is available as a command line argument to `scripts/train.py`. To find all available command line arguments for your config, run `uv run scripts/train.py <config-name> --help`, or look at the `TrainConfig` class in [src/openpi/training/config.py](src/openpi/training/config.py).
+
+
+For example, to train with the `pi0_aloha_sim` config, run the following;
+
+(one time only) Compute the norm stats for the training data:
+
+```bash
+uv run scripts/compute_norm_stats.py --config-name pi0_aloha_sim
 ```
 
-## Running Examples
+Run training:
+
+```bash
+uv run scripts/train.py pi0_aloha_sim --exp-name=my_experiment --overwrite
+```
+
+The `pi0_aloha_sim` config is optimized for training on a single H100 GPU. By default, JAX pre-allocates 75% of available GPU memory. We set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` to allow JAX to use up to 90% of GPU memory, which enables training with larger batch sizes while maintaining stability.
+
+The training script automatically utilizes all available GPUs on a single node. Currently, distributed training across multiple nodes is not supported.
+  
+## Running examples
 
 We provide example integrations with several robotics platforms. See the README in each example for more details:
 
@@ -62,28 +73,44 @@ We provide example integrations with several robotics platforms. See the README 
 - [CALVIN](examples/calvin)
 - [LIBERO](examples/libero)
 
-## Running the openpi Server
+## Running the openpi server
 
-The openpi server hosts model inference for an openpi policy. 
+The server can be configured to serve openpi policies in the following ways:
 
-The server can be configured using the folllowing commands line arguments:
+- Serve a default policy for the given environment.
+- Serve a trained policy from a checkpoint.
+- Serve an exported model.
 
-- `--env`: The environment to serve the policy for.
-- `--config-name`: If provided, loads the policy from a training config. Otherwise, loads the default pi0 policy.
-- `--checkpoint-path`: Required if `config-name` is provided. Specifies the path to the checkpoint to load.
-- `--default-prompt`: If provided, overrides the default prompt for the policy.
+### Serve the default policy for the LIBERO environment
 
-The examples describe how to run it in conjunction with each environment, but you can also run it standalone:
+```bash
+uv run scripts/serve_policy.py --env LIBERO --default_prompt "my task"
+```
 
-### With Docker:
+### Serve a trained policy from an openpi checkpoint
+
+This option allows serving a model that was trained using the openpi training code.
+
+```bash
+uv run scripts/serve_policy.py --env ALOHA_SIM policy:checkpoint --policy.config=pi0_aloha_sim --policy.dir=checkpoints/pi0_aloha_sim/exp_name/10000
+```
+
+The training config is used to determine which data transformations should be applied to the runtime data before feeding into the model. The norm stats, which are used to normalize the transformed data, are loaded from the checkpoint directory.
+
+### Serve an exported model
+
+There are also a number of checkpoints that are available as exported JAX graphs, which we trained ourselves using our internal training code. These can be served using the following command:
+
+```bash
+uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_aloha/model --policy.processor=trossen_biarm_single_base_cam_24dim
+```
+
+In this case, the data transformations are taken from the default policy and the processor name will be used to determine which norms stats should be used to normalize the transformed data.
+
+
+### Running with Docker:
 
 ```bash
 export SERVER_ARGS="--env ALOHA_SIM --default_prompt 'my task'"
 docker compose -f scripts/compose.yml up --build
-```
-
-### Without Docker:
-
-```bash
-uv run scripts/serve_policy.py --env ALOHA_SIM --default_prompt 'my task'
 ```

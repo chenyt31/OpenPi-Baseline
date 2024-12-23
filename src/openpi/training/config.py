@@ -1,3 +1,5 @@
+"""See _CONFIGS for the list of available configs."""
+
 from collections.abc import Sequence
 import dataclasses
 import difflib
@@ -177,6 +179,12 @@ class TrainConfig:
     # If true, will enable wandb logging.
     wandb_enabled: bool = True
 
+    # If the value is greater than 1, FSDP will be enabled and shard across number of specified devices; overall
+    # device memory will be reduced but training could potentially be slower.
+    # eg. if total device is 4 and fsdp devices is 2; then the model will shard to 2 devices and run
+    # data parallel between 2 groups of devices.
+    fsdp_devices: int = 1
+
     @property
     def metadata_dir(self) -> pathlib.Path:
         """Get the metadata directory for this config."""
@@ -208,32 +216,21 @@ _CONFIGS = [
     # pi0 configs.
     #
     TrainConfig(
-        name="pi0",
+        name="pi0_aloha_sim",
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
-            delta_action_mask=None,
+            default_prompt="Transfer cube",
         ),
-    ),
-    TrainConfig(
-        name="pi0_pretrained",
-        data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_sim_transfer_cube_human",
-            delta_action_mask=None,
-        ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-internal/checkpoints/pi0_base/model"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
+    #
+    # Additional configs.
+    #
     TrainConfig(
         name="pi0_paligemma",
-        data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_sim_transfer_cube_human",
-            delta_action_mask=None,
-        ),
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),
     ),
-    #
-    # pi0_small configs.
-    #
     TrainConfig(
         name="pi0_small",
         module=pi0_small.Module(),
@@ -256,7 +253,8 @@ _CONFIGS = [
         name="debug_restore",
         batch_size=2,
         module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
-        weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/debug/debug/9/train_state"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/debug/debug/9/params"),
+        overwrite=True,
         exp_name="debug",
         num_train_steps=10,
         wandb_enabled=False,

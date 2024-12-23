@@ -106,7 +106,7 @@ class BaseModel(abc.ABC):
         self,
         rng: at.KeyArrayLike,
         observation: common.Observation,
-        actions: at.Float[at.Array, "*b ah ad"],
+        actions: common.Actions,
         *,
         train: bool = False,
         params: at.Params | None = None,
@@ -118,7 +118,7 @@ class BaseModel(abc.ABC):
         rng: at.KeyArrayLike,
         observation: common.Observation,
         **sample_kwargs,
-    ) -> at.Float[at.Array, "*b ah ad"]: ...
+    ) -> common.Actions: ...
 
 
 @struct.dataclass
@@ -197,29 +197,38 @@ class Model(BaseModel):
         observation_spec, _ = create_inputs_spec(self, batch_size=batch_size)
         return jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), observation_spec)
 
+    def fake_act(self, batch_size: int = 1) -> common.Actions:
+        _, action_spec = create_inputs_spec(self, batch_size=batch_size)
+        return jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), action_spec)
 
-def restore_params(ckpt_path: pathlib.Path | str, *, sharding: jax.sharding.Sharding | None = None) -> at.Params:
+
+def restore_params(
+    params_path: pathlib.Path | str,
+    *,
+    dtype: jnp.dtype | None = None,
+    sharding: jax.sharding.Sharding | None = None,
+) -> at.Params:
     """Restores unstructured params PyTree from a checkpoint. This works with checkpoints saved with `save_state` during
     openpi training (see `training/checkpoints.py`) as well as pre-trained checkpoints released for openpi.
     """
-    ckpt_path = pathlib.Path(ckpt_path).resolve()
-    if not ckpt_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found at: {ckpt_path}")
+    params_path = pathlib.Path(params_path).resolve()
+    if not params_path.exists():
+        raise FileNotFoundError(f"Model params not found at: {params_path}")
 
     restore_type = np.ndarray if sharding is None else jax.Array
 
     with ocp.PyTreeCheckpointer() as ckptr:
-        metadata = ckptr.metadata(ckpt_path)
+        metadata = ckptr.metadata(params_path)
         # Use EMA params if they exist, otherwise regular params. See `training.utils.TrainState`.
         params_name = "ema_params" if metadata.get("ema_params") is not None else "params"
         item = {params_name: metadata[params_name]}
 
         return ckptr.restore(
-            ckpt_path,
+            params_path,
             ocp.args.PyTreeRestore(
                 item=item,
                 restore_args=jax.tree.map(
-                    lambda _: ocp.ArrayRestoreArgs(sharding=sharding, restore_type=restore_type), item
+                    lambda _: ocp.ArrayRestoreArgs(sharding=sharding, restore_type=restore_type, dtype=dtype), item
                 ),
                 transforms={},  # required to load a partial PyTree (e.g., only params from a full TrainState)
             ),

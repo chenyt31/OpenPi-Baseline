@@ -83,6 +83,7 @@ class FakeDataset(Dataset):
 
 
 def create_dataset(data_config: _config.DataConfig, model: _model.Model) -> Dataset:
+    """Create a dataset for training."""
     repo_id = data_config.repo_id
     if repo_id == "fake":
         return FakeDataset(model, num_samples=1024)
@@ -92,6 +93,28 @@ def create_dataset(data_config: _config.DataConfig, model: _model.Model) -> Data
         data_config.repo_id,
         delta_timestamps={"action": [t / dataset_meta.fps for t in range(model.action_horizon)]},
         root=data_config.dataset_root,
+    )
+
+
+def transform_dataset(dataset: Dataset, data_config: _config.DataConfig, *, skip_norm_stats: bool = False) -> Dataset:
+    """Transform the dataset by applying the data transforms."""
+    norm_stats = {}
+    if data_config.repo_id != "fake" and not skip_norm_stats:
+        if data_config.norm_stats is None:
+            raise ValueError(
+                "Normalization stats not found. "
+                "Make sure to run `scripts/compute_norm_stats.py --config-name=<your-config>`."
+            )
+        norm_stats = data_config.norm_stats
+
+    return TransformedDataset(
+        dataset,
+        [
+            *data_config.repack_transforms.inputs,
+            *data_config.data_transforms.inputs,
+            _transforms.Normalize(norm_stats),
+            *data_config.model_transforms.inputs,
+        ],
     )
 
 
@@ -121,24 +144,14 @@ def create_data_loader(
             execute in the main process.
     """
     data_config = config.data.create(config.metadata_dir, model)
-    dataset = create_dataset(data_config, model)
 
-    norm_stats = {}
-    if data_config.repo_id != "fake" and not skip_norm_stats:
-        if data_config.norm_stats is None:
-            raise ValueError("Normalization stats not found. Make sure to run `compute_norm_stats.py` first.")
-        norm_stats = data_config.norm_stats
+    dataset = create_dataset(data_config, model)
+    dataset = transform_dataset(dataset, data_config, skip_norm_stats=skip_norm_stats)
 
     data_loader = TorchDataLoader(
         dataset,
         local_batch_size=config.batch_size // jax.process_count(),
         sharding=sharding,
-        transforms=[
-            *data_config.repack_transforms.inputs,
-            *data_config.data_transforms.inputs,
-            _transforms.Normalize(norm_stats),
-            *data_config.model_transforms.inputs,
-        ],
         shuffle=shuffle,
         num_batches=num_batches,
         num_workers=num_workers,
@@ -167,7 +180,6 @@ class TorchDataLoader:
         local_batch_size: int,
         *,
         sharding: jax.sharding.Sharding | None = None,
-        transforms: Sequence[_transforms.DataTransformFn] = (),
         shuffle: bool = False,
         num_batches: int | None = None,
         num_workers: int = 0,
@@ -179,7 +191,6 @@ class TorchDataLoader:
             dataset: The dataset to load.
             local_batch_size: The local batch size for each process.
             sharding: The sharding to use for the data loader.
-            transforms: The transforms to apply to the data.
             shuffle: Whether to shuffle the data.
             num_batches: If provided, determines the number of returned batches. If the
                 number is larger than the number of batches in the dataset, the data loader
@@ -204,7 +215,6 @@ class TorchDataLoader:
         if num_workers > 0:
             mp_context = multiprocessing.get_context("spawn")
 
-        dataset = TransformedDataset(dataset, transforms)
         generator = torch.Generator()
         generator.manual_seed(seed)
         self._data_loader = torch.utils.data.DataLoader(

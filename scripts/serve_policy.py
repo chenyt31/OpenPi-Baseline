@@ -33,7 +33,7 @@ class EnvMode(enum.Enum):
 class Exported:
     """Load an exported checkpoint."""
 
-    # Checkpoint directory (e.g., "s3://openpi-assets-internal/checkpoints/pi0_real/model").
+    # Checkpoint directory (e.g., "s3://openpi-assets/exported/pi0_aloha/model").
     dir: str
     # Processor name to load the norm stats from. If not provided, the default processor for the environment will be used.
     processor: str | None = None
@@ -88,23 +88,23 @@ def repack_from_env(env: EnvMode) -> transforms.Group:
 # Default exported models.
 DEFAULT_EXPORTED: dict[EnvMode, Exported] = {
     EnvMode.ALOHA: Exported(
-        dir="s3://openpi-assets-internal/checkpoints/pi0_real/model",
+        dir="s3://openpi-assets/exported/pi0_aloha/model",
         processor="trossen_biarm_single_base_cam_24dim",
     ),
     EnvMode.ALOHA_SIM: Exported(
-        dir="s3://openpi-assets-internal/checkpoints/pi0_sim/model",
+        dir="s3://openpi-assets/exported/pi0_aloha_sim/model",
         processor="huggingface_aloha_sim_transfer_cube",
     ),
     EnvMode.DROID: Exported(
-        dir="s3://openpi-assets-internal/checkpoints/gemmamix_nov4_droid_no22_1056am/290000/model",
+        dir="s3://openpi-assets/exported/pi0_droid/model",
         processor="openx_droid",
     ),
     EnvMode.CALVIN: Exported(
-        dir="s3://openpi-assets-internal/checkpoints/release_gemmamix_calvin_nov24_2053/40000/model",
+        dir="s3://openpi-assets/exported/pi0_calvin/model",
         processor="calvin",
     ),
     EnvMode.LIBERO: Exported(
-        dir="s3://openpi-assets-internal/checkpoints/release_gemmamix_libero_nov23_1443/40000/model",
+        dir="s3://openpi-assets/exported/pi0_libero/model",
         processor="libero",
     ),
 }

@@ -6,7 +6,7 @@ from openpi.policies import policy_config as _policy_config
 
 
 def create_policy_config() -> _policy_config.PolicyConfig:
-    model = _exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_sim/model")
+    model = _exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
 
     return _policy_config.PolicyConfig(
         model=model,

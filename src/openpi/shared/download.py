@@ -73,6 +73,15 @@ def maybe_download(url: str, **kwargs) -> pathlib.Path:
         scratch_path = local_path.with_suffix(".partial")
 
         if _is_openpi_url(url):
+            # Download with openpi credentials.
+            # TODO(ury): Remove once the bucket becomes public.
+            boto_session = boto3.Session(
+                aws_access_key_id="AKIA4MTWIIQIZBO44C62",
+                aws_secret_access_key="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",
+            )
+            _download_boto3(url, scratch_path, boto_session=boto_session)
+        elif url.startswith("s3://"):
+            # Download with default boto3 credentials.
             _download_boto3(url, scratch_path)
         else:
             _download_fsspec(url, scratch_path, **kwargs)
@@ -227,4 +236,4 @@ def _ensure_permissions(path: pathlib.Path) -> None:
 
 def _is_openpi_url(url: str) -> bool:
     """Check if the url is an OpenPI S3 bucket url."""
-    return url.startswith("s3://openpi-assets")
+    return url.startswith("s3://openpi-assets/")

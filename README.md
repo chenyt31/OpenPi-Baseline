@@ -37,13 +37,7 @@ During the first run of any example, Docker will build the images. Go grab a cof
 
 ### Downloading checkpoints
 
-By default checkpoints are downloaded and cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
-
-Available checkpoints:
-
-- `pi0_sim`: TODO
-- `pi0_droid`: TODO
-
+By default checkpoints are downloaded from `s3://openpi-assets` and are cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
 
 ## Running Training
 
@@ -84,7 +78,7 @@ uv run scripts/serve_policy.py --env LIBERO
 > [!NOTE] This uses the same code path as the default policy, including how the runtime data will be processed before feeding into the model.
 
 ```bash
-uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets-internal/checkpoints/pi0_real/model --policy.processor=trossen_biarm_single_base_cam_24dim
+uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_aloha/model --policy.processor=trossen_biarm_single_base_cam_24dim
 ```
 
 ### Serve a trained policy from an openpi checkpoint

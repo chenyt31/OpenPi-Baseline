@@ -3,19 +3,21 @@ import pathlib
 import jax
 import jax.numpy as jnp
 
-from openpi.models import exported
-from openpi.models import pi0
+import openpi.models.exported as exported
+import openpi.models.model as _model
+import openpi.models.pi0 as pi0
+import openpi.training.checkpoints as _checkpoints
 
 
 def test_sample_actions():
-    model = exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_sim/model")
+    model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
     actions = model.sample_actions(jax.random.key(0), model.fake_obs(), num_steps=10)
 
     assert actions.shape == (1, model.action_horizon, model.action_dim)
 
 
 def test_exported_as_pi0():
-    pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_sim/model")
+    pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
     model = pi_model.set_module(pi0.Module(), param_path="decoder")
 
     key = jax.random.key(0)
@@ -35,19 +37,11 @@ def test_convert_to_openpi(tmp_path: pathlib.Path):
     output_dir = tmp_path / "output"
 
     exported.convert_to_openpi(
-        "s3://openpi-assets-internal/checkpoints/pi0_sim/model",
+        "s3://openpi-assets/exported/pi0_aloha_sim/model",
         "huggingface_aloha_sim_transfer_cube",
         output_dir,
     )
 
-    assert (output_dir / "params").exists()
-    assert (output_dir / "assets").exists()
-
-
-def test_exported_droid():
-    model = exported.PiModel.from_checkpoint(
-        "s3://openpi-assets-internal/checkpoints/gemmamix_dct_dec5_droid_dec8_1008am/340000/model"
-    )
-    actions = model.sample_actions(jax.random.key(0), model.fake_obs(), num_denoising_steps=10)
-
-    assert actions.shape == (1, model.action_horizon, model.action_dim)
+    # Make sure that we can load the params and norm stats.
+    _ = _model.restore_params(output_dir / "params")
+    _ = _checkpoints.load_norm_stats(output_dir / "assets")

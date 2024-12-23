@@ -53,7 +53,7 @@ The below example shows how to run training with a config defined in `openpi/tra
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py <config name (eg. pi0 / pi0_small / debug)> 
 ```
 
-## Running Examples
+## Running examples
 
 We provide example integrations with several robotics platforms. See the README in each example for more details:
 
@@ -62,28 +62,40 @@ We provide example integrations with several robotics platforms. See the README 
 - [CALVIN](examples/calvin)
 - [LIBERO](examples/libero)
 
-## Running the openpi Server
+## Running the openpi server
 
 The openpi server hosts model inference for an openpi policy. 
 
-The server can be configured using the folllowing commands line arguments:
 
-- `--env`: The environment to serve the policy for.
-- `--config-name`: If provided, loads the policy from a training config. Otherwise, loads the default pi0 policy.
-- `--checkpoint-path`: Required if `config-name` is provided. Specifies the path to the checkpoint to load.
-- `--default-prompt`: If provided, overrides the default prompt for the policy.
+The server can be configured to serve policies in the following ways:
 
-The examples describe how to run it in conjunction with each environment, but you can also run it standalone:
+- Serve a default policy for the given environment.
+- Serve a trained policy from a checkpoint.
+- Serve an exported model.
 
-### With Docker:
+### Serve the default policy for the LIBERO environment
+
+```bash
+uv run scripts/serve_policy.py --env LIBERO
+```
+
+### Serve an exported model
+
+> [!NOTE] This uses the same code path as the default policy, including how the runtime data will be processed before feeding into the model.
+
+```bash
+uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets-internal/checkpoints/pi0_real/model --policy.processor=trossen_biarm_single_base_cam_24dim
+```
+
+### Serve a trained policy from an openpi checkpoint
+
+```bash
+uv run scripts/serve_policy.py --env ALOHA_SIM policy:checkpoint --policy.config=pi0_pretrained --policy.dir=checkpoints/pi0_pretrained/exp_name/10000
+```
+
+### Running with Docker:
 
 ```bash
 export SERVER_ARGS="--env ALOHA_SIM --default_prompt 'my task'"
 docker compose -f scripts/compose.yml up --build
-```
-
-### Without Docker:
-
-```bash
-uv run scripts/serve_policy.py --env ALOHA_SIM --default_prompt 'my task'
 ```

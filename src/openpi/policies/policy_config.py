@@ -15,7 +15,7 @@ import openpi.transforms as transforms
 
 @dataclasses.dataclass
 class PolicyConfig:
-    model: _model.Model
+    model: _model.BaseModel
 
     norm_stats: dict[str, transforms.NormStats]
 
@@ -47,7 +47,7 @@ def create_policy(config: PolicyConfig) -> _policy.Policy:
 
 def create_trained_policy(
     train_config: _config.TrainConfig,
-    checkpoint_path: str,
+    checkpoint_dir: str,
     *,
     repack_transforms: transforms.Group | None = None,
     sample_kwargs: dict[str, Any] | None = None,
@@ -58,10 +58,10 @@ def create_trained_policy(
 
     logging.info("Loading model...")
     model = train_config.create_model()
-    model = model.set_params(_model.restore_params(checkpoint_path, dtype=jnp.bfloat16))
+    model = model.set_params(_model.restore_params(checkpoint_dir, dtype=jnp.bfloat16))
 
     data_config = train_config.data.create(train_config.metadata_dir, model)
-    norm_stats = _checkpoints.load_norm_stats(checkpoint_path)
+    norm_stats = _checkpoints.load_norm_stats(checkpoint_dir)
 
     return _policy.Policy(
         model,

@@ -1,5 +1,8 @@
+from collections.abc import Sequence
+import dataclasses
 import enum
 import logging
+from typing import Any
 
 import tyro
 
@@ -17,11 +20,51 @@ from openpi.training import config as _config
 
 
 class EnvMode(enum.Enum):
+    """Supported environments."""
+
     ALOHA = "aloha"
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
     CALVIN = "calvin"
     LIBERO = "libero"
+
+
+@dataclasses.dataclass
+class Exported:
+    """Load an exported checkpoint."""
+
+    # Checkpoint directory (e.g., "s3://openpi-assets-internal/checkpoints/pi0_real/model").
+    dir: str
+    # Processor name to load the norm stats from. If not provided, the default processor for the environment will be used.
+    processor: str | None = None
+
+
+@dataclasses.dataclass
+class Checkpoint:
+    """Load a policy from a trained checkpoint."""
+
+    # Training config name (e.g., "pi0_pretrained").
+    config: str
+    # Checkpoint directory (e.g., "checkpoints/pi0_pretrained/exp/10000").
+    dir: str
+
+
+@dataclasses.dataclass
+class Args:
+    """Arguments for the serve_policy script."""
+
+    # Environment to serve the policy for.
+    env: EnvMode = EnvMode.ALOHA_SIM
+    # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
+    policy: Checkpoint | Exported | None = None
+
+    # If provided, overrides the default prompt for the policy.
+    default_prompt: str | None = None
+
+    # Port to serve the policy on.
+    port: int = 8000
+    # Record the policy's behavior for debugging.
+    record: bool = False
 
 
 def repack_from_env(env: EnvMode) -> transforms.Group:
@@ -42,21 +85,69 @@ def repack_from_env(env: EnvMode) -> transforms.Group:
             return transforms.Group()
 
 
-def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.Policy:
+# Default exported models.
+DEFAULT_EXPORTED: dict[EnvMode, Exported] = {
+    EnvMode.ALOHA: Exported(
+        dir="s3://openpi-assets-internal/checkpoints/pi0_real/model",
+        processor="trossen_biarm_single_base_cam_24dim",
+    ),
+    EnvMode.ALOHA_SIM: Exported(
+        dir="s3://openpi-assets-internal/checkpoints/pi0_sim/model",
+        processor="huggingface_aloha_sim_transfer_cube",
+    ),
+    EnvMode.DROID: Exported(
+        dir="s3://openpi-assets-internal/checkpoints/gemmamix_nov4_droid_no22_1056am/290000/model",
+        processor="openx_droid",
+    ),
+    EnvMode.CALVIN: Exported(
+        dir="s3://openpi-assets-internal/checkpoints/release_gemmamix_calvin_nov24_2053/40000/model",
+        processor="calvin",
+    ),
+    EnvMode.LIBERO: Exported(
+        dir="s3://openpi-assets-internal/checkpoints/release_gemmamix_libero_nov23_1443/40000/model",
+        processor="libero",
+    ),
+}
+
+
+def create_default_policy(
+    env: EnvMode, *, default_prompt: str | None = None, exported: Exported | None = None
+) -> _policy.Policy:
     model: _model.BaseModel
     config: _policy_config.PolicyConfig
 
+    default_exported = DEFAULT_EXPORTED[env]
+    if exported:
+        checkpoint_dir = exported.dir
+        processor = exported.processor or default_exported.processor
+    else:
+        checkpoint_dir = default_exported.dir
+        processor = default_exported.processor
+    assert processor, "Default processor must be always set"
+
+    logging.info("Loading model...")
+    model = _exported.PiModel.from_checkpoint(checkpoint_dir)
+
+    def make_policy_config(
+        input_layers: Sequence[transforms.DataTransformFn],
+        output_layers: Sequence[transforms.DataTransformFn],
+        sample_kwargs: dict[str, Any] | None = None,
+    ):
+        sample_kwargs = sample_kwargs or {"num_steps": 10}
+        return _policy_config.PolicyConfig(
+            model=model,
+            norm_stats=model.norm_stats(processor),
+            default_prompt=default_prompt,
+            input_layers=input_layers,
+            output_layers=output_layers,
+            sample_kwargs=sample_kwargs,
+        )
+
+    logging.info("Creating policy...")
     match env:
         case EnvMode.ALOHA:
-            logging.info("Loading model...")
-            model = _exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_real/model")
-
-            logging.info("Creating policy...")
             delta_action_mask = _policy_config.make_bool_mask(6, -1, 6, -1)
-            config = _policy_config.PolicyConfig(
-                model=model,
-                norm_stats=model.norm_stats("trossen_biarm_single_base_cam_24dim"),
-                default_prompt=default_prompt,
+            config = make_policy_config(
                 input_layers=[
                     aloha_policy.ActInputsRepack(),
                     aloha_policy.AlohaInputs(
@@ -74,94 +165,43 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
                 ],
             )
         case EnvMode.ALOHA_SIM:
-            logging.info("Loading model...")
-            model = _exported.PiModel.from_checkpoint("s3://openpi-assets-internal/checkpoints/pi0_sim/model")
-
-            logging.info("Creating policy...")
-            config = _policy_config.PolicyConfig(
-                model=model,
-                norm_stats=model.norm_stats("huggingface_aloha_sim_transfer_cube"),
-                default_prompt=default_prompt,
+            config = make_policy_config(
                 input_layers=[
                     aloha_policy.ActInputsRepack(),
-                    aloha_policy.AlohaInputs(
-                        action_dim=model.action_dim,
-                        delta_action_mask=None,
-                        adapt_to_pi=False,
-                    ),
+                    aloha_policy.AlohaInputs(action_dim=model.action_dim),
                 ],
                 output_layers=[
-                    aloha_policy.AlohaOutputs(
-                        delta_action_mask=None,
-                        adapt_to_pi=False,
-                    ),
+                    aloha_policy.AlohaOutputs(),
                     aloha_policy.ActOutputsRepack(),
                 ],
             )
         case EnvMode.DROID:
-            logging.info("Loading model...")
-            model = _exported.PiModel.from_checkpoint(
-                "s3://openpi-assets-internal/checkpoints/gemmamix_nov4_droid_no22_1056am/290000/model"
-            )
-
-            logging.info("Creating policy...")
-            config = _policy_config.PolicyConfig(
-                model=model,
-                norm_stats=model.norm_stats("openx_droid"),
-                default_prompt=default_prompt,
+            config = make_policy_config(
                 input_layers=[
-                    droid_policy.DroidInputs(
-                        action_dim=model.action_dim,
-                        delta_action_mask=None,
-                    ),
+                    droid_policy.DroidInputs(action_dim=model.action_dim),
                 ],
                 output_layers=[
-                    droid_policy.DroidOutputs(
-                        delta_action_mask=None,
-                    ),
+                    droid_policy.DroidOutputs(),
                     transforms.SubsampleActions(stride=5),
                 ],
-                sample_kwargs={"num_steps": 10},
             )
         case EnvMode.CALVIN:
-            logging.info("Loading model...")
-            model = _exported.PiModel.from_checkpoint(
-                "s3://openpi-assets-internal/checkpoints/release_gemmamix_calvin_nov24_2053/40000/model"
-            )
-
-            logging.info("Creating policy...")
-            config = _policy_config.PolicyConfig(
-                model=model,
-                norm_stats=model.norm_stats("calvin"),
-                default_prompt=default_prompt,
+            config = make_policy_config(
                 input_layers=[
                     calvin_policy.CalvinInputs(action_dim=model.action_dim),
                 ],
                 output_layers=[
                     calvin_policy.CalvinOutputs(),
                 ],
-                sample_kwargs={"num_steps": 10},
             )
         case EnvMode.LIBERO:
-            logging.info("Loading model...")
-            model = _exported.PiModel.from_checkpoint(
-                "s3://openpi-assets-internal/checkpoints/release_gemmamix_libero_nov23_1443/40000/model"
-            )
-
-            logging.info("Creating policy...")
-            config = _policy_config.PolicyConfig(
-                model=model,
-                norm_stats=model.norm_stats("libero"),
-                default_prompt=default_prompt,
+            config = make_policy_config(
                 input_layers=[
                     libero_policy.LiberoInputs(action_dim=model.action_dim),
                 ],
                 output_layers=[
                     libero_policy.LiberoOutputs(),
                 ],
-                sample_kwargs={
-                    "num_steps": 10,
-                },
             )
         case _:
             raise ValueError(f"Unknown environment mode: {env}")
@@ -169,43 +209,30 @@ def create_default_policy(env: EnvMode, default_prompt: str | None) -> _policy.P
     return _policy_config.create_policy(config)
 
 
-def main(
-    port: int = 8000,
-    *,
-    env: EnvMode = EnvMode.ALOHA_SIM,
-    config_name: str | None = None,
-    checkpoint_path: str | None = None,
-    default_prompt: str | None = None,
-    record: bool = False,
-) -> None:
-    """Serve a policy.
+def create_policy(args: Args) -> _policy.Policy:
+    match args.policy:
+        case Checkpoint():
+            return _policy_config.create_trained_policy(
+                _config.get_config(args.policy.config),
+                args.policy.dir,
+                repack_transforms=repack_from_env(args.env),
+                default_prompt=args.default_prompt,
+            )
+        case Exported():
+            return create_default_policy(args.env, default_prompt=args.default_prompt, exported=args.policy)
+        case None:
+            return create_default_policy(args.env, default_prompt=args.default_prompt)
 
-    Args:
-        env: The environment to serve the policy for.
-        config_name: If provided, loads the policy from a training config. Otherwise, loads the default pi0 policy.
-        checkpoint_path: Required if `config_name` is provided. Specifies the path to the checkpoint to load.
-        default_prompt: If provided, overrides the default prompt for the policy.
-        record: Whether to record the policy's behavior.
-    """
-    if config_name:
-        if not checkpoint_path:
-            raise ValueError("checkpoint_path is required if config_name is provided")
-        config = _config.get_config(config_name)
-        policy = _policy_config.create_trained_policy(
-            config,
-            checkpoint_path,
-            repack_transforms=repack_from_env(env),
-            sample_kwargs=config.sample_kwargs,
-        )
-    else:
-        policy = create_default_policy(env, default_prompt)
+
+def main(args: Args) -> None:
+    policy = create_policy(args)
 
     # Record the policy's behavior.
-    if record:
+    if args.record:
         policy = _policy.PolicyRecorder(policy, "policy_records")
 
     logging.info("Creating server...")
-    server = websocket_policy_server.WebsocketPolicyServer(policy=policy, host="0.0.0.0", port=port)
+    server = websocket_policy_server.WebsocketPolicyServer(policy=policy, host="0.0.0.0", port=args.port)
 
     logging.info("Serving...")
     server.serve_forever()
@@ -213,4 +240,4 @@ def main(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, force=True)
-    tyro.cli(main)
+    main(tyro.cli(Args))

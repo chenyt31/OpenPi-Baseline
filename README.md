@@ -131,6 +131,7 @@ name | path | env | recommended language command | description
 --- | --- | ---  | --- | ---
 `pi0_base` | `s3://openpi-assets/exported/pi0_base/model/` | `ALOHA`, `DROID` | `"be a good robot"` | Standard pre-trained $\pi_0$, may not perform well in zero-shot
 `pi0_aloha` | `s3://openpi-assets/exported/pi0_aloha/model` | `ALOHA` | `""` | $\pi_0$ model fine-tuned on public ALOHA data, supports pen cap/uncap task
+`pi0_aloha_towel` | `s3://openpi-assets/exported/pi0_aloha_towel/model` | `ALOHA` | `"fold the towel"` | $\pi_0$ model fine-tuned to perform a towel folding task on ALOHA
 `pi0_aloha_sim` | `s3://openpi-assets/exported/pi0_aloha_sim/model` | `ALOHA_SIM` | `"be a good robot"` | $\pi_0$ model fine-tuned on public simulated ALOHA cube transfer task
 `pi0_droid` | `s3://openpi-assets/exported/pi0_droid/model` | `DROID` | any DROID command | $\pi_0$ model fine-tuned on public DROID dataset
 `pi0_calvin` | `s3://openpi-assets/exported/pi0_calvin/model` | `CALVIN` | any CALVIN command | $\pi_0$ model fine-tuned on public CALVIN simulated dataset

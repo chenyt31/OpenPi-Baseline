@@ -276,13 +276,13 @@ class UR5DataConfig(DataConfigFactory):
             # These transforms are the ones we wrote earlier.
             data_transforms=_transforms.Group(
                 inputs=[
-                    ur5_policy. UR5Inputs(
+                    ur5_policy.UR5Inputs(
                         action_dim=model.action_dim,
                         delta_action_mask=self.delta_action_mask,
                     ),
                 ],
                 outputs=[
-                    ur5_policy. UR5Outputs(
+                    ur5_policy.UR5Outputs(
                         delta_action_mask=self.delta_action_mask,
                     ),
                 ],

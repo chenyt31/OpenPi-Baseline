@@ -118,3 +118,103 @@ For these exported models, norm stats are loaded from processors that are export
 export SERVER_ARGS="--env ALOHA_SIM --default_prompt 'my task'"
 docker compose -f scripts/compose.yml up --build
 ```
+
+## Fine-tuning to your own robot
+
+This section provides a brief general guide to fine-tune $\pi_0$ to your own robot data. As a running example, we will describe adapting the policy to control a 6 DoF UR5e robot arm with a 1 DoF gripper. While $\pi_0$ may be adapted to a variety of different robot morphologies, we have tested single- and dual-arm setups with 6 DoF arms and single-arm setups with 7 DoF arms, typically with one base camera (over the shoulder) and a wrist camera on each wrist.
+
+### Define the policy inputs and outputs
+
+We will first define `UR5Inputs` and `UR5Outputs` classes derived from `DataTransformFn` to describe how the observations from the robot map onto model inputs and how the model outputs map onto robot actions, respectively. For a simple existing example such transforms, see [src/openpi/policies/droid_policy.py](src/openpi/policies/droid_policy.py).
+
+We assume that the robot client produces a dict with the following fields, and that images have already been resized to the model's expected 224x224 resolution:
+- `joints`: 6D vector of joint angles
+- `gripper`: 1D gripper position in the range [0, 1]
+- `base_rgb`: RGB image from the base camera at 224x224 resolution
+- `wrist_rgb`: RGB image from the wrist camera at 224x224 resolution
+
+Here is an example input transformation:
+
+```
+class UR5Inputs(transforms.DataTransformFn):
+    def __init__(self, action_dim: int, *, delta_action_mask: Sequence[bool] | None = None):
+        self._action_dim = action_dim
+        self._delta_action_mask = delta_action_mask
+
+    def __call__(self, data: dict) -> dict:
+        # First, concatenate the joints and gripper into the state vector.
+        # Pad to the expected input dimensionality of the model (same as action_dim).
+        state = np.concatenate([data["joints"], data["gripper"]], axis=1)
+        state = transforms.pad_to_dim(state, self._action_dim)
+
+        inputs = {
+            "state": state,
+            # Dictionary containing image inputs, the keys must have these names.
+            "image": {
+                "base_0_rgb": data["base_rgb"],
+                "left_wrist_0_rgb": data["wrist_rgb"]
+                # Since there is no right wrist, replace with zeros
+                "right_wrist_0_rgb": np.zeros_like(data["base_rgb"]),
+            },
+            # 1D bool indicating if the image exists.
+            "image_mask": {
+                "base_0_rgb": np.ones(1, dtype=np.bool_),
+                "left_wrist_0_rgb": np.ones(1, dtype=np.bool_),
+                "right_wrist_0_rgb": np.zeros(1, dtype=np.bool_),
+            },
+        }
+
+        # Pass the prompt along to the model.
+        if "prompt" in data:
+            inputs["prompt"] = data["prompt"]
+
+        return inputs
+```
+
+Here is an example output transformation:
+
+```
+class UR5Outputs(transforms.DataTransformFn):
+    def __init__(self, *, delta_action_mask: Sequence[bool] | None = None):
+        self._delta_action_mask = delta_action_mask
+
+    def __call__(self, data: dict) -> dict:
+        # Since the robot has 7 action dimensions (6 DoF + gripper), return the first 7 dims
+        actions = np.asarray(data["actions"][..., :7])
+
+        # _delta_action_mask indicates which dimensions of the action are relative to the
+        # state. For these dimensions, add the state back in. Note we again use the first
+        # 7 dimensions, because the robot expects 7D actions.
+        if self._delta_action_mask is not None:
+            state = np.asarray(data["state"][..., :7])
+            mask = np.asarray(self._delta_action_mask[:7])
+            actions = actions + np.expand_dims(np.where(mask, state, 0), axis=-2)
+
+        return {"actions": actions}
+```
+
+You will also need to define a new entry in the `EnvMode` enum in [scripts/serve_policy.py](scripts/serve_policy.py). You do not need to do anything with this entry unless you want to use the `pi0_base` model in zero-shot, which is **almost certainly** the case if you are adding your own robot that $\pi_0$ was not trained on. But if you do want to use $\pi_0$ in zero-shot on a supported robot: You will need to add the right processor under `DEFAULT_EXPORTED` (if the model already supports your robot, this should exist, but you may need to file a Github issue to get the name), and add a case to `create_default_policy`, e.g.:
+
+```
+        case EnvMode.UR5:
+            config = make_policy_config(
+                input_layers=[
+                    ur5_policy.UR5Inputs(action_dim=model.action_dim),
+                ],
+                output_layers=[
+                    ur5_policy.UR5Outputs(),
+                ],
+            )
+```
+
+### Define the training config
+
+TODO: describe how to define the training config (presumably using the input/output transforms defined above)
+
+### Convert your dataset and train
+
+TODO: describe how to convert the dataset and train
+
+### Serve your policy
+
+TODO: explain how to do this

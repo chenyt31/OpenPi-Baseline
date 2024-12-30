@@ -189,6 +189,19 @@ class UR5Inputs(transforms.DataTransformFn):
             },
         }
 
+        # If this is called during training, actions will also be available.
+        if "actions" in data:
+            actions = np.asarray(data["actions"])
+            # _delta_action_mask indicates which dimensions of the action are relative to the
+            # state. For these dimensions, subtract state. Note we use the first
+            # 7 dimensions, because the robot expects 7D actions.
+            if self._delta_action_mask is not None:
+                mask = np.asarray(self._delta_action_mask[:7])
+                # Note that actions is 3D: batch, chunk position, dimension.
+                actions = actions - np.expand_dims(np.where(mask, state[..., :7], 0), axis=-2)
+
+            inputs["actions"] = transforms.pad_to_dim(actions, self._action_dim)
+
         # Pass the prompt along to the model.
         if "prompt" in data:
             inputs["prompt"] = data["prompt"]
@@ -213,6 +226,7 @@ class UR5Outputs(transforms.DataTransformFn):
         if self._delta_action_mask is not None:
             state = np.asarray(data["state"][..., :7])
             mask = np.asarray(self._delta_action_mask[:7])
+            # Note that actions is 3D: batch, chunk position, dimension.
             actions = actions + np.expand_dims(np.where(mask, state, 0), axis=-2)
 
         return {"actions": actions}

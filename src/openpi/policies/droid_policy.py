@@ -1,18 +1,18 @@
-from collections.abc import Sequence
+import dataclasses
 
 import numpy as np
 
 from openpi import transforms
 
 
+@dataclasses.dataclass(frozen=True)
 class DroidInputs(transforms.DataTransformFn):
-    def __init__(self, action_dim: int, *, delta_action_mask: Sequence[bool] | None = None):
-        self._action_dim = action_dim
-        self._delta_action_mask = delta_action_mask
+    # The action dimension of the model. Will be used to pad state and actions.
+    action_dim: int
 
     def __call__(self, data: dict) -> dict:
         state = np.concatenate([data["observation/joint_position"], data["observation/gripper_position"]], axis=1)
-        state = transforms.pad_to_dim(state, self._action_dim)
+        state = transforms.pad_to_dim(state, self.action_dim)
 
         base_image = data["observation/exterior_image_1_left"]
 
@@ -36,18 +36,8 @@ class DroidInputs(transforms.DataTransformFn):
         return inputs
 
 
+@dataclasses.dataclass(frozen=True)
 class DroidOutputs(transforms.DataTransformFn):
-    def __init__(self, *, delta_action_mask: Sequence[bool] | None = None):
-        self._delta_action_mask = delta_action_mask
-
     def __call__(self, data: dict) -> dict:
         # Only return the first 8 dims.
-        actions = np.asarray(data["actions"][..., :8])
-
-        # Apply the delta action mask.
-        if self._delta_action_mask is not None:
-            state = np.asarray(data["state"][..., :8])
-            mask = np.asarray(self._delta_action_mask[:8])
-            actions = actions + np.expand_dims(np.where(mask, state, 0), axis=-2)
-
-        return {"actions": actions}
+        return {"actions": np.asarray(data["actions"][..., :8])}

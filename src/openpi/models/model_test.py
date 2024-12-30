@@ -36,7 +36,7 @@ def test_model_restore():
     batch_size = 2
     obs, act = model.fake_obs(batch_size), model.fake_act(batch_size)
 
-    params = _model.restore_params(download.maybe_download("s3://openpi-assets/exported/pi0_aloha_sim/model"))
+    params = _model.restore_params(download.maybe_download("s3://openpi-assets/checkpoints/pi0_base/params"))
     model = model.set_params(params)
 
     rng = jax.random.key(0)

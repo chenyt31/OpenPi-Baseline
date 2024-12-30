@@ -13,17 +13,10 @@ def create_policy_config() -> _policy_config.PolicyConfig:
         norm_stats=model.norm_stats("huggingface_aloha_sim_transfer_cube"),
         input_layers=[
             aloha_policy.ActInputsRepack(),
-            aloha_policy.AlohaInputs(
-                action_dim=model.action_dim,
-                delta_action_mask=None,
-                adapt_to_pi=False,
-            ),
+            aloha_policy.AlohaInputs(action_dim=model.action_dim),
         ],
         output_layers=[
-            aloha_policy.AlohaOutputs(
-                delta_action_mask=None,
-                adapt_to_pi=False,
-            ),
+            aloha_policy.AlohaOutputs(),
             aloha_policy.ActOutputsRepack(),
         ],
     )

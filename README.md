@@ -130,12 +130,12 @@ We will first define `UR5Inputs` and `UR5Outputs` classes derived from `DataTran
 We assume that the robot client produces a dict with the following fields, and that images have already been resized to the model's expected 224x224 resolution:
 - `joints`: 6D vector of joint angles
 - `gripper`: 1D gripper position in the range [0, 1]
-- `base_rgb`: RGB image from the base camera at 224x224 resolution
-- `wrist_rgb`: RGB image from the wrist camera at 224x224 resolution
+- `base_rgb`: RGB image from the base camera
+- `wrist_rgb`: RGB image from the wrist camera
 
 Here is an example input transformation:
 
-```
+```python
 class UR5Inputs(transforms.DataTransformFn):
     def __init__(self, action_dim: int, *, delta_action_mask: Sequence[bool] | None = None):
         self._action_dim = action_dim
@@ -173,7 +173,7 @@ class UR5Inputs(transforms.DataTransformFn):
 
 Here is an example output transformation:
 
-```
+```python
 class UR5Outputs(transforms.DataTransformFn):
     def __init__(self, *, delta_action_mask: Sequence[bool] | None = None):
         self._delta_action_mask = delta_action_mask
@@ -193,9 +193,9 @@ class UR5Outputs(transforms.DataTransformFn):
         return {"actions": actions}
 ```
 
-You will also need to define a new entry in the `EnvMode` enum in [scripts/serve_policy.py](scripts/serve_policy.py). You do not need to do anything with this entry unless you want to use the `pi0_base` model in zero-shot, which is **almost certainly** the case if you are adding your own robot that $\pi_0$ was not trained on. But if you do want to use $\pi_0$ in zero-shot on a supported robot: You will need to add the right processor under `DEFAULT_EXPORTED` (if the model already supports your robot, this should exist, but you may need to file a Github issue to get the name), and add a case to `create_default_policy`, e.g.:
+You will also need to define a new entry in the `EnvMode` enum in [scripts/serve_policy.py](scripts/serve_policy.py) (e.g., `UR5`). You do not need to do anything with this entry unless you want to use the `pi0_base` model in zero-shot, which is **almost certainly** the case if you are adding your own robot that $\pi_0$ was not trained on. But if you do want to use $\pi_0$ in zero-shot on a supported robot: You will need to add the right processor under `DEFAULT_EXPORTED` (if the model already supports your robot, this should exist, but you may need to file a Github issue to get the name), and add a case to `create_default_policy`, e.g.:
 
-```
+```python
         case EnvMode.UR5:
             config = make_policy_config(
                 input_layers=[
@@ -209,12 +209,148 @@ You will also need to define a new entry in the `EnvMode` enum in [scripts/serve
 
 ### Define the training config
 
-TODO: describe how to define the training config (presumably using the input/output transforms defined above)
+To create a configuration for training on your robot, it will be necessary to add two things to [src/openpi/training/config.py](src/openpi/training/config.py): a `DataConfigFactory` subclass that defines the data source for your robot, and a `TrainConfig` object added to the `_CONFIGS` list, which lists the available training configs. Let's start with the `DataConfigFactory`: [config.py](src/openpi/training/config.py) already has one example (`LeRobotAlohaDataConfig`), which uses the LeRobot dataset format to import data for the ALOHA platform. This example is a bit more involved than we will need, since ALOHA has a few quirks that require special handling. Here is an example of `DataConfigFactory` subclass for our UR5 example above:
+
+```python
+@dataclasses.dataclass(frozen=True)
+class UR5DataConfig(DataConfigFactory):
+    # This is the repo id from LeRobot for this dataset repo.
+    repo_id: str
+    # The delta action mask. Each value corresponds to an action dimension and indicates if
+    # it should be converted to a delta action. If None, absolute actions are used.
+    delta_action_mask: Sequence[bool] | None = None
+    # By default, the prompt will be "be a good robot", but we can override it here.
+    # We can also set the prompt in the command line, but it's good to specify a reasonable
+    # default that matches a reasonable prompt in the training set.
+    default_prompt: str | None = None
+    # If true, will disable syncing the dataset from the huggingface hub.
+    local_files_only: bool = False
+
+    def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
+        # This is standard boilerplate for loading norm stats for openpi checkpoints.
+        norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
+        norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exist() else None
+        
+        return DataConfig(
+            repo_id=self.repo_id,
+            norm_stats=norm_stats,
+            # These transforms are the ones we wrote earlier.
+            data_transforms=_transforms.Group(
+                inputs=[
+                    ur5_policy. UR5Inputs(
+                        action_dim=model.action_dim,
+                        delta_action_mask=self.delta_action_mask,
+                    ),
+                ],
+                outputs=[
+                    ur5_policy. UR5Outputs(
+                        delta_action_mask=self.delta_action_mask,
+                    ),
+                ],
+            ),
+            # These transformations resize the images and tokenize the prompt.
+            model_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.ResizeImages(224, 224),
+                    _transforms.TokenizePrompt(
+                        _tokenizer.PaligemmaTokenizer(model.max_token_len),
+                        default_prompt=self.default_prompt,
+                    ),
+                ]
+            ),
+            local_files_only=self.local_files_only,
+        )
+```
+
+Then, the `TrainConfig` that we add to the list `_CONFIGS` can look like this. You can further modify this if you want to tweak any other parameters, such as learning rate, batch size, and number of training steps (see the `TrainConfig` class for the full list of parameters):
+
+```python
+TrainConfig(
+    name="ur5",
+    data=UR5DataConfig(
+        # This points to the repo ID for your dataset.
+        repo_id="lerobot/my_ur5_dataset",
+        # This means that we use delta actions for the first 6 dimensions (the joints),
+        # and then absolute action for the 7th dimension (the gripper), which is standard.
+        delta_action_mask=delta_actions.make_bool_mask(6, -1),
+        # Set a reasonable default here.
+        default_prompt="be a good robot",
+        # Set this to True if you are using a dataset that is not on the HuggingFace hub.
+        local_files_only=True,
+    ),
+    # This is the standard pi0 pretrained checkpoint.
+    weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+),
+```
+
+### Write your robot client
+
+The openpi policy server serves the policy, and your robot can run a client to connect to this server, sending it observations and getting back actions. You can write your own robot client in whatever way you want, but if you would like to build on our client, take a look at [examples/aloha_real/main.py](examples/aloha_real/main.py) for an example. The important bit of code is this:
+
+```python
+def main(args: Args) -> None:
+    runtime = _runtime.Runtime(
+        # This specifies the environment (which you will implement to interface with your robot).
+        environment=_env.AlohaRealEnvironment(),
+        agent=_policy_agent.PolicyAgent(
+            policy=action_chunk_broker.ActionChunkBroker(
+                policy=_websocket_client_policy.WebsocketClientPolicy(
+                    host=args.host,
+                    port=args.port,
+                ),
+                # This is the number of steps before getting a new action chunk.
+                # Here it is taken from the CLI arguments, but you can also hard-code it.
+                action_horizon=args.action_horizon,
+            )
+        ),
+        subscribers=[],
+        # The expected real-time frequency of the robot.
+        max_hz=50,
+    )
+
+    runtime.run()
+```
+
+If we look at the [Environment ABC](packages/openpi-client/src/openpi_client/runtime/environment.py), we see that we need to implement just four methods (see [examples/aloha_real/env.py](examples/aloha_real/env.py)) for how these are implemented for the ALOHA robot:
+
+- `def reset(self)`: This is called at the start of each episodes and might, for example, move the robot to a starting home position.
+- `def done(self) -> bool`: This method returns `True` if the robot is done with the task, times out, etc. It is reasonable to always return `False` if you want the episode to run forever.
+- `def get_observation(self) -> dict`: This method returns a dictionary of observations. If you followed this guide, your `UR5Inputs` class will receive exactly this dictionary as input. But it is possible to add other input transformations as well (which our ALOHA example does, see [aloha_policy.py](src/openpi/policies/aloha_policy.py)).
+- `def apply_action(self, action: dict)`: This method sets the actions on the robot as specified by the dictionary `action`, which also matches the output of `UR5Outputs` unless other transformations are applied.
+
+You should interface each of these functions with your own robot code as needed.
+
+Congratulations, you are now done with all the additional openpi code!
 
 ### Convert your dataset and train
 
-TODO: describe how to convert the dataset and train
+As described in the [Running Training](#running-training) section, we need to run two commands to train on this dataset. First, we need to compute normalization statistics for our training config. This needs to only be done once for the dataset (and redone if the dataset changes):
+
+```bash
+uv run scripts/compute_norm_stats.py --config-name ur5
+```
+
+Then we can run training:
+
+```bash
+uv run scripts/train.py ur5 --exp-name=my_experiment --overwrite
+```
+
+Remember to set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` to allow JAX to use up to 90% of GPU memory.
+
 
 ### Serve your policy
 
-TODO: explain how to do this
+Once your model is trained, you can start the model server by running
+
+```bash
+uv run scripts/serve_policy.py --env UR5 policy:checkpoint --policy.config=ur5 --policy.dir=checkpoints/ur5/my_experiment/29999
+```
+
+where we use `29999` as the step number if we want the final checkpoint for a 30,000 step training run.
+
+To start the robot client, if you used our client code, just run
+
+```bash
+python your_client_main.py
+```

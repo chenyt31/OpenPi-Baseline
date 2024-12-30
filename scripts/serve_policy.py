@@ -91,7 +91,7 @@ def repack_from_env(env: EnvMode) -> transforms.Group:
 DEFAULT_EXPORTED: dict[EnvMode, Exported] = {
     EnvMode.ALOHA: Exported(
         dir="s3://openpi-assets/exported/pi0_aloha/model",
-        processor="trossen_biarm_single_base_cam_24dim",
+        processor="all_berkeley_aloha_data_delta_actions",
     ),
     EnvMode.ALOHA_SIM: Exported(
         dir="s3://openpi-assets/exported/pi0_aloha_sim/model",

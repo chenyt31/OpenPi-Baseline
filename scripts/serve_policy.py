@@ -16,7 +16,6 @@ from openpi.policies import libero_policy
 from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.serving import websocket_policy_server
-from openpi.shared import delta_actions
 from openpi.training import config as _config
 
 
@@ -165,21 +164,16 @@ def create_default_policy(
     logging.info("Creating policy...")
     match env:
         case EnvMode.ALOHA:
-            delta_action_mask = delta_actions.make_bool_mask(6, -1, 6, -1)
+            delta_action_mask = transforms.make_bool_mask(6, -1, 6, -1)
             config = make_policy_config(
                 input_layers=[
                     aloha_policy.ActInputsRepack(),
-                    aloha_policy.AlohaInputs(
-                        action_dim=model.action_dim,
-                        delta_action_mask=delta_action_mask,
-                        adapt_to_pi=True,
-                    ),
+                    aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=True),
+                    transforms.DeltaActions(mask=delta_action_mask),
                 ],
                 output_layers=[
-                    aloha_policy.AlohaOutputs(
-                        delta_action_mask=delta_action_mask,
-                        adapt_to_pi=True,
-                    ),
+                    transforms.AbsoluteActions(mask=delta_action_mask),
+                    aloha_policy.AlohaOutputs(adapt_to_pi=True),
                     aloha_policy.ActOutputsRepack(),
                 ],
             )

@@ -1,4 +1,5 @@
-from collections.abc import Sequence
+import dataclasses
+from typing import ClassVar
 
 import einops
 import numpy as np
@@ -42,32 +43,31 @@ class ActOutputsRepack(transforms.DataTransformFn):
         return {"qpos": data["actions"]}
 
 
+@dataclasses.dataclass(frozen=True)
 class AlohaInputs(transforms.DataTransformFn):
     """Inputs for the Aloha policy.
 
     Expected inputs:
     - images: dict[name, img] where img is [..., channel, height, width]. name must be in EXPECTED_CAMERAS.
     - state: [..., 14]
-    - actions: [..., action_horizon, action_dim]
-
-    Args:
-        action_dim: The dimension of the action space.
-        delta_action_mask: A boolean mask for the action dimensions. If None, absolute actions are used.
-        adapt_to_pi: If true, will adapt the joint and gripper values to match the pi runtime.
+    - actions: [..., action_horizon, 14]
     """
 
-    EXPECTED_CAMERAS = ("cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist")
+    # The action dimension of the model. Will be used to pad state and actions.
+    action_dim: int
 
-    def __init__(self, action_dim: int, *, delta_action_mask: Sequence[bool] | None = None, adapt_to_pi: bool = False):
-        self._action_dim = action_dim
-        self._delta_action_mask = delta_action_mask
-        self._adapt_to_pi = adapt_to_pi
+    # If true, will adapt the joint and gripper values to match the pi runtime.
+    adapt_to_pi: bool = False
+
+    # The expected cameras names. All input cameras must be in this set. Missing cameras will be
+    # replaced with black images and the corresponding `image_mask` will be set to False.
+    EXPECTED_CAMERAS: ClassVar[tuple[str, ...]] = ("cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist")
 
     def __call__(self, data: dict) -> dict:
-        data = _decode_aloha(data, adapt_to_pi=self._adapt_to_pi)
+        data = _decode_aloha(data, adapt_to_pi=self.adapt_to_pi)
 
         # Get the state. We are padding from 14 to the model action dim.
-        state = transforms.pad_to_dim(data["state"], self._action_dim)
+        state = transforms.pad_to_dim(data["state"], self.action_dim)
 
         in_images = data["images"]
         if set(in_images) - set(self.EXPECTED_CAMERAS):
@@ -106,13 +106,8 @@ class AlohaInputs(transforms.DataTransformFn):
         # Actions are only available during training.
         if "actions" in data:
             actions = np.asarray(data["actions"])
-            actions = _encode_actions_inv(actions, adapt_to_pi=self._adapt_to_pi)
-
-            if self._delta_action_mask is not None:
-                mask = np.asarray(self._delta_action_mask[:14])
-                actions = actions - np.expand_dims(np.where(mask, state[..., :14], 0), axis=-2)
-
-            inputs["actions"] = transforms.pad_to_dim(actions, self._action_dim)
+            actions = _encode_actions_inv(actions, adapt_to_pi=self.adapt_to_pi)
+            inputs["actions"] = transforms.pad_to_dim(actions, self.action_dim)
 
         if "prompt" in data:
             inputs["prompt"] = data["prompt"]
@@ -120,29 +115,17 @@ class AlohaInputs(transforms.DataTransformFn):
         return inputs
 
 
+@dataclasses.dataclass(frozen=True)
 class AlohaOutputs(transforms.DataTransformFn):
-    """Outputs for the Aloha policy.
+    """Outputs for the Aloha policy."""
 
-    Args:
-        delta_action_mask: A boolean mask for the action dimensions. If None, absolute actions are used.
-        adapt_to_pi: If true, will adapt the joint and gripper values to match the pi runtime.
-    """
-
-    def __init__(self, *, delta_action_mask: Sequence[bool] | None = None, adapt_to_pi: bool = False):
-        self._delta_action_mask = delta_action_mask
-        self._adapt_to_pi = adapt_to_pi
+    # If true, will adapt the joint and gripper values to match the pi runtime.
+    adapt_to_pi: bool = False
 
     def __call__(self, data: dict) -> dict:
         # Only return the first 14 dims.
         actions = np.asarray(data["actions"][..., :14])
-
-        # Apply the delta action mask.
-        if self._delta_action_mask is not None:
-            state = np.asarray(data["state"][..., :14])
-            mask = np.asarray(self._delta_action_mask[:14])
-            actions = actions + np.expand_dims(np.where(mask, state, 0), axis=-2)
-
-        return {"actions": _encode_actions(actions, adapt_to_pi=self._adapt_to_pi)}
+        return {"actions": _encode_actions(actions, adapt_to_pi=self.adapt_to_pi)}
 
 
 def joint_flip_mask() -> np.ndarray:

@@ -1,6 +1,5 @@
 """See _CONFIGS for the list of available configs."""
 
-from collections.abc import Sequence
 import dataclasses
 import difflib
 import pathlib
@@ -14,7 +13,6 @@ import openpi.models.pi0 as pi0
 import openpi.models.pi0_small as pi0_small
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
-from openpi.shared import delta_actions
 import openpi.shared.download as download
 import openpi.shared.normalize as _normalize
 import openpi.training.optimizer as _optimizer
@@ -64,9 +62,9 @@ class FakeDataConfig(DataConfigFactory):
 class LeRobotAlohaDataConfig(DataConfigFactory):
     # The LeRobot repo id.
     repo_id: str
-    # The delta action mask. Each value corresponds to an action dimension and indicates if it should be converted to a delta action.
-    # If None, absolute actions are used.
-    delta_action_mask: Sequence[bool] | None = None
+    # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
+    # Gripper dimensions will remain in absolute values.
+    use_delta_joint_actions: bool = False
     # If provided, will determine the default prompt that be used by the model.
     default_prompt: str | None = None
     # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
@@ -93,25 +91,23 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
             ]
         )
 
+        data_transforms = _transforms.Group(
+            inputs=[aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=self.adapt_to_pi)],
+            outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
+        )
+
+        if self.use_delta_joint_actions:
+            delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
+
         return DataConfig(
             repo_id=self.repo_id,
             norm_stats=norm_stats,
             repack_transforms=repack_transforms,
-            data_transforms=_transforms.Group(
-                inputs=[
-                    aloha_policy.AlohaInputs(
-                        action_dim=model.action_dim,
-                        delta_action_mask=self.delta_action_mask,
-                        adapt_to_pi=self.adapt_to_pi,
-                    ),
-                ],
-                outputs=[
-                    aloha_policy.AlohaOutputs(
-                        delta_action_mask=self.delta_action_mask,
-                        adapt_to_pi=self.adapt_to_pi,
-                    ),
-                ],
-            ),
+            data_transforms=data_transforms,
             model_transforms=_transforms.Group(
                 inputs=[
                     _transforms.ResizeImages(224, 224),
@@ -250,7 +246,7 @@ _CONFIGS = [
         name="aloha_static_cups_open",
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_static_cups_open",
-            delta_action_mask=delta_actions.make_bool_mask(6, -1, 6, -1),
+            use_delta_joint_actions=True,
             adapt_to_pi=True,
             repack_transforms=_transforms.Group(
                 inputs=[

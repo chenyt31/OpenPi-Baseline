@@ -24,6 +24,7 @@ class Args:
     port: int = 8000
 
     env: EnvMode = EnvMode.ALOHA_SIM
+    num_steps: int = 10
 
 
 def main(args: Args) -> None:
@@ -44,13 +45,12 @@ def main(args: Args) -> None:
     policy.infer(obs_fn())
 
     start = time.time()
-    for _ in range(100):
+    for _ in range(args.num_steps):
         policy.infer(obs_fn())
     end = time.time()
 
-    print(f"Total time taken: {end - start}")
-    # Note that each inference returns many action chunks.
-    print(f"Inference rate: {100 / (end - start)} Hz")
+    print(f"Total time taken: {end - start:.2f} s")
+    print(f"Average inference time: {1000 * (end - start) / args.num_steps:.2f} ms")
 
 
 def _random_observation_aloha() -> dict:
@@ -90,4 +90,4 @@ def _random_observation_libero() -> dict:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    tyro.cli(main)
+    main(tyro.cli(Args))

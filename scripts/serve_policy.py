@@ -68,24 +68,6 @@ class Args:
     record: bool = False
 
 
-def repack_from_env(env: EnvMode) -> transforms.Group:
-    """Creates environment specific repack transforms."""
-    # TODO(ury): Move this to the runtime.
-    match env:
-        case EnvMode.ALOHA:
-            return transforms.Group(
-                inputs=[aloha_policy.ActInputsRepack()],
-                outputs=[aloha_policy.ActOutputsRepack()],
-            )
-        case EnvMode.ALOHA_SIM:
-            return transforms.Group(
-                inputs=[aloha_policy.ActInputsRepack()],
-                outputs=[aloha_policy.ActOutputsRepack()],
-            )
-        case _:
-            return transforms.Group()
-
-
 # Default exported models.
 DEFAULT_EXPORTED: dict[EnvMode, Exported] = {
     EnvMode.ALOHA: Exported(
@@ -167,25 +149,21 @@ def create_default_policy(
             delta_action_mask = transforms.make_bool_mask(6, -1, 6, -1)
             config = make_policy_config(
                 input_layers=[
-                    aloha_policy.ActInputsRepack(),
                     aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=True),
                     transforms.DeltaActions(mask=delta_action_mask),
                 ],
                 output_layers=[
                     transforms.AbsoluteActions(mask=delta_action_mask),
                     aloha_policy.AlohaOutputs(adapt_to_pi=True),
-                    aloha_policy.ActOutputsRepack(),
                 ],
             )
         case EnvMode.ALOHA_SIM:
             config = make_policy_config(
                 input_layers=[
-                    aloha_policy.ActInputsRepack(),
                     aloha_policy.AlohaInputs(action_dim=model.action_dim),
                 ],
                 output_layers=[
                     aloha_policy.AlohaOutputs(),
-                    aloha_policy.ActOutputsRepack(),
                 ],
             )
         case EnvMode.DROID:
@@ -228,7 +206,6 @@ def create_policy(args: Args) -> _policy.Policy:
             return _policy_config.create_trained_policy(
                 _config.get_config(args.policy.config),
                 args.policy.dir,
-                repack_transforms=repack_from_env(args.env),
                 default_prompt=args.default_prompt,
             )
         case Exported():

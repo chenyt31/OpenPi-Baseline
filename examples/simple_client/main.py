@@ -57,10 +57,10 @@ def _random_observation_aloha() -> dict:
     return {
         "state": np.ones((14,)),
         "images": {
-            "cam_high": np.random.rand(3, 480, 640).astype(np.float32),
-            "cam_low": np.random.rand(3, 480, 640).astype(np.float32),
-            "cam_left_wrist": np.random.rand(3, 480, 640).astype(np.float32),
-            "cam_right_wrist": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_high": np.random.randint(256, size=(3, 224, 224), dtype=np.uint8),
+            "cam_low": np.random.randint(256, size=(3, 224, 224), dtype=np.uint8),
+            "cam_left_wrist": np.random.randint(256, size=(3, 224, 224), dtype=np.uint8),
+            "cam_right_wrist": np.random.randint(256, size=(3, 224, 224), dtype=np.uint8),
         },
     }
 
@@ -78,8 +78,8 @@ def _random_observation_droid() -> dict:
 def _random_observation_calvin() -> dict:
     return {
         "observation/state": np.random.rand(15),
-        "observation/rgb_static": np.random.rand(4, 3, 480, 640).astype(np.float32),
-        "observation/rgb_gripper": np.random.rand(4, 3, 480, 640).astype(np.float32),
+        "observation/rgb_static": np.random.randint(256, size=(4, 3, 224, 224), dtype=np.uint8),
+        "observation/rgb_gripper": np.random.randint(256, size=(4, 3, 224, 224), dtype=np.uint8),
         "prompt": "do something",
     }
 
@@ -87,8 +87,8 @@ def _random_observation_calvin() -> dict:
 def _random_observation_libero() -> dict:
     return {
         "observation/state": np.random.rand(8),
-        "observation/image": np.random.rand(4, 3, 480, 640).astype(np.float32),
-        "observation/wrist_image": np.random.rand(4, 3, 480, 640).astype(np.float32),
+        "observation/image": np.random.randint(256, size=(4, 3, 224, 224), dtype=np.uint8),
+        "observation/wrist_image": np.random.randint(256, size=(4, 3, 224, 224), dtype=np.uint8),
         "prompt": "do something",
     }
 

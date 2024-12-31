@@ -153,13 +153,14 @@ class DeltaActions(DataTransformFn):
     mask: Sequence[bool] | None
 
     def __call__(self, data: dict) -> dict:
-        state, actions = data["state"], data["actions"]
+        if "actions" not in data or self.mask is None:
+            return data
 
-        if self.mask is not None:
-            mask = np.asarray(self.mask)
-            dims = mask.shape[-1]
-            actions[..., :dims] -= np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
-            data["actions"] = actions
+        state, actions = data["state"], data["actions"]
+        mask = np.asarray(self.mask)
+        dims = mask.shape[-1]
+        actions[..., :dims] -= np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
+        data["actions"] = actions
 
         return data
 
@@ -174,13 +175,14 @@ class AbsoluteActions(DataTransformFn):
     mask: Sequence[bool] | None
 
     def __call__(self, data: dict) -> dict:
-        state, actions = data["state"], data["actions"]
+        if "actions" not in data or self.mask is None:
+            return data
 
-        if self.mask is not None:
-            mask = np.asarray(self.mask)
-            dims = mask.shape[-1]
-            actions[..., :dims] += np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
-            data["actions"] = actions
+        state, actions = data["state"], data["actions"]
+        mask = np.asarray(self.mask)
+        dims = mask.shape[-1]
+        actions[..., :dims] += np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
+        data["actions"] = actions
 
         return data
 

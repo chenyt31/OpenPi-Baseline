@@ -128,27 +128,27 @@ class AlohaOutputs(transforms.DataTransformFn):
         return {"actions": _encode_actions(actions, adapt_to_pi=self.adapt_to_pi)}
 
 
-def joint_flip_mask() -> np.ndarray:
+def _joint_flip_mask() -> np.ndarray:
     """Used to convert between aloha and pi joint angles."""
     return np.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1])
 
 
-def normalize(x, min_val, max_val):
+def _normalize(x, min_val, max_val):
     return (x - min_val) / (max_val - min_val)
 
 
-def unnormalize(x, min_val, max_val):
+def _unnormalize(x, min_val, max_val):
     return x * (max_val - min_val) + min_val
 
 
-def gripper_to_angular(value):
+def _gripper_to_angular(value):
     # Aloha transforms the gripper positions into a linear space. The following code
     # reverses this transformation to be consistent with pi0 which is pretrained in
     # angular space.
     #
     # These values are coming from the Aloha code:
     # PUPPET_GRIPPER_POSITION_OPEN, PUPPET_GRIPPER_POSITION_CLOSED
-    value = unnormalize(value, min_val=0.01844, max_val=0.05800)
+    value = _unnormalize(value, min_val=0.01844, max_val=0.05800)
 
     # This is the inverse of the angular to linear transformation inside the Interbotix code.
     def linear_to_radian(linear_position, arm_length, horn_radius):
@@ -160,25 +160,25 @@ def gripper_to_angular(value):
 
     # Normalize to [0, 1].
     # The values 0.4 and 1.5 were measured on an actual Trossen robot.
-    return normalize(value, min_val=0.4, max_val=1.5)
+    return _normalize(value, min_val=0.4, max_val=1.5)
 
 
-def gripper_from_angular(value):
+def _gripper_from_angular(value):
     # Convert from the gripper position used by pi0 to the gripper position that is used by Aloha.
     # Note that the units are still angular but the range is different.
 
     # The values 0.4 and 1.5 were measured on an actual Trossen robot.
-    value = unnormalize(value, min_val=0.4, max_val=1.5)
+    value = _unnormalize(value, min_val=0.4, max_val=1.5)
 
     # These values are coming from the Aloha code:
     # PUPPET_GRIPPER_JOINT_OPEN, PUPPET_GRIPPER_JOINT_CLOSE
-    return normalize(value, min_val=-0.6213, max_val=1.4910)
+    return _normalize(value, min_val=-0.6213, max_val=1.4910)
 
 
-def gripper_from_angular_inv(value):
+def _gripper_from_angular_inv(value):
     # Directly inverts the gripper_from_angular function.
-    value = unnormalize(value, min_val=-0.6213, max_val=1.4910)
-    return normalize(value, min_val=0.4, max_val=1.5)
+    value = _unnormalize(value, min_val=-0.6213, max_val=1.4910)
+    return _normalize(value, min_val=0.4, max_val=1.5)
 
 
 def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
@@ -206,11 +206,11 @@ def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
 def _decode_state(state: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray:
     if adapt_to_pi:
         # Flip the joints.
-        state = joint_flip_mask() * state
+        state = _joint_flip_mask() * state
 
         # Reverse the gripper transformation that is being applied by the Aloha runtime.
-        state[..., 6] = gripper_to_angular(state[..., 6])
-        state[..., 13] = gripper_to_angular(state[..., 13])
+        state[..., 6] = _gripper_to_angular(state[..., 6])
+        state[..., 13] = _gripper_to_angular(state[..., 13])
 
     return state
 
@@ -218,19 +218,19 @@ def _decode_state(state: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray
 def _encode_actions(actions: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray:
     if adapt_to_pi:
         # Flip the joints.
-        actions = joint_flip_mask() * actions
+        actions = _joint_flip_mask() * actions
 
-        actions[..., 6] = gripper_from_angular(actions[..., 6])
-        actions[..., 13] = gripper_from_angular(actions[..., 13])
+        actions[..., 6] = _gripper_from_angular(actions[..., 6])
+        actions[..., 13] = _gripper_from_angular(actions[..., 13])
 
     return actions
 
 
 def _encode_actions_inv(actions: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray:
     if adapt_to_pi:
-        actions = joint_flip_mask() * actions
+        actions = _joint_flip_mask() * actions
 
-        actions[..., 6] = gripper_from_angular_inv(actions[..., 6])
-        actions[..., 13] = gripper_from_angular_inv(actions[..., 13])
+        actions[..., 6] = _gripper_from_angular_inv(actions[..., 6])
+        actions[..., 13] = _gripper_from_angular_inv(actions[..., 13])
 
     return actions

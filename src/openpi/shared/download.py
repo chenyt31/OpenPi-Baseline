@@ -116,7 +116,7 @@ def _download_boto3(
     local_path: pathlib.Path,
     *,
     boto_session: boto3.Session | None = None,
-    workers: int = 20,
+    workers: int = 16,
 ) -> None:
     """Download a file from the OpenPI S3 bucket using boto3. This is a more performant version of download but can
     only handle s3 urls. In openpi repo, this is mainly used to access assets in S3 with higher throughput.
@@ -142,7 +142,19 @@ def _download_boto3(
     s3api = session.resource("s3")
     bucket = s3api.Bucket(bucket_name)
 
+    # Check if prefix points to an object and if not, assume that it's a directory and add a trailing slash.
+    try:
+        bucket.Object(prefix).load()
+    except botocore.exceptions.ClientError:
+        # Make sure to append a "/" to prevent getting objects from a different directory that shares the same prefix.
+        # For example, if we are downloading from s3://bucket/foo, we don't want to also download from s3://bucket/foobar.
+        if not prefix.endswith("/"):
+            prefix = prefix + "/"
+
     objects = list(bucket.objects.filter(Prefix=prefix))
+    if not objects:
+        raise FileNotFoundError(f"No objects found at {url}")
+
     total_size = sum(obj.size for obj in objects)
 
     s3t = _get_s3_transfer_manager(session, workers)

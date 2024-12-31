@@ -34,19 +34,14 @@ class AlohaRealEnvironment(_environment.Environment):
             if "_depth" in k:
                 del obs["images"][k]
 
-        images = []
         for cam_name in obs["images"]:
-            curr_image = obs["images"][cam_name]
-            curr_image = einops.rearrange(curr_image, "h w c -> c h w")
-            images.append(curr_image)
-        stacked_images = np.stack(images, axis=0).astype(np.uint8)
+            obs["images"][cam_name] = einops.rearrange(obs["images"][cam_name], "h w c -> c h w").astype(np.uint8)
 
-        # TODO: Consider removing these transformations.
         return {
-            "qpos": obs["qpos"],
-            "image": stacked_images,
+            "state": obs["qpos"],
+            "images": obs["images"],
         }
 
     @override
     def apply_action(self, action: dict) -> None:
-        self._ts = self._env.step(action["qpos"])
+        self._ts = self._env.step(action["actions"])

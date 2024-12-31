@@ -2875,7 +2875,7 @@ requires-dist = [
     { name = "tqdm-loggable", specifier = ">=0.2" },
     { name = "types-boto3", extras = ["boto3", "s3"], specifier = ">=1.35.7" },
     { name = "typing-extensions", specifier = ">=4.12.2" },
-    { name = "tyro", specifier = ">=0.9.4" },
+    { name = "tyro", specifier = ">=0.9.5" },
     { name = "wandb", specifier = ">=0.19.1" },
 ]
 
@@ -4280,7 +4280,7 @@ name = "triton"
 version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "filelock", marker = "(platform_machine != 'aarch64' and platform_system == 'Linux') or (platform_system != 'Darwin' and platform_system != 'Linux')" },
+    { name = "filelock", marker = "(python_full_version < '3.13' and platform_machine != 'aarch64' and platform_system == 'Linux') or (python_full_version < '3.13' and platform_system != 'Darwin' and platform_system != 'Emscripten' and platform_system != 'Linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/86/17/d9a5cf4fcf46291856d1e90762e36cbabd2a56c7265da0d1d9508c8e3943/triton-3.1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0f34f6e7885d1bf0eaaf7ba875a5f0ce6f3c13ba98f9503651c1e6dc6757ed5c", size = 209506424 },
@@ -4362,7 +4362,7 @@ wheels = [
 
 [[package]]
 name = "tyro"
-version = "0.9.4"
+version = "0.9.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "platform_system == 'Windows' and sys_platform != 'linux'" },
@@ -4372,9 +4372,9 @@ dependencies = [
     { name = "typeguard" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2e/a1/889e6bfdc18d648f603792fd61ad569e1df0ce5d52f9c7b30ed6103d7d73/tyro-0.9.4.tar.gz", hash = "sha256:1f6c8fe19040e2f8bde32013c5255693a2f311d3599bb051474bc92561de25e2", size = 234997 }
+sdist = { url = "https://files.pythonhosted.org/packages/81/69/22b63efc7624b78a8b50a21ab5aeef11ee817edaf458013277efa212d0df/tyro-0.9.5.tar.gz", hash = "sha256:9e01f9438079acc09bc6a0b7bf709c0bd036ca7f2a70e267063652fd12ca1d8a", size = 236037 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/58/aa/6a088b7abfef042b3ef4213f949a5b54013cab30317e85db0516f00d5c29/tyro-0.9.4-py3-none-any.whl", hash = "sha256:00546f1863f842b2b400b3fa3ca4606dc4de53f989ed570357da393580b0a6c5", size = 112438 },
+    { url = "https://files.pythonhosted.org/packages/42/31/9a4bc850af5d6bdb60b38055fcdc40cf92d491cf196a93f221d9bcf1d80e/tyro-0.9.5-py3-none-any.whl", hash = "sha256:14a2e5a9f0dbc9684999481d1b3d5a7f31368832949c5f8f3af6e9c5b1937fba", size = 112527 },
 ]
 
 [[package]]

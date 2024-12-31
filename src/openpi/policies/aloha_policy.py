@@ -9,38 +9,14 @@ from openpi import transforms
 
 def make_aloha_example() -> dict:
     return {
-        "qpos": np.ones((14,)),
-        "image": np.random.rand(4, 3, 480, 640).astype(np.float32),
+        "state": np.ones((14,)),
+        "images": {
+            "cam_high": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_low": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_left_wrist": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_right_wrist": np.random.rand(3, 480, 640).astype(np.float32),
+        },
     }
-
-
-class ActInputsRepack(transforms.DataTransformFn):
-    def __call__(self, data: dict) -> dict:
-        # images is [..., num_cams, channel, height, width] of type uint8.
-        # number of cameras (num_cams) depends on the environment.
-        images = np.asarray(data["image"])
-
-        num_cams = images.shape[-4]
-        if num_cams == 4:
-            cam_names = ["cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist"]
-        elif num_cams == 1:
-            cam_names = ["cam_high"]
-        else:
-            raise ValueError(f"Expected 1 or 4 cameras, got {num_cams}")
-
-        # `images` have shape [..., cam_idx, channel, height, width].
-        image_splits = [np.squeeze(x, axis=-4) for x in np.split(images, num_cams, axis=-4)]
-        images_dict = dict(zip(cam_names, image_splits, strict=True))
-
-        return {
-            "images": images_dict,
-            "state": data["qpos"],
-        }
-
-
-class ActOutputsRepack(transforms.DataTransformFn):
-    def __call__(self, data: dict) -> dict:
-        return {"qpos": data["actions"]}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -48,9 +24,9 @@ class AlohaInputs(transforms.DataTransformFn):
     """Inputs for the Aloha policy.
 
     Expected inputs:
-    - images: dict[name, img] where img is [..., channel, height, width]. name must be in EXPECTED_CAMERAS.
-    - state: [..., 14]
-    - actions: [..., action_horizon, 14]
+    - images: dict[name, img] where img is [channel, height, width]. name must be in EXPECTED_CAMERAS.
+    - state: [14]
+    - actions: [action_horizon, 14]
     """
 
     # The action dimension of the model. Will be used to pad state and actions.
@@ -75,13 +51,12 @@ class AlohaInputs(transforms.DataTransformFn):
 
         # Assume that base image always exists.
         base_image = in_images["cam_high"]
-        batch_size = base_image.shape[:-3]
 
         images = {
             "base_0_rgb": base_image,
         }
         image_masks = {
-            "base_0_rgb": np.ones(batch_size, dtype=np.bool_),
+            "base_0_rgb": np.True_,
         }
 
         # Add the extra images.
@@ -92,10 +67,10 @@ class AlohaInputs(transforms.DataTransformFn):
         for dest, source in extra_image_names.items():
             if source in in_images:
                 images[dest] = in_images[source]
-                image_masks[dest] = np.ones(batch_size, dtype=np.bool_)
+                image_masks[dest] = np.True_
             else:
                 images[dest] = np.zeros_like(base_image)
-                image_masks[dest] = np.zeros(batch_size, dtype=np.bool_)
+                image_masks[dest] = np.False_
 
         inputs = {
             "image": images,
@@ -124,31 +99,31 @@ class AlohaOutputs(transforms.DataTransformFn):
 
     def __call__(self, data: dict) -> dict:
         # Only return the first 14 dims.
-        actions = np.asarray(data["actions"][..., :14])
+        actions = np.asarray(data["actions"][:, :14])
         return {"actions": _encode_actions(actions, adapt_to_pi=self.adapt_to_pi)}
 
 
-def joint_flip_mask() -> np.ndarray:
+def _joint_flip_mask() -> np.ndarray:
     """Used to convert between aloha and pi joint angles."""
     return np.array([1, -1, -1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 1])
 
 
-def normalize(x, min_val, max_val):
+def _normalize(x, min_val, max_val):
     return (x - min_val) / (max_val - min_val)
 
 
-def unnormalize(x, min_val, max_val):
+def _unnormalize(x, min_val, max_val):
     return x * (max_val - min_val) + min_val
 
 
-def gripper_to_angular(value):
+def _gripper_to_angular(value):
     # Aloha transforms the gripper positions into a linear space. The following code
     # reverses this transformation to be consistent with pi0 which is pretrained in
     # angular space.
     #
     # These values are coming from the Aloha code:
     # PUPPET_GRIPPER_POSITION_OPEN, PUPPET_GRIPPER_POSITION_CLOSED
-    value = unnormalize(value, min_val=0.01844, max_val=0.05800)
+    value = _unnormalize(value, min_val=0.01844, max_val=0.05800)
 
     # This is the inverse of the angular to linear transformation inside the Interbotix code.
     def linear_to_radian(linear_position, arm_length, horn_radius):
@@ -160,25 +135,25 @@ def gripper_to_angular(value):
 
     # Normalize to [0, 1].
     # The values 0.4 and 1.5 were measured on an actual Trossen robot.
-    return normalize(value, min_val=0.4, max_val=1.5)
+    return _normalize(value, min_val=0.4, max_val=1.5)
 
 
-def gripper_from_angular(value):
+def _gripper_from_angular(value):
     # Convert from the gripper position used by pi0 to the gripper position that is used by Aloha.
     # Note that the units are still angular but the range is different.
 
     # The values 0.4 and 1.5 were measured on an actual Trossen robot.
-    value = unnormalize(value, min_val=0.4, max_val=1.5)
+    value = _unnormalize(value, min_val=0.4, max_val=1.5)
 
     # These values are coming from the Aloha code:
     # PUPPET_GRIPPER_JOINT_OPEN, PUPPET_GRIPPER_JOINT_CLOSE
-    return normalize(value, min_val=-0.6213, max_val=1.4910)
+    return _normalize(value, min_val=-0.6213, max_val=1.4910)
 
 
-def gripper_from_angular_inv(value):
+def _gripper_from_angular_inv(value):
     # Directly inverts the gripper_from_angular function.
-    value = unnormalize(value, min_val=-0.6213, max_val=1.4910)
-    return normalize(value, min_val=0.4, max_val=1.5)
+    value = _unnormalize(value, min_val=-0.6213, max_val=1.4910)
+    return _normalize(value, min_val=0.4, max_val=1.5)
 
 
 def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
@@ -192,8 +167,8 @@ def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
         # Convert to uint8 if using float images.
         if np.issubdtype(img.dtype, np.floating):
             img = (255 * img).astype(np.uint8)
-        # Convert from [..., channel, height, width] to [..., height, width, channel].
-        return einops.rearrange(img, "... c h w -> ... h w c")
+        # Convert from [channel, height, width] to [height, width, channel].
+        return einops.rearrange(img, "c h w -> h w c")
 
     images = data["images"]
     images_dict = {name: convert_image(img) for name, img in images.items()}
@@ -206,31 +181,22 @@ def _decode_aloha(data: dict, *, adapt_to_pi: bool = False) -> dict:
 def _decode_state(state: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray:
     if adapt_to_pi:
         # Flip the joints.
-        state = joint_flip_mask() * state
-
+        state = _joint_flip_mask() * state
         # Reverse the gripper transformation that is being applied by the Aloha runtime.
-        state[..., 6] = gripper_to_angular(state[..., 6])
-        state[..., 13] = gripper_to_angular(state[..., 13])
-
+        state[[6, 13]] = _gripper_to_angular(state[[6, 13]])
     return state
 
 
 def _encode_actions(actions: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray:
     if adapt_to_pi:
         # Flip the joints.
-        actions = joint_flip_mask() * actions
-
-        actions[..., 6] = gripper_from_angular(actions[..., 6])
-        actions[..., 13] = gripper_from_angular(actions[..., 13])
-
+        actions = _joint_flip_mask() * actions
+        actions[:, [6, 13]] = _gripper_from_angular(actions[:, [6, 13]])
     return actions
 
 
 def _encode_actions_inv(actions: np.ndarray, *, adapt_to_pi: bool = False) -> np.ndarray:
     if adapt_to_pi:
-        actions = joint_flip_mask() * actions
-
-        actions[..., 6] = gripper_from_angular_inv(actions[..., 6])
-        actions[..., 13] = gripper_from_angular_inv(actions[..., 13])
-
+        actions = _joint_flip_mask() * actions
+        actions[:, [6, 13]] = _gripper_from_angular_inv(actions[:, [6, 13]])
     return actions

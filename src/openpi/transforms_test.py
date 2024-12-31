@@ -69,22 +69,20 @@ def test_make_bool_mask():
 def test_tokenize_prompt():
     tokenizer = _tokenizer.PaligemmaTokenizer(max_len=12)
     transform = _transforms.TokenizePrompt(tokenizer)
-    item = {
-        "state": np.zeros((2, 10)),
-        "prompt": "Hello, world!",
-    }
 
-    transformed = transform(item)
+    data = transform({"prompt": "Hello, world!"})
 
-    assert transformed["tokenized_prompt"].shape == (2, 12)
-    assert transformed["tokenized_prompt_mask"].shape == (2, 12)
+    tok_prompt, tok_mask = tokenizer.tokenize("Hello, world!")
+    assert np.allclose(tok_prompt, data["tokenized_prompt"])
+    assert np.allclose(tok_mask, data["tokenized_prompt_mask"])
 
 
 def test_tokenize_prompt_default():
-    transform = _transforms.TokenizePrompt(_tokenizer.PaligemmaTokenizer(max_len=12))
-    item = {"state": np.zeros((10,))}
+    tokenizer = _tokenizer.PaligemmaTokenizer(max_len=12)
+    transform = _transforms.TokenizePrompt(tokenizer, default_prompt="This is a default prompt")
 
-    transformed = transform(item)
+    data = transform({})
 
-    assert transformed["tokenized_prompt"].shape == (12,)
-    assert transformed["tokenized_prompt_mask"].shape == (12,)
+    tok_prompt, tok_mask = tokenizer.tokenize("This is a default prompt")
+    assert np.allclose(tok_prompt, data["tokenized_prompt"])
+    assert np.allclose(tok_mask, data["tokenized_prompt_mask"])

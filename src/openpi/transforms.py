@@ -11,7 +11,7 @@ from openpi.models import tokenizer as _tokenizer
 from openpi.shared import array_typing as at
 from openpi.shared import normalize as _normalize
 
-Batch: TypeAlias = at.PyTree
+DataDict: TypeAlias = at.PyTree
 NormStats: TypeAlias = _normalize.NormStats
 
 
@@ -24,12 +24,28 @@ DEFAULT_PROMPT = "be a good robot"
 
 @runtime_checkable
 class DataTransformFn(Protocol):
-    def __call__(self, data: Batch) -> Batch: ...
+    def __call__(self, data: DataDict) -> DataDict:
+        """Apply transformation to the data.
+
+        Args:
+            data: The data to apply the transform to. This is a possibly nested dictionary that contains
+                unbatched data elements. Each leaf is expected to be a numpy array. Using JAX arrays is allowed
+                but not recommended since it may result in extra GPU memory usage inside data loader worker
+                processes.
+
+        Returns:
+            The transformed data. Could be the input `data` that was modified in place, or a new data structure.
+        """
 
 
 @dataclasses.dataclass(frozen=True)
 class Group:
+    """A group of transforms."""
+
+    # Transforms that are applied to the model input data.
     inputs: Sequence[DataTransformFn] = ()
+
+    # Transforms that are applied to the model output data.
     outputs: Sequence[DataTransformFn] = ()
 
     def push(self, *, inputs: Sequence[DataTransformFn] = (), outputs: Sequence[DataTransformFn] = ()) -> "Group":
@@ -47,9 +63,11 @@ class Group:
 
 @dataclasses.dataclass(frozen=True)
 class CompositeTransform(DataTransformFn):
+    """A composite transform that applies a sequence of transforms in order."""
+
     transforms: Sequence[DataTransformFn]
 
-    def __call__(self, data: Batch) -> Batch:
+    def __call__(self, data: DataDict) -> DataDict:
         for transform in self.transforms:
             data = transform(data)
         return data
@@ -80,8 +98,8 @@ class RepackTransform(DataTransformFn):
 
     structure: at.PyTree[str]
 
-    def __call__(self, item) -> dict:
-        flat_item = flatten_dict(item)
+    def __call__(self, data: DataDict) -> DataDict:
+        flat_item = flatten_dict(data)
         return jax.tree.map(lambda k: flat_item[k], self.structure)
 
 
@@ -89,9 +107,9 @@ class RepackTransform(DataTransformFn):
 class InjectDefaultPrompt(DataTransformFn):
     prompt: str | None
 
-    def __call__(self, data: dict) -> dict:
+    def __call__(self, data: DataDict) -> DataDict:
         if self.prompt is not None and "prompt" not in data:
-            data["prompt"] = self.prompt
+            data["prompt"] = np.asarray(self.prompt)
         return data
 
 
@@ -100,7 +118,7 @@ class Normalize(DataTransformFn):
     norm_stats: at.PyTree[NormStats] | None
     strict: bool = False
 
-    def __call__(self, data: dict) -> dict:
+    def __call__(self, data: DataDict) -> DataDict:
         def normalize(x, stats: NormStats):
             return (x - stats.mean) / (stats.std + 1e-6)
 
@@ -114,7 +132,7 @@ class Normalize(DataTransformFn):
 class Unnormalize(DataTransformFn):
     norm_stats: at.PyTree[NormStats] | None
 
-    def __call__(self, data: dict) -> dict:
+    def __call__(self, data: DataDict) -> DataDict:
         def unnormalize(x, stats: NormStats):
             return x * (stats.std + 1e-6) + stats.mean
 
@@ -130,16 +148,16 @@ class ResizeImages(DataTransformFn):
     height: int
     width: int
 
-    def __call__(self, item) -> dict:
-        item["image"] = {k: image_tools.resize_with_pad(v, self.height, self.width) for k, v in item["image"].items()}
-        return item
+    def __call__(self, data: DataDict) -> DataDict:
+        data["image"] = {k: image_tools.resize_with_pad(v, self.height, self.width) for k, v in data["image"].items()}
+        return data
 
 
 @dataclasses.dataclass(frozen=True)
 class SubsampleActions(DataTransformFn):
     stride: int
 
-    def __call__(self, data: dict) -> dict:
+    def __call__(self, data: DataDict) -> DataDict:
         data["actions"] = data["actions"][:: self.stride]
         return data
 
@@ -153,7 +171,7 @@ class DeltaActions(DataTransformFn):
     # See `make_bool_mask` for more details.
     mask: Sequence[bool] | None
 
-    def __call__(self, data: dict) -> dict:
+    def __call__(self, data: DataDict) -> DataDict:
         if "actions" not in data or self.mask is None:
             return data
 
@@ -175,7 +193,7 @@ class AbsoluteActions(DataTransformFn):
     # See `make_bool_mask` for more details.
     mask: Sequence[bool] | None
 
-    def __call__(self, data: dict) -> dict:
+    def __call__(self, data: DataDict) -> DataDict:
         if "actions" not in data or self.mask is None:
             return data
 
@@ -196,25 +214,15 @@ class TokenizePrompt(DataTransformFn):
     # If None, `DEFAULT_PROMPT` is used.
     default_prompt: str | None = None
 
-    def __call__(self, data: dict) -> dict:
-        batch_size = data["state"].shape[:-1]
-
+    def __call__(self, data: DataDict) -> DataDict:
         if (prompt := data.pop("prompt", None)) is None:
             prompt = self.default_prompt or DEFAULT_PROMPT
 
-        if isinstance(prompt, str):
-            prompt = np.full(batch_size, prompt)
+        if not isinstance(prompt, str):
+            prompt = prompt.item()
 
-        # TODO(ury): Adjust the tokenizer to take a single element instead.
-        shape = prompt.shape
-        if len(shape) == 0:
-            prompt = prompt[np.newaxis, ...]
         tokens, token_masks = self.tokenizer.tokenize(prompt)
-        if len(shape) == 0:
-            tokens = tokens[0]
-            token_masks = token_masks[0]
-
-        return {**data, "tokenized_prompt": np.asarray(tokens), "tokenized_prompt_mask": np.asarray(token_masks)}
+        return {**data, "tokenized_prompt": tokens, "tokenized_prompt_mask": token_masks}
 
 
 def flatten_dict(tree: at.PyTree) -> dict:

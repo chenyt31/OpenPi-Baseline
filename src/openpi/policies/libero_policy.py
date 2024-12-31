@@ -20,8 +20,8 @@ class LiberoInputs(transforms.DataTransformFn):
                 "wrist_image": data["observation/wrist_image"],
             },
             "image_mask": {
-                "image": np.ones(1, dtype=np.bool_),
-                "wrist_image": np.ones(1, dtype=np.bool_),
+                "image": np.True_,
+                "wrist_image": np.True_,
             },
         }
 
@@ -35,4 +35,4 @@ class LiberoInputs(transforms.DataTransformFn):
 class LiberoOutputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Only return the first 8 dims.
-        return {"actions": np.asarray(data["actions"][..., :8])}
+        return {"actions": np.asarray(data["actions"][:, :8])}

@@ -3,7 +3,7 @@
 import dataclasses
 import difflib
 import pathlib
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 import tyro
 
@@ -48,6 +48,7 @@ class DataConfig:
     local_files_only: bool = False
 
 
+@runtime_checkable
 class DataConfigFactory(Protocol):
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
         """Create a data config."""
@@ -61,7 +62,7 @@ class FakeDataConfig(DataConfigFactory):
 @dataclasses.dataclass(frozen=True)
 class LeRobotAlohaDataConfig(DataConfigFactory):
     # The LeRobot repo id.
-    repo_id: str
+    repo_id: str = tyro.MISSING
     # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
     # Gripper dimensions will remain in absolute values.
     use_delta_joint_actions: bool = False
@@ -70,14 +71,16 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
     # fine-tuning a pretrained model.
     adapt_to_pi: bool = False
-    # Repack transforms. Default is used if not provided.
-    repack_transforms: _transforms.Group | None = None
     # If true, will disable syncing the dataset from the huggingface hub.
     local_files_only: bool = False
+    # Repack transforms. Default is used if not provided.
+    repack_transforms: tyro.conf.Suppress[_transforms.Group | None] = None
 
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
-        norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
-        norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
+        norm_stats = None
+        if self.repo_id is not tyro.MISSING:
+            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
+            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
 
         repack_transforms = self.repack_transforms or _transforms.Group(
             inputs=[
@@ -218,6 +221,12 @@ _CONFIGS = [
     #
     # pi0 configs.
     #
+    TrainConfig(
+        name="pi0_aloha",
+        data=LeRobotAlohaDataConfig(use_delta_joint_actions=True, adapt_to_pi=True),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),
     TrainConfig(
         name="pi0_aloha_sim",
         data=LeRobotAlohaDataConfig(

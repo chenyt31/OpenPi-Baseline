@@ -8,8 +8,6 @@ import tyro
 
 from openpi import transforms
 from openpi.models import exported as _exported
-from openpi.models import model as _model
-from openpi.policies import aloha_policy
 from openpi.policies import calvin_policy
 from openpi.policies import droid_policy
 from openpi.policies import libero_policy
@@ -68,16 +66,21 @@ class Args:
     record: bool = False
 
 
+# Default checkpoints that should be used for each environment.
+DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
+    EnvMode.ALOHA: Checkpoint(
+        config="pi0_aloha",
+        dir="s3://openpi-assets/checkpoints/pi0_aloha",
+    ),
+    EnvMode.ALOHA_SIM: Checkpoint(
+        config="pi0_aloha_sim",
+        dir="s3://openpi-assets/checkpoints/pi0_aloha_sim",
+    ),
+}
+
 # Default exported models.
+# TODO(ury): Convert to checkpoints and remove.
 DEFAULT_EXPORTED: dict[EnvMode, Exported] = {
-    EnvMode.ALOHA: Exported(
-        dir="s3://openpi-assets/exported/pi0_aloha/model",
-        processor="all_berkeley_aloha_data_delta_actions",
-    ),
-    EnvMode.ALOHA_SIM: Exported(
-        dir="s3://openpi-assets/exported/pi0_aloha_sim/model",
-        processor="huggingface_aloha_sim_transfer_cube",
-    ),
     EnvMode.DROID: Exported(
         dir="s3://openpi-assets/exported/pi0_droid/model",
         processor="openx_droid",
@@ -93,19 +96,23 @@ DEFAULT_EXPORTED: dict[EnvMode, Exported] = {
 }
 
 
-def create_default_policy(
-    env: EnvMode, *, default_prompt: str | None = None, exported: Exported | None = None
-) -> _policy.Policy:
-    model: _model.BaseModel
-    config: _policy_config.PolicyConfig
+def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) -> _policy.Policy:
+    """Create a default policy for the given environment."""
+    if checkpoint := DEFAULT_CHECKPOINT.get(env):
+        return _policy_config.create_trained_policy(
+            _config.get_config(checkpoint.config),
+            checkpoint.dir,
+            default_prompt=default_prompt,
+        )
+    if exported := DEFAULT_EXPORTED.get(env):
+        return create_exported_policy(env, exported, default_prompt=default_prompt)
+    raise ValueError(f"Unsupported environment mode: {env}")
 
-    default_exported = DEFAULT_EXPORTED[env]
-    if exported:
-        checkpoint_dir = exported.dir
-        processor = exported.processor
-    else:
-        checkpoint_dir = default_exported.dir
-        processor = default_exported.processor
+
+def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: str | None = None) -> _policy.Policy:
+    """Create a policy from an exported model."""
+    checkpoint_dir = exported.dir
+    processor = exported.processor
 
     logging.info("Loading model...")
     model = _exported.PiModel.from_checkpoint(checkpoint_dir)
@@ -116,15 +123,17 @@ def create_default_policy(
 
     if processor is None:
         # First try using the default environment processor.
-        if default_exported.processor in processors:
-            processor = default_exported.processor
+        if default_exported := DEFAULT_EXPORTED.get(env):
+            if default_exported.processor in processors:
+                processor = default_exported.processor
         # If the default processor is not available, load a processor if there is only one available.
         elif len(processors) == 1:
             processor = processors[0]
         # If there are multiple processors, ask the user to provide a processor name.
         else:
             raise ValueError(f"Processor name must be provided. Available: {processors}")
-        logging.info("Using processor: %s", default_exported.processor)
+        assert processor is not None
+        logging.info("Using processor: %s", processor)
     elif processor not in processors:
         raise ValueError(f"Processor {processor} not found in {checkpoint_dir}, found {processors}")
 
@@ -145,54 +154,20 @@ def create_default_policy(
 
     logging.info("Creating policy...")
     match env:
-        case EnvMode.ALOHA:
-            delta_action_mask = transforms.make_bool_mask(6, -1, 6, -1)
-            config = make_policy_config(
-                input_layers=[
-                    aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=True),
-                    transforms.DeltaActions(mask=delta_action_mask),
-                ],
-                output_layers=[
-                    transforms.AbsoluteActions(mask=delta_action_mask),
-                    aloha_policy.AlohaOutputs(adapt_to_pi=True),
-                ],
-            )
-        case EnvMode.ALOHA_SIM:
-            config = make_policy_config(
-                input_layers=[
-                    aloha_policy.AlohaInputs(action_dim=model.action_dim),
-                ],
-                output_layers=[
-                    aloha_policy.AlohaOutputs(),
-                ],
-            )
         case EnvMode.DROID:
             config = make_policy_config(
-                input_layers=[
-                    droid_policy.DroidInputs(action_dim=model.action_dim),
-                ],
-                output_layers=[
-                    droid_policy.DroidOutputs(),
-                    transforms.SubsampleActions(stride=5),
-                ],
+                input_layers=[droid_policy.DroidInputs(action_dim=model.action_dim)],
+                output_layers=[droid_policy.DroidOutputs(), transforms.SubsampleActions(stride=5)],
             )
         case EnvMode.CALVIN:
             config = make_policy_config(
-                input_layers=[
-                    calvin_policy.CalvinInputs(action_dim=model.action_dim),
-                ],
-                output_layers=[
-                    calvin_policy.CalvinOutputs(),
-                ],
+                input_layers=[calvin_policy.CalvinInputs(action_dim=model.action_dim)],
+                output_layers=[calvin_policy.CalvinOutputs()],
             )
         case EnvMode.LIBERO:
             config = make_policy_config(
-                input_layers=[
-                    libero_policy.LiberoInputs(action_dim=model.action_dim),
-                ],
-                output_layers=[
-                    libero_policy.LiberoOutputs(),
-                ],
+                input_layers=[libero_policy.LiberoInputs(action_dim=model.action_dim)],
+                output_layers=[libero_policy.LiberoOutputs()],
             )
         case _:
             raise ValueError(f"Unknown environment mode: {env}")
@@ -201,6 +176,7 @@ def create_default_policy(
 
 
 def create_policy(args: Args) -> _policy.Policy:
+    """Create a policy from the given arguments."""
     match args.policy:
         case Checkpoint():
             return _policy_config.create_trained_policy(
@@ -209,7 +185,7 @@ def create_policy(args: Args) -> _policy.Policy:
                 default_prompt=args.default_prompt,
             )
         case Exported():
-            return create_default_policy(args.env, default_prompt=args.default_prompt, exported=args.policy)
+            return create_exported_policy(args.env, args.policy, default_prompt=args.default_prompt)
         case None:
             return create_default_policy(args.env, default_prompt=args.default_prompt)
 

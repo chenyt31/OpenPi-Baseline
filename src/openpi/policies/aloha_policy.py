@@ -8,10 +8,12 @@ from openpi import transforms
 
 
 def make_aloha_example() -> dict:
-    return {
-        "qpos": np.ones((14,)),
-        "image": np.random.rand(4, 3, 480, 640).astype(np.float32),
-    }
+    return ActInputsRepack()(
+        {
+            "qpos": np.ones((14,)),
+            "image": np.random.rand(4, 3, 480, 640).astype(np.float32),
+        }
+    )
 
 
 class ActInputsRepack(transforms.DataTransformFn):

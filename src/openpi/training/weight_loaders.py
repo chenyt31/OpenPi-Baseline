@@ -44,7 +44,8 @@ class CheckpointWeightLoader(WeightLoader):
     params_path: str
 
     def load(self, params: at.Params) -> at.Params:
-        return _model.restore_params(download.maybe_download(self.params_path))
+        # We are loading np.ndarray and relying on the training code to properly convert and shard the params.
+        return _model.restore_params(download.maybe_download(self.params_path), restore_type=np.ndarray)
 
 
 def _recover_tree(d: dict) -> dict:

@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import numpy as np
 from openpi_client.runtime import subscriber as _subscriber
 from typing_extensions import override
 
@@ -21,8 +20,7 @@ class VideoDisplay(_subscriber.Subscriber):
     def on_step(self, observation: dict, action: dict) -> None:
         assert self._ax is not None
 
-        im = observation["image"][0]  # [C, H, W]
-        im = np.transpose(im, (1, 2, 0))  # [H, W, C]
+        im = observation["images"]["cam_high"]  # [H, W, C]
 
         if self._plt_img is None:
             self._plt_img = self._ax.imshow(im)

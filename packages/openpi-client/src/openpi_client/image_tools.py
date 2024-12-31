@@ -2,6 +2,19 @@ import numpy as np
 from PIL import Image
 
 
+def convert_to_uint8(img: np.ndarray) -> np.ndarray:
+    """Converts an image to uint8 if it is a float32 image.
+
+    This is important because it makes the image much smaller, so it can be serialized/deserialized faster
+    when being sent over the network.
+    """
+    img = np.asarray(img)
+    # Convert to uint8 if using float images.
+    if np.issubdtype(img.dtype, np.floating):
+        img = (255 * img).astype(np.uint8)
+    return img
+
+
 def resize_with_pad(images: np.ndarray, height: int, width: int, method=Image.BILINEAR) -> np.ndarray:
     """Replicates tf.image.resize_with_pad for multiple images using PIL. Resizes a batch of images to a target height.
 

@@ -21,8 +21,7 @@ class VideoSaver(_subscriber.Subscriber):
 
     @override
     def on_step(self, observation: dict, action: dict) -> None:
-        im = observation["image"][0]  # [C, H, W]
-        im = np.transpose(im, (1, 2, 0))  # [H, W, C]
+        im = observation["images"]["cam_high"]  # [H, W, C]
         self._images.append(im)
 
     @override

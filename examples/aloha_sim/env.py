@@ -1,6 +1,7 @@
 import gym_aloha  # noqa: F401
 import gymnasium
 import numpy as np
+from openpi_client import image_tools
 from openpi_client.runtime import environment as _environment
 from typing_extensions import override
 
@@ -44,12 +45,9 @@ class AlohaSimEnvironment(_environment.Environment):
         self._episode_reward = max(self._episode_reward, reward)
 
     def _convert_observation(self, gym_obs: dict) -> dict:
-        # Convert axis order from [H, W, C] --> [C, H, W]
-        img = np.transpose(gym_obs["pixels"]["top"], (2, 0, 1))
-
         return {
             "state": gym_obs["agent_pos"],
             "images": {
-                "cam_high": img,
+                "cam_high": image_tools.convert_to_uint8(gym_obs["pixels"]["top"]),
             },
         }

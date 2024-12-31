@@ -67,9 +67,6 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     use_delta_joint_actions: bool = False
     # If provided, will determine the default prompt that be used by the model.
     default_prompt: str | None = None
-    # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
-    # fine-tuning a pretrained model.
-    adapt_to_pi: bool = False
     # Repack transforms. Default is used if not provided.
     repack_transforms: _transforms.Group | None = None
     # If true, will disable syncing the dataset from the huggingface hub.
@@ -92,8 +89,8 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
         )
 
         data_transforms = _transforms.Group(
-            inputs=[aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=self.adapt_to_pi)],
-            outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
+            inputs=[aloha_policy.AlohaInputs(action_dim=model.action_dim)],
+            outputs=[aloha_policy.AlohaOutputs()],
         )
 
         if self.use_delta_joint_actions:
@@ -247,7 +244,6 @@ _CONFIGS = [
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_static_cups_open",
             use_delta_joint_actions=True,
-            adapt_to_pi=True,
             repack_transforms=_transforms.Group(
                 inputs=[
                     _transforms.RepackTransform(

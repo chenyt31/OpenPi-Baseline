@@ -55,8 +55,13 @@ def main(args: Args) -> None:
 
 def _random_observation_aloha() -> dict:
     return {
-        "qpos": np.ones((14,)),
-        "image": np.random.rand(4, 3, 480, 640).astype(np.float32),
+        "state": np.ones((14,)),
+        "images": {
+            "cam_high": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_low": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_left_wrist": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_right_wrist": np.random.rand(3, 480, 640).astype(np.float32),
+        },
     }
 
 

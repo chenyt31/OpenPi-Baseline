@@ -8,41 +8,15 @@ from openpi import transforms
 
 
 def make_aloha_example() -> dict:
-    return ActInputsRepack()(
-        {
-            "qpos": np.ones((14,)),
-            "image": np.random.rand(4, 3, 480, 640).astype(np.float32),
-        }
-    )
-
-
-class ActInputsRepack(transforms.DataTransformFn):
-    def __call__(self, data: dict) -> dict:
-        # images is [num_cams, channel, height, width] of type uint8.
-        # number of cameras (num_cams) depends on the environment.
-        images = np.asarray(data["image"])
-
-        num_cams = images.shape[0]
-        if num_cams == 4:
-            cam_names = ["cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist"]
-        elif num_cams == 1:
-            cam_names = ["cam_high"]
-        else:
-            raise ValueError(f"Expected 1 or 4 cameras, got {num_cams}")
-
-        # `images` have shape [cam_idx, channel, height, width].
-        image_splits = [np.squeeze(x, axis=0) for x in np.split(images, num_cams, axis=0)]
-        images_dict = dict(zip(cam_names, image_splits, strict=True))
-
-        return {
-            "images": images_dict,
-            "state": data["qpos"],
-        }
-
-
-class ActOutputsRepack(transforms.DataTransformFn):
-    def __call__(self, data: dict) -> dict:
-        return {"qpos": data["actions"]}
+    return {
+        "state": np.ones((14,)),
+        "images": {
+            "cam_high": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_low": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_left_wrist": np.random.rand(3, 480, 640).astype(np.float32),
+            "cam_right_wrist": np.random.rand(3, 480, 640).astype(np.float32),
+        },
+    }
 
 
 @dataclasses.dataclass(frozen=True)

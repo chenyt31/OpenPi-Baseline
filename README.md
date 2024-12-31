@@ -161,16 +161,19 @@ We assume that the robot client produces a dict with the following fields, and t
 Here is an example input transformation:
 
 ```python
+@dataclasses.dataclass(frozen=True)
 class UR5Inputs(transforms.DataTransformFn):
-    def __init__(self, action_dim: int, *, delta_action_mask: Sequence[bool] | None = None):
-        self._action_dim = action_dim
-        self._delta_action_mask = delta_action_mask
+    # This is the action dimensionality of the model (not the robot!). The model has the same
+    # state and action dimensionality, so this variable can be used to determine how to pad
+    # state and action inputs loaded from the dataset.
+    action_dim: int
 
     def __call__(self, data: dict) -> dict:
         # First, concatenate the joints and gripper into the state vector.
         # Pad to the expected input dimensionality of the model (same as action_dim).
         state = np.concatenate([data["joints"], data["gripper"]], axis=1)
-        state = transforms.pad_to_dim(state, self._action_dim)
+        state = transforms.pad_to_dim(state, self.action_dim)
+        batch_size = state.shape[0]
 
         inputs = {
             "state": state,
@@ -183,24 +186,16 @@ class UR5Inputs(transforms.DataTransformFn):
             },
             # 1D bool indicating if the image exists.
             "image_mask": {
-                "base_0_rgb": np.ones(1, dtype=np.bool_),
-                "left_wrist_0_rgb": np.ones(1, dtype=np.bool_),
-                "right_wrist_0_rgb": np.zeros(1, dtype=np.bool_),
+                "base_0_rgb": np.ones(batch_size, dtype=np.bool_),
+                "left_wrist_0_rgb": np.ones(batch_size, dtype=np.bool_),
+                "right_wrist_0_rgb": np.zeros(batch_size, dtype=np.bool_),
             },
         }
 
         # If this is called during training, actions will also be available.
         if "actions" in data:
-            actions = np.asarray(data["actions"])
-            # _delta_action_mask indicates which dimensions of the action are relative to the
-            # state. For these dimensions, subtract state. Note we use the first
-            # 7 dimensions, because the robot expects 7D actions.
-            if self._delta_action_mask is not None:
-                mask = np.asarray(self._delta_action_mask[:7])
-                # Note that actions is 3D: batch, chunk position, dimension.
-                actions = actions - np.expand_dims(np.where(mask, state[..., :7], 0), axis=-2)
-
-            inputs["actions"] = transforms.pad_to_dim(actions, self._action_dim)
+            # The robot produces 7D actions (6 DoF + 1 gripper), and we pad these.
+            inputs["actions"] = transforms.pad_to_dim(data["actions"], self.action_dim)
 
         # Pass the prompt along to the model.
         if "prompt" in data:
@@ -212,24 +207,11 @@ class UR5Inputs(transforms.DataTransformFn):
 Here is an example output transformation:
 
 ```python
+@dataclasses.dataclass(frozen=True)
 class UR5Outputs(transforms.DataTransformFn):
-    def __init__(self, *, delta_action_mask: Sequence[bool] | None = None):
-        self._delta_action_mask = delta_action_mask
-
     def __call__(self, data: dict) -> dict:
         # Since the robot has 7 action dimensions (6 DoF + gripper), return the first 7 dims
-        actions = np.asarray(data["actions"][..., :7])
-
-        # _delta_action_mask indicates which dimensions of the action are relative to the
-        # state. For these dimensions, add the state back in. Note we again use the first
-        # 7 dimensions, because the robot expects 7D actions.
-        if self._delta_action_mask is not None:
-            state = np.asarray(data["state"][..., :7])
-            mask = np.asarray(self._delta_action_mask[:7])
-            # Note that actions is 3D: batch, chunk position, dimension.
-            actions = actions + np.expand_dims(np.where(mask, state, 0), axis=-2)
-
-        return {"actions": actions}
+        return {"actions": np.asarray(data["actions"][..., :7])}
 ```
 
 You will also need to define a new entry in the `EnvMode` enum in [scripts/serve_policy.py](scripts/serve_policy.py) (e.g., `UR5`). You do not need to do anything with this entry unless you want to use the `pi0_base` model in zero-shot, which is **almost certainly** the case if you are adding your own robot that $\pi_0$ was not trained on. But if you do want to use $\pi_0$ in zero-shot on a supported robot: You will need to add the right processor under `DEFAULT_EXPORTED` (if the model already supports your robot, this should exist, but you may need to file a Github issue to get the name), and add a case to `create_default_policy`, e.g.:
@@ -255,9 +237,9 @@ To create a configuration for training on your robot, it will be necessary to ad
 class UR5DataConfig(DataConfigFactory):
     # This is the repo id from LeRobot for this dataset repo.
     repo_id: str
-    # The delta action mask. Each value corresponds to an action dimension and indicates if
-    # it should be converted to a delta action. If None, absolute actions are used.
-    delta_action_mask: Sequence[bool] | None = None
+    # If true, will convert joint dimensions to deltas with respect to the current state
+    # before passing to the model. Most models expect this. Grippers do not use delta.
+    use_delta_joint_actions: bool = False
     # By default, the prompt will be "be a good robot", but we can override it here.
     # We can also set the prompt in the command line, but it's good to specify a reasonable
     # default that matches a reasonable prompt in the training set.
@@ -268,28 +250,38 @@ class UR5DataConfig(DataConfigFactory):
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
         # This is standard boilerplate for loading norm stats for openpi checkpoints.
         norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
-        norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exist() else None
+        if norm_stats_path.exist():
+            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text())
+        else:
+            norm_stats = None
+
+        # These transforms are the ones we wrote earlier.
+        data_transforms=_transforms.Group(
+            inputs=[ur5_policy.UR5Inputs(action_dim=model.action_dim)],
+            outputs=[ur5_policy.UR5Outputs()],
+        )
+
+        if self.use_delta_joint_actions:
+            # This mask defines which action/state dimensions correspond to grippers.
+            # Positive arguments to make_bool_mask create that number of True values,
+            # negative arguments create that number of False values, so this call will
+            # create a bool array with 6xTrue followed by 1xFalse.
+            delta_action_mask = _transforms.make_bool_mask(6, -1)
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
         
         return DataConfig(
             repo_id=self.repo_id,
             norm_stats=norm_stats,
-            # These transforms are the ones we wrote earlier.
-            data_transforms=_transforms.Group(
-                inputs=[
-                    ur5_policy.UR5Inputs(
-                        action_dim=model.action_dim,
-                        delta_action_mask=self.delta_action_mask,
-                    ),
-                ],
-                outputs=[
-                    ur5_policy.UR5Outputs(
-                        delta_action_mask=self.delta_action_mask,
-                    ),
-                ],
-            ),
+            data_transforms=data_transforms,
             # These transformations resize the images and tokenize the prompt.
             model_transforms=_transforms.Group(
                 inputs=[
+                    # This is only necessary if we expect the input images to require
+                    # resizing. If your data is already 224x224 and your robot produces
+                    # 224x224 images, then you can omit this.
                     _transforms.ResizeImages(224, 224),
                     _transforms.TokenizePrompt(
                         _tokenizer.PaligemmaTokenizer(model.max_token_len),
@@ -309,9 +301,8 @@ TrainConfig(
     data=UR5DataConfig(
         # This points to the repo ID for your dataset.
         repo_id="lerobot/my_ur5_dataset",
-        # This means that we use delta actions for the first 6 dimensions (the joints),
-        # and then absolute action for the 7th dimension (the gripper), which is standard.
-        delta_action_mask=delta_actions.make_bool_mask(6, -1),
+        # We set this to True because pi0_base expects delta actions.
+        use_delta_joint_actions=True,
         # Set a reasonable default here.
         default_prompt="be a good robot",
         # Set this to True if you are using a dataset that is not on the HuggingFace hub.
@@ -324,7 +315,13 @@ TrainConfig(
 
 ### Write your robot client
 
-The openpi policy server serves the policy, and your robot can run a client to connect to this server, sending it observations and getting back actions. You can write your own robot client in whatever way you want, but if you would like to build on our client, take a look at [examples/aloha_real/main.py](examples/aloha_real/main.py) for an example. The important bit of code is this:
+The openpi policy server serves the policy, and your robot can run a client to connect to this server, sending it observations and getting back actions. You can write your own robot client in whatever way you want, but if you would like to build on our client, we recommend installing the accompanying `openpi_client` package:
+
+```bash
+pip install -e packages/openpi-client
+```
+
+ Take a look at [examples/aloha_real/main.py](examples/aloha_real/main.py) for an example. The important bit of code is this:
 
 ```python
 def main(args: Args) -> None:
@@ -350,7 +347,7 @@ def main(args: Args) -> None:
     runtime.run()
 ```
 
-If we look at the [Environment ABC](packages/openpi-client/src/openpi_client/runtime/environment.py), we see that we need to implement just four methods (see [examples/aloha_real/env.py](examples/aloha_real/env.py)) for how these are implemented for the ALOHA robot:
+If we look at the [Environment](packages/openpi-client/src/openpi_client/runtime/environment.py) class, we see that we need to implement just four methods (see [examples/aloha_real/env.py](examples/aloha_real/env.py)) for how these are implemented for the ALOHA robot:
 
 - `def reset(self)`: This is called at the start of each episodes and might, for example, move the robot to a starting home position.
 - `def done(self) -> bool`: This method returns `True` if the robot is done with the task, times out, etc. It is reasonable to always return `False` if you want the episode to run forever.
@@ -372,10 +369,10 @@ uv run scripts/compute_norm_stats.py --config-name ur5
 Then we can run training:
 
 ```bash
-uv run scripts/train.py ur5 --exp-name=my_experiment --overwrite
+uv run scripts/train.py ur5 --exp-name=my_experiment
 ```
 
-Remember to set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` to allow JAX to use up to 90% of GPU memory.
+You can use the `--overwrite` flag if you previously ran an experiment with the same name and would like to overwrite it, or `--resume` if you want to instead resume it from where you left off. Remember to set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` to allow JAX to use up to 90% of GPU memory. We optimized training to use H100 GPUs, though it will likely work on other high-memory GPUs. We use wandb to track training, and the script will prompt you to link to your wandb account and project the first time you start it. You can also disable it in the `TrainConfig` definition.
 
 
 ### Serve your policy
@@ -393,3 +390,5 @@ To start the robot client, if you used our client code, just run
 ```bash
 python your_client_main.py
 ```
+
+It is also possible to run the client with Docker, as described earlier in this document.

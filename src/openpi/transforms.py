@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 import dataclasses
-from typing import Protocol, TypeAlias, TypeVar
+from typing import Protocol, TypeAlias, TypeVar, runtime_checkable
 
 import flax.traverse_util as traverse_util
 import jax
@@ -22,6 +22,7 @@ S = TypeVar("S")
 DEFAULT_PROMPT = "be a good robot"
 
 
+@runtime_checkable
 class DataTransformFn(Protocol):
     def __call__(self, data: Batch) -> Batch: ...
 
@@ -41,7 +42,7 @@ class Group:
         Returns:
             A new group with the appended transforms.
         """
-        return Group(inputs=[*self.inputs, *inputs], outputs=[*outputs, *self.outputs])
+        return Group(inputs=(*self.inputs, *inputs), outputs=(*outputs, *self.outputs))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -194,11 +195,13 @@ class TokenizePrompt(DataTransformFn):
     default_prompt: str | None = None
 
     def __call__(self, data: dict) -> dict:
-        if "prompt" not in data:
-            batch_size = data["state"].shape[:-1]
-            prompt = np.full(batch_size, self.default_prompt or DEFAULT_PROMPT)
-        else:
-            prompt = np.asarray(data.pop("prompt"))
+        batch_size = data["state"].shape[:-1]
+
+        if (prompt := data.pop("prompt", None)) is None:
+            prompt = self.default_prompt or DEFAULT_PROMPT
+
+        if isinstance(prompt, str):
+            prompt = np.full(batch_size, prompt)
 
         # TODO(ury): Adjust the tokenizer to take a single element instead.
         shape = prompt.shape

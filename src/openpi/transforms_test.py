@@ -1,5 +1,6 @@
 import numpy as np
 
+import openpi.models.tokenizer as _tokenizer
 import openpi.transforms as _transforms
 
 
@@ -37,3 +38,27 @@ def test_absolute_actions():
 def test_make_bool_mask():
     assert _transforms.make_bool_mask(2, -2, 2) == (True, True, False, False, True, True)
     assert _transforms.make_bool_mask(2, 0, 2) == (True, True, True, True)
+
+
+def test_tokenize_prompt():
+    tokenizer = _tokenizer.PaligemmaTokenizer(max_len=12)
+    transform = _transforms.TokenizePrompt(tokenizer)
+    item = {
+        "state": np.zeros((2, 10)),
+        "prompt": "Hello, world!",
+    }
+
+    transformed = transform(item)
+
+    assert transformed["tokenized_prompt"].shape == (2, 12)
+    assert transformed["tokenized_prompt_mask"].shape == (2, 12)
+
+
+def test_tokenize_prompt_default():
+    transform = _transforms.TokenizePrompt(_tokenizer.PaligemmaTokenizer(max_len=12))
+    item = {"state": np.zeros((10,))}
+
+    transformed = transform(item)
+
+    assert transformed["tokenized_prompt"].shape == (12,)
+    assert transformed["tokenized_prompt_mask"].shape == (12,)

@@ -47,8 +47,9 @@ class Policy(BasePolicy):
                 sample_rng, common.Observation.from_dict(inputs), **self._sample_kwargs
             ),
         }
+        outputs = jax.device_get(outputs)
         outputs = self._output_transform(outputs)
-        return _unbatch(jax.device_get(outputs))
+        return _unbatch(outputs)
 
 
 class PolicyRecorder(_base_policy.BasePolicy):

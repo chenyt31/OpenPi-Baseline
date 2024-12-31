@@ -1,14 +1,17 @@
-import jax.numpy as jnp
+import dataclasses
+
+import numpy as np
 
 from openpi import transforms
 
 
+@dataclasses.dataclass(frozen=True)
 class LiberoInputs(transforms.DataTransformFn):
-    def __init__(self, action_dim: int):
-        self._action_dim = action_dim
+    # The action dimension of the model. Will be used to pad state and actions.
+    action_dim: int
 
     def __call__(self, data: dict) -> dict:
-        state = transforms.pad_to_dim(data["observation/state"], self._action_dim)
+        state = transforms.pad_to_dim(data["observation/state"], self.action_dim)
 
         inputs = {
             "state": state,
@@ -17,8 +20,8 @@ class LiberoInputs(transforms.DataTransformFn):
                 "wrist_image": data["observation/wrist_image"],
             },
             "image_mask": {
-                "image": jnp.ones(1, dtype=jnp.bool_),
-                "wrist_image": jnp.ones(1, dtype=jnp.bool_),
+                "image": np.ones(1, dtype=np.bool_),
+                "wrist_image": np.ones(1, dtype=np.bool_),
             },
         }
 
@@ -28,8 +31,8 @@ class LiberoInputs(transforms.DataTransformFn):
         return inputs
 
 
+@dataclasses.dataclass(frozen=True)
 class LiberoOutputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Only return the first 8 dims.
-        actions = jnp.asarray(data["actions"][..., :8])
-        return {"actions": actions}
+        return {"actions": np.asarray(data["actions"][..., :8])}

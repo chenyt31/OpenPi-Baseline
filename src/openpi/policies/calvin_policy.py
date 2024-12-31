@@ -1,14 +1,17 @@
-import jax.numpy as jnp
+import dataclasses
+
+import numpy as np
 
 from openpi import transforms
 
 
+@dataclasses.dataclass(frozen=True)
 class CalvinInputs(transforms.DataTransformFn):
-    def __init__(self, action_dim: int):
-        self._action_dim = action_dim
+    # The action dimension of the model. Will be used to pad state and actions.
+    action_dim: int
 
     def __call__(self, data: dict) -> dict:
-        state = transforms.pad_to_dim(data["observation/state"], self._action_dim)
+        state = transforms.pad_to_dim(data["observation/state"], self.action_dim)
 
         inputs = {
             "state": state,
@@ -17,8 +20,8 @@ class CalvinInputs(transforms.DataTransformFn):
                 "rgb_gripper": data["observation/rgb_gripper"],
             },
             "image_mask": {
-                "rgb_static": jnp.ones(1, dtype=jnp.bool_),
-                "rgb_gripper": jnp.ones(1, dtype=jnp.bool_),
+                "rgb_static": np.ones(1, dtype=np.bool_),
+                "rgb_gripper": np.ones(1, dtype=np.bool_),
             },
         }
 
@@ -28,11 +31,8 @@ class CalvinInputs(transforms.DataTransformFn):
         return inputs
 
 
+@dataclasses.dataclass(frozen=True)
 class CalvinOutputs(transforms.DataTransformFn):
-    def __init__(self):
-        pass
-
     def __call__(self, data: dict) -> dict:
         # Only return the first 15 dims.
-        actions = jnp.asarray(data["actions"][..., :15])
-        return {"actions": actions}
+        return {"actions": np.asarray(data["actions"][..., :15])}

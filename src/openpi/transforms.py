@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 import dataclasses
-from typing import Protocol, TypeAlias, TypeVar
+from typing import Protocol, TypeAlias, TypeVar, runtime_checkable
 
 import flax.traverse_util as traverse_util
 import jax
@@ -18,7 +18,11 @@ NormStats: TypeAlias = _normalize.NormStats
 T = TypeVar("T")
 S = TypeVar("S")
 
+# Prompt that should be used if "prompt" is not present in the data or an alternative default is not provided.
+DEFAULT_PROMPT = "be a good robot"
 
+
+@runtime_checkable
 class DataTransformFn(Protocol):
     def __call__(self, data: Batch) -> Batch: ...
 
@@ -27,6 +31,18 @@ class DataTransformFn(Protocol):
 class Group:
     inputs: Sequence[DataTransformFn] = ()
     outputs: Sequence[DataTransformFn] = ()
+
+    def push(self, *, inputs: Sequence[DataTransformFn] = (), outputs: Sequence[DataTransformFn] = ()) -> "Group":
+        """Append transforms to the group and return a new group.
+
+        Args:
+            inputs: Appended to the *end* of the current input transforms.
+            outputs: Appended to the *beginning* of the current output transforms.
+
+        Returns:
+            A new group with the appended transforms.
+        """
+        return Group(inputs=(*self.inputs, *inputs), outputs=(*outputs, *self.outputs))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -128,26 +144,72 @@ class SubsampleActions(DataTransformFn):
         return data
 
 
-class TokenizePrompt(DataTransformFn):
-    # This is the default text prompt for the model.
-    DEFAULT_PROMPT = "be a good robot"
+@dataclasses.dataclass(frozen=True)
+class DeltaActions(DataTransformFn):
+    """Repacks absolute actions into delta action space."""
 
-    def __init__(self, tokenizer: _tokenizer.Tokenizer, *, default_prompt: str | None = None):
-        self._tokenizer = tokenizer
-        self._default_prompt = default_prompt or self.DEFAULT_PROMPT
+    # Boolean mask for the action dimensions to be repacked into delta action space. Length
+    # can be smaller than the actual number of dimensions. If None, this transform is a no-op.
+    # See `make_bool_mask` for more details.
+    mask: Sequence[bool] | None
 
     def __call__(self, data: dict) -> dict:
-        if "prompt" not in data:
-            batch_size = data["state"].shape[:-1]
-            prompt = np.full(batch_size, self._default_prompt)
-        else:
-            prompt = np.asarray(data.pop("prompt"))
+        if "actions" not in data or self.mask is None:
+            return data
+
+        state, actions = data["state"], data["actions"]
+        mask = np.asarray(self.mask)
+        dims = mask.shape[-1]
+        actions[..., :dims] -= np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
+        data["actions"] = actions
+
+        return data
+
+
+@dataclasses.dataclass(frozen=True)
+class AbsoluteActions(DataTransformFn):
+    """Repacks delta actions into absolute action space."""
+
+    # Boolean mask for the action dimensions to be repacked into absolute action space. Length
+    # can be smaller than the actual number of dimensions. If None, this transform is a no-op.
+    # See `make_bool_mask` for more details.
+    mask: Sequence[bool] | None
+
+    def __call__(self, data: dict) -> dict:
+        if "actions" not in data or self.mask is None:
+            return data
+
+        state, actions = data["state"], data["actions"]
+        mask = np.asarray(self.mask)
+        dims = mask.shape[-1]
+        actions[..., :dims] += np.expand_dims(np.where(mask, state[..., :dims], 0), axis=-2)
+        data["actions"] = actions
+
+        return data
+
+
+@dataclasses.dataclass(frozen=True)
+class TokenizePrompt(DataTransformFn):
+    tokenizer: _tokenizer.Tokenizer
+
+    # Default prompt that should be used if "prompt" is not present in the data.
+    # If None, `DEFAULT_PROMPT` is used.
+    default_prompt: str | None = None
+
+    def __call__(self, data: dict) -> dict:
+        batch_size = data["state"].shape[:-1]
+
+        if (prompt := data.pop("prompt", None)) is None:
+            prompt = self.default_prompt or DEFAULT_PROMPT
+
+        if isinstance(prompt, str):
+            prompt = np.full(batch_size, prompt)
 
         # TODO(ury): Adjust the tokenizer to take a single element instead.
         shape = prompt.shape
         if len(shape) == 0:
             prompt = prompt[np.newaxis, ...]
-        tokens, token_masks = self._tokenizer.tokenize(prompt)
+        tokens, token_masks = self.tokenizer.tokenize(prompt)
         if len(shape) == 0:
             tokens = tokens[0]
             token_masks = token_masks[0]
@@ -185,9 +247,32 @@ def apply_tree(
 
 
 def pad_to_dim(x: np.ndarray, target_dim: int, axis: int = -1) -> np.ndarray:
+    """Pad an array to the target dimension with zeros along the specified axis."""
     current_dim = x.shape[axis]
     if current_dim < target_dim:
         pad_width = [(0, 0)] * len(x.shape)
         pad_width[axis] = (0, target_dim - current_dim)
         return np.pad(x, pad_width)
     return x
+
+
+def make_bool_mask(*dims: int) -> tuple[bool, ...]:
+    """Make a boolean mask for the given dimensions.
+
+    Example:
+        make_bool_mask(2, -2, 2) == (True, True, False, False, True, True)
+        make_bool_mask(2, 0, 2) == (True, True, True, True)
+
+    Args:
+        dims: The dimensions to make the mask for.
+
+    Returns:
+        A tuple of booleans.
+    """
+    result = []
+    for dim in dims:
+        if dim > 0:
+            result.extend([True] * (dim))
+        else:
+            result.extend([False] * (-dim))
+    return tuple(result)

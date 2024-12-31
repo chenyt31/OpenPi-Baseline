@@ -171,9 +171,8 @@ class UR5Inputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # First, concatenate the joints and gripper into the state vector.
         # Pad to the expected input dimensionality of the model (same as action_dim).
-        state = np.concatenate([data["joints"], data["gripper"]], axis=1)
+        state = np.concatenate([data["joints"], data["gripper"]])
         state = transforms.pad_to_dim(state, self.action_dim)
-        batch_size = state.shape[0]
 
         inputs = {
             "state": state,
@@ -186,9 +185,9 @@ class UR5Inputs(transforms.DataTransformFn):
             },
             # 1D bool indicating if the image exists.
             "image_mask": {
-                "base_0_rgb": np.ones(batch_size, dtype=np.bool_),
-                "left_wrist_0_rgb": np.ones(batch_size, dtype=np.bool_),
-                "right_wrist_0_rgb": np.zeros(batch_size, dtype=np.bool_),
+                "base_0_rgb": np.True_,
+                "left_wrist_0_rgb": np.True_,
+                "right_wrist_0_rgb": np.True_,
             },
         }
 

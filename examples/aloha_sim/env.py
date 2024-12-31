@@ -1,6 +1,7 @@
 import gym_aloha  # noqa: F401
 import gymnasium
 import numpy as np
+from openpi_client import image_tools
 from openpi_client.runtime import environment as _environment
 from typing_extensions import override
 
@@ -50,6 +51,6 @@ class AlohaSimEnvironment(_environment.Environment):
         return {
             "state": gym_obs["agent_pos"],
             "images": {
-                "cam_high": img,
+                "cam_high": image_tools.convert_to_uint8(image_tools.resize_with_pad(img, 224, 224)),
             },
         }

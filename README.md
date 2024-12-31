@@ -152,7 +152,7 @@ This section provides a brief general guide to fine-tune $\pi_0$ to your own rob
 
 We will first define `UR5Inputs` and `UR5Outputs` classes derived from `DataTransformFn` to describe how the observations from the robot map onto model inputs and how the model outputs map onto robot actions, respectively. For a simple existing example such transforms, see [src/openpi/policies/droid_policy.py](src/openpi/policies/droid_policy.py).
 
-We assume that the robot client produces a dict with the following fields, and that images have already been resized to the model's expected 224x224 resolution:
+We assume that the robot client produces a dict with the following fields, and that images are `uint8` RGB in the range [0, 255]. The model expects 224x224 resolution images, but we can add a transformation to our processor stack that will resize them if necessary (more on this later):
 - `joints`: 6D vector of joint angles
 - `gripper`: 1D gripper position in the range [0, 1]
 - `base_rgb`: RGB image from the base camera

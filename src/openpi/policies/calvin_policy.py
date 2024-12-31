@@ -20,8 +20,8 @@ class CalvinInputs(transforms.DataTransformFn):
                 "rgb_gripper": data["observation/rgb_gripper"],
             },
             "image_mask": {
-                "rgb_static": np.ones(1, dtype=np.bool_),
-                "rgb_gripper": np.ones(1, dtype=np.bool_),
+                "rgb_static": np.True_,
+                "rgb_gripper": np.True_,
             },
         }
 
@@ -35,4 +35,4 @@ class CalvinInputs(transforms.DataTransformFn):
 class CalvinOutputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Only return the first 15 dims.
-        return {"actions": np.asarray(data["actions"][..., :15])}
+        return {"actions": np.asarray(data["actions"][:, :15])}

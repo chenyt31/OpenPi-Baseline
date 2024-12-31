@@ -30,15 +30,18 @@ class Policy(BasePolicy):
         sample_kwargs: dict[str, Any] | None = None,
     ):
         self._model = model
-        self._input_transform = _transforms.CompositeTransform(transforms)
-        self._output_transform = _transforms.CompositeTransform(output_transforms)
+        self._input_transform = _transforms.compose(transforms)
+        self._output_transform = _transforms.compose(output_transforms)
         self._rng = rng or jax.random.key(0)
         self._sample_kwargs = sample_kwargs or {"num_steps": 10}
 
     @override
     def infer(self, obs: dict) -> dict:  # type: ignore[misc]
-        inputs = self._input_transform(_make_batch(obs))
-        inputs = jax.tree_util.tree_map(lambda x: jnp.asarray(x), inputs)
+        # Make a copy since transformations may modify the inputs in place.
+        inputs = jax.tree.map(lambda x: x, obs)
+        inputs = self._input_transform(inputs)
+        # Make a batch and convert to jax.Array.
+        inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
 
         self._rng, sample_rng = jax.random.split(self._rng)
         outputs = {
@@ -47,9 +50,10 @@ class Policy(BasePolicy):
                 sample_rng, common.Observation.from_dict(inputs), **self._sample_kwargs
             ),
         }
-        outputs = jax.device_get(outputs)
-        outputs = self._output_transform(outputs)
-        return _unbatch(outputs)
+
+        # Unbatch and convert to np.ndarray.
+        outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
+        return self._output_transform(outputs)
 
 
 class PolicyRecorder(_base_policy.BasePolicy):
@@ -75,14 +79,3 @@ class PolicyRecorder(_base_policy.BasePolicy):
 
         np.save(output_path, np.asarray(data))
         return results
-
-
-def _make_batch(data: at.PyTree[np.ndarray]) -> at.PyTree[np.ndarray]:
-    def _transform(x: np.ndarray) -> np.ndarray:
-        return np.asarray(x)[np.newaxis, ...]
-
-    return jax.tree_util.tree_map(_transform, data)
-
-
-def _unbatch(data: at.PyTree[np.ndarray]) -> at.PyTree[np.ndarray]:
-    return jax.tree_util.tree_map(lambda x: np.asarray(x[0, ...]), data)

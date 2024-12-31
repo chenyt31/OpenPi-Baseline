@@ -179,11 +179,21 @@ def _download_boto3(
 
     try:
         with tqdm.tqdm(total=total_size, unit="iB", unit_scale=True, unit_divisor=1024) as pbar:
+            if os.getenv("IS_DOCKER", "false").lower() == "true":
+                # tqdm is bugged when using docker-compose. See https://github.com/tqdm/tqdm/issues/771
+                def update_progress(size: int) -> None:
+                    pbar.update(size)
+                    print(pbar)
+            else:
+
+                def update_progress(size: int) -> None:
+                    pbar.update(size)
+
             futures = []
             for obj in objects:
                 relative_path = pathlib.Path(obj.key).relative_to(prefix)
                 dest_path = local_path / relative_path
-                if future := transfer(obj, dest_path, pbar.update):
+                if future := transfer(obj, dest_path, update_progress):
                     futures.append(future)
             for future in futures:
                 future.result()

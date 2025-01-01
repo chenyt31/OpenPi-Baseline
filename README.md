@@ -35,9 +35,9 @@ Docker installation instructions are [here](https://docs.docker.com/engine/insta
 
 During the first run of any example, Docker will build the images. Go grab a coffee while this happens. Subsequent runs will be faster since the images are cached.
 
-### Downloading checkpoints
+### Downloading assets
 
-By default checkpoints are downloaded from `s3://openpi-assets` and are cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
+By default, assets like checkpoints and exported models are downloaded from `s3://openpi-assets` and are cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
 
 ## Running Training
 
@@ -101,40 +101,85 @@ uv run scripts/serve_policy.py --env LIBERO --default_prompt "my task"
 
 ### Serve a trained policy from an openpi checkpoint
 
-This option allows serving a model that was trained using the openpi training code.
+This option allows serving a model that was trained using the openpi training code. Here's an example of how to serve a checkpoint that corresponds to the `pi0_aloha_sim` training config:
 
 ```bash
 uv run scripts/serve_policy.py --default_prompt "my task" policy:checkpoint --policy.config=pi0_aloha_sim --policy.dir=checkpoints/pi0_aloha_sim/exp_name/10000
 ```
 
+See the [list of available checkpoints](#available-checkpoints) below for more details.
+
 The training config is used to determine which data transformations should be applied to the runtime data before feeding into the model. The norm stats, which are used to normalize the transformed data, are loaded from the checkpoint directory.
 
 ### Serve an exported model
 
-There are also a number of checkpoints that are available as exported JAX graphs, which we trained ourselves using our internal training code. These can be served using the following command:
+There are also a number of checkpoints that are available as exported JAX graphs, which we trained ourselves using our internal training code. Here's an example of how to serve the pre-trained $\pi_0$ model on an ALOHA robot:
 
 ```bash
-uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_base/model [--policy.processor=trossen_biarm_single_base_cam_24dim]
+uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_base/model --policy.processor=trossen_biarm_single_base_cam_24dim
 ```
+
+See the [list of available exported models](#available-exported-models) below for more details.
 
 For these exported models, norm stats are loaded from processors that are exported along with the model, while data transformations are defined by the --env argument (see `create_exported_policy` in [scripts/serve_policy.py](scripts/serve_policy.py)). The processor name is optional, and if not provided, we will do the following:
 - Load a processor if there is only one available
 - Raise an error if there are multiple processors available and ask to provide a processor name
 
+### Available policies
 
-### Available exported models
+#### Checkpoints
 
-We currently have the following exported models available for use. See [scripts/serve_policy.py](scripts/serve_policy.py) for details.
+All available openpi checkpoints are located in `s3://openpi-assets/checkpoints/`. Similar to checkpionts that were trained using the openpi training code, they can be served using the following command:
 
-| name              | path                                                | env              | recommended language command | description                                                                |
-| ----------------- | --------------------------------------------------- | ---------------- | ---------------------------- | -------------------------------------------------------------------------- |
-| `pi0_base`        | `s3://openpi-assets/exported/pi0_base/model/`       | `ALOHA`, `DROID` | `"be a good robot"`          | Standard pre-trained $\pi_0$, may not perform well in zero-shot            |
-| `pi0_aloha`       | `s3://openpi-assets/exported/pi0_aloha/model`       | `ALOHA`          | `""`                         | $\pi_0$ model fine-tuned on public ALOHA data, supports pen cap/uncap task |
-| `pi0_aloha_towel` | `s3://openpi-assets/exported/pi0_aloha_towel/model` | `ALOHA`          | `"fold the towel"`           | $\pi_0$ model fine-tuned to perform a towel folding task on ALOHA          |
-| `pi0_aloha_sim`   | `s3://openpi-assets/exported/pi0_aloha_sim/model`   | `ALOHA_SIM`      | `"be a good robot"`          | $\pi_0$ model fine-tuned on public simulated ALOHA cube transfer task      |
-| `pi0_droid`       | `s3://openpi-assets/exported/pi0_droid/model`       | `DROID`          | any DROID command            | $\pi_0$ model fine-tuned on public DROID dataset                           |
-| `pi0_calvin`      | `s3://openpi-assets/exported/pi0_calvin/model`      | `CALVIN`         | any CALVIN command           | $\pi_0$ model fine-tuned on public CALVIN simulated dataset                |
-| `pi0_libero`      | `s3://openpi-assets/exported/pi0_libero/model`      | `LIBERO`         | any LIBERO command           | $\pi_0$ model fine-tuned on public LIBERO simulated dataset                |
+```bash
+uv run scripts/serve_policy.py --default_prompt=<prompt> policy:checkpoint --policy.config=<config> --policy.dir=<dir>
+```
+
+| dir                                              | config          | prompt             | description                                                                |
+| ------------------------------------------------ | --------------- | ------------------ | -------------------------------------------------------------------------- |
+| `s3://openpi-assets/checkpoints/pi0_aloha`       | `pi0_aloha`     | not needed         | $\pi_0$ model fine-tuned on public ALOHA data, supports pen cap/uncap task |
+| `s3://openpi-assets/checkpoints/pi0_aloha_towel` | `pi0_aloha`     | `"fold the towel"` | $\pi_0$ model fine-tuned to perform a towel folding task on ALOHA          |
+| `s3://openpi-assets/checkpoints/pi0_aloha_sim`   | `pi0_aloha_sim` | not needed         | $\pi_0$ model fine-tuned on public simulated ALOHA cube transfer task      |
+
+#### Exported models
+
+NOTE: We are in the process of converting all exported fine-tuned models into checkpoints.
+
+All available openpi exported models are located in `s3://openpi-assets/exported/`. They can be served using the following command:
+
+```bash
+uv run scripts/serve_policy.py --env=<env> --default_prompt=<prompt> policy:exported --policy.dir=<dir>
+```
+
+| dir                                            | env      | prompt             | description                                                 |
+| ---------------------------------------------- | -------- | ------------------ | ----------------------------------------------------------- |
+| `s3://openpi-assets/exported/pi0_droid/model`  | `DROID`  | any DROID command  | $\pi_0$ model fine-tuned on public DROID dataset            |
+| `s3://openpi-assets/exported/pi0_calvin/model` | `CALVIN` | any CALVIN command | $\pi_0$ model fine-tuned on public CALVIN simulated dataset |
+| `s3://openpi-assets/exported/pi0_libero/model` | `LIBERO` | any LIBERO command | $\pi_0$ model fine-tuned on public LIBERO simulated dataset |
+
+#### Standard pre-trained $\pi_0$ model
+
+Our standard pre-trained $\pi_0$ model is available both as a checkpoint and an exported model.
+
+The checkpoint is used to initialize the model weights for fine-tuning using:
+
+```python
+weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+```
+
+Although it may not perform well in zero-shot, it can be used as a baseline for comparing against fine-tuned models. We currently don't support serving pi0_base as a checkpoint and recommend using the exported model instead:
+
+```bash
+uv run scripts/serve_policy.py --env=<env> policy:exported --policy.dir=s3://openpi-assets/exported/pi0_base/model --policy.processor=<processor>
+```
+
+Here's a list of supported environments and corresponding processors:
+
+| env     | processor                             |
+| ------- | ------------------------------------- |
+| `ALOHA` | `trossen_biarm_single_base_cam_24dim` |
+| `DROID` | `openx_droid`                         |
+
 
 ### Running with Docker:
 

@@ -33,8 +33,8 @@ class Exported:
 
     # Checkpoint directory (e.g., "s3://openpi-assets/exported/pi0_aloha/model").
     dir: str
-    # Processor name to load the norm stats from. If not provided, first try using the default environment processor.
-    # If not available, load a processor if there is only one available. If there are multiple processors, raise an error.
+    # Processor name to load the norm stats from. If not provided, will automatically load a processor if there is only
+    # one available. If there are multiple processors, raise an error and ask the user to provide a processor name.
     processor: str | None = None
 
 
@@ -49,13 +49,16 @@ class Checkpoint:
 
 
 @dataclasses.dataclass
+class Default:
+    """Use the default policy for the given environment."""
+
+
+@dataclasses.dataclass
 class Args:
     """Arguments for the serve_policy script."""
 
-    # Environment to serve the policy for.
+    # Environment to serve the policy for. This is only used when serving default policies, or loading exported models.
     env: EnvMode = EnvMode.ALOHA_SIM
-    # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
-    policy: Checkpoint | Exported | None = None
 
     # If provided, overrides the default prompt for the policy.
     default_prompt: str | None = None
@@ -64,6 +67,9 @@ class Args:
     port: int = 8000
     # Record the policy's behavior for debugging.
     record: bool = False
+
+    # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
+    policy: Checkpoint | Exported | Default = dataclasses.field(default_factory=Default)
 
 
 # Default checkpoints that should be used for each environment.
@@ -122,12 +128,8 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
         raise ValueError(f"No processors found in {checkpoint_dir}")
 
     if processor is None:
-        # First try using the default environment processor.
-        if default_exported := DEFAULT_EXPORTED.get(env):
-            if default_exported.processor in processors:
-                processor = default_exported.processor
-        # If the default processor is not available, load a processor if there is only one available.
-        elif len(processors) == 1:
+        # If there is only one processor, use it.
+        if len(processors) == 1:
             processor = processors[0]
         # If there are multiple processors, ask the user to provide a processor name.
         else:
@@ -186,7 +188,7 @@ def create_policy(args: Args) -> _policy.Policy:
             )
         case Exported():
             return create_exported_policy(args.env, args.policy, default_prompt=args.default_prompt)
-        case None:
+        case Default():
             return create_default_policy(args.env, default_prompt=args.default_prompt)
 
 

@@ -187,7 +187,9 @@ class UR5Inputs(transforms.DataTransformFn):
             "image_mask": {
                 "base_0_rgb": np.True_,
                 "left_wrist_0_rgb": np.True_,
-                "right_wrist_0_rgb": np.True_,
+                # Since the "slot" for the right wrist is not used, this mask is set
+                # to False
+                "right_wrist_0_rgb": np.False_,
             },
         }
 
@@ -210,7 +212,7 @@ Here is an example output transformation:
 class UR5Outputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Since the robot has 7 action dimensions (6 DoF + gripper), return the first 7 dims
-        return {"actions": np.asarray(data["actions"][..., :7])}
+        return {"actions": np.asarray(data["actions"][:, :7])}
 ```
 
 You will also need to define a new entry in the `EnvMode` enum in [scripts/serve_policy.py](scripts/serve_policy.py) (e.g., `UR5`). You do not need to do anything with this entry unless you want to use the `pi0_base` model in zero-shot, which is **almost certainly** the case if you are adding your own robot that $\pi_0$ was not trained on. But if you do want to use $\pi_0$ in zero-shot on a supported robot: You will need to add the right processor under `DEFAULT_EXPORTED` (if the model already supports your robot, this should exist, but you may need to file a Github issue to get the name), and add a case to `create_default_policy`, e.g.:
@@ -280,7 +282,9 @@ class UR5DataConfig(DataConfigFactory):
                 inputs=[
                     # This is only necessary if we expect the input images to require
                     # resizing. If your data is already 224x224 and your robot produces
-                    # 224x224 images, then you can omit this.
+                    # 224x224 images, then you can omit this, but it's also fine to leave
+                    # this in as a precaution -- if the images are already 224x224, this
+                    # adds no additional cost.
                     _transforms.ResizeImages(224, 224),
                     _transforms.TokenizePrompt(
                         _tokenizer.PaligemmaTokenizer(model.max_token_len),

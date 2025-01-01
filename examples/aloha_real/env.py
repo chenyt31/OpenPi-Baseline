@@ -1,5 +1,5 @@
 import einops
-import numpy as np
+from openpi_client import image_tools
 from openpi_client.runtime import environment as _environment
 from typing_extensions import override
 
@@ -9,7 +9,7 @@ from examples.aloha_real import real_env as _real_env
 class AlohaRealEnvironment(_environment.Environment):
     """An environment for an Aloha robot on real hardware."""
 
-    def __init__(self, render_height: int = 480, render_width: int = 640) -> None:
+    def __init__(self, render_height: int = 224, render_width: int = 224) -> None:
         self._env = _real_env.make_real_env(init_node=True)
         self._render_height = render_height
         self._render_width = render_width
@@ -35,7 +35,10 @@ class AlohaRealEnvironment(_environment.Environment):
                 del obs["images"][k]
 
         for cam_name in obs["images"]:
-            obs["images"][cam_name] = einops.rearrange(obs["images"][cam_name], "h w c -> c h w").astype(np.uint8)
+            img = image_tools.convert_to_uint8(
+                image_tools.resize_with_pad(obs["images"][cam_name], self._render_height, self._render_width)
+            )
+            obs["images"][cam_name] = einops.rearrange(img, "h w c -> c h w")
 
         return {
             "state": obs["qpos"],

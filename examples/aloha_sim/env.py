@@ -27,7 +27,7 @@ class AlohaSimEnvironment(_environment.Environment):
         self._episode_reward = 0.0
 
     @override
-    def done(self) -> bool:
+    def is_episode_complete(self) -> bool:
         return self._done
 
     @override

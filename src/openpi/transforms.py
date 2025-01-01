@@ -1,5 +1,6 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 import dataclasses
+import re
 from typing import Protocol, TypeAlias, TypeVar, runtime_checkable
 
 import flax.traverse_util as traverse_util
@@ -233,6 +234,60 @@ def flatten_dict(tree: at.PyTree) -> dict:
 def unflatten_dict(tree: dict) -> at.PyTree:
     """Unflatten a flattened dictionary. Assumes that '/' was used as a separator."""
     return traverse_util.unflatten_dict(tree, sep="/")
+
+
+def transform_dict(patterns: Mapping[str, str | None], tree: at.PyTree) -> at.PyTree:
+    """Transform the structure of a nested dictionary using a set of patterns.
+
+    The transformation is defined using the `patterns` dictionary. The keys are the
+    input keys that should be matched and the values are the new names inside the output
+    dictionary. If the value is None, the input key is removed.
+
+    Both keys and values should represent flattened paths using '/' as the separator.
+    Keys can be regular expressions and values can include backreferences to the
+    matched groups (see `re.sub` for more details). Note that the regular expression
+    must match the entire key.
+
+    The order inside the `patterns` dictionary is important. Only the first pattern that
+    matches the input key will be used.
+
+    See unit tests for more examples.
+
+    Args:
+        patterns: A mapping from old keys to new keys.
+        tree: The nested dictionary to transform.
+
+    Returns:
+        The transformed nested dictionary.
+    """
+    data = flatten_dict(tree)
+
+    # Compile the patterns.
+    compiled = {re.compile(k): v for k, v in patterns.items()}
+
+    output = {}
+    for k in data:
+        for pattern, repl in compiled.items():
+            if pattern.fullmatch(k):
+                new_k = pattern.sub(repl, k, count=1) if repl is not None else None
+                break
+        else:
+            # Use the original key if no match is found.
+            new_k = k
+
+        if new_k is not None:
+            if new_k in output:
+                raise ValueError(f"Key '{new_k}' already exists in output")
+            output[new_k] = data[k]
+
+    # Validate the output structure to make sure that it can be unflattened.
+    names = sorted(output)
+    for i in range(len(names) - 1):
+        name, next_name = names[i : i + 2]
+        if next_name.startswith(name + "/"):
+            raise ValueError(f"Leaf '{name}' aliases a node of '{next_name}'")
+
+    return unflatten_dict(output)
 
 
 def apply_tree(

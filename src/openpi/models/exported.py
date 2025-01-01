@@ -3,6 +3,7 @@
 Used to test internal pi checkpoints and provides utilities to convert them to openpi checkpoints.
 """
 
+from collections.abc import Mapping
 import pathlib
 from typing import Any
 
@@ -20,12 +21,27 @@ from openpi.shared import image_tools
 from openpi.shared import normalize as _normalize
 import openpi.shared.array_typing as at
 import openpi.shared.download as download
+import openpi.transforms as _transforms
 
 
 def convert_to_openpi(
-    ckpt_dir: pathlib.Path | str, processor: str, out_dir: pathlib.Path | str, param_path: str = "decoder"
+    ckpt_dir: pathlib.Path | str,
+    processor: str,
+    out_dir: pathlib.Path | str,
+    *,
+    param_path: str = "decoder",
+    transform: Mapping[str, None] | None = None,
 ) -> None:
-    """Convert a monopi checkpoint to an openpi checkpoint."""
+    """Convert an internal checkpoint to an openpi checkpoint.
+
+    Args:
+        ckpt_dir: The directory containing the internal exported model.
+        processor: The processor name to use to extract the norm stats.
+        out_dir: The directory to save the openpi checkpoint.
+        param_path: The path to the parameters within the overall param structure. Can include "/" to support nesting.
+        transform: Optional transform patterns to use when converting the checkpoint params. Each key maps from the
+            original param name to the openpi param name. See `determine_transform_patterns` for more details.
+    """
     out_dir = pathlib.Path(out_dir)
     if out_dir.exists():
         raise FileExistsError(f"Output directory already exists: {out_dir}")
@@ -43,7 +59,9 @@ def convert_to_openpi(
             raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
         params = params[part]
 
-    # Load the monopi model.
+    if transform is not None:
+        params = _transforms.transform_dict(transform, params)
+
     # Save params.
     ckpt = ocp.StandardCheckpointer()
     ckpt.save(out_dir / "params", {"params": params})
@@ -55,7 +73,7 @@ def convert_to_openpi(
 
 @struct.dataclass
 class PiModel(_model.BaseModel):
-    """A model loaded from a monopi checkpoint model directory."""
+    """A model loaded from an internal exported model directory."""
 
     params: at.Params
 
@@ -66,7 +84,7 @@ class PiModel(_model.BaseModel):
 
     @classmethod
     def from_checkpoint(cls, ckpt_dir: pathlib.Path | str) -> "PiModel":
-        """Load a model from a monopi model checkpoint directory. Must point at the "model" sub-directory."""
+        """Load a model from the internal checkpoint directory. Must point at the "model" sub-directory."""
         ckpt_dir = download.maybe_download(str(ckpt_dir))
         with (ckpt_dir / "graph").open("rb") as f:
             exported = jax.export.deserialize(f.read())
@@ -171,6 +189,59 @@ class PiModel(_model.BaseModel):
             action_horizon=self.action_horizon,
             max_token_len=self.max_token_len,
         )
+
+
+def determine_transform_patterns(
+    pi_model: PiModel, module: common.BaseModule, *, param_path: str = "decoder"
+) -> dict[str, str]:
+    """Determine the transform patterns to use when converting an internal checkpoint to an openpi checkpoint.
+
+    The returned pattern can be used by `transforms.transform_dict` to convert the checkpoint params to the openpi format.
+    """
+    model = pi_model.set_module(module, param_path=param_path)
+
+    obs, act = model.fake_obs(), model.fake_act()
+    real_params = model.init_params(jax.random.key(0), obs, act)
+
+    real_params = _transforms.flatten_dict(real_params)
+    loaded_params = _transforms.flatten_dict(model.params)
+
+    missing = sorted(set(real_params) - set(loaded_params), key=lambda n: (real_params[n].shape, n))
+    extra = sorted(set(loaded_params) - set(real_params), key=lambda n: (loaded_params[n].shape, n))
+
+    if not missing:
+        return {}
+
+    if missing and (len(missing) == len(extra)):
+        patterns = dict(zip(extra, missing, strict=True))
+        # Confirm that all shapes match.
+        for k, v in patterns.items():
+            if loaded_params[k].shape != real_params[v].shape:
+                print("Shape mismatch between checkpoint and model candidates:")
+                print(k, loaded_params[k].shape)
+                print(v, real_params[v].shape)
+                print()
+                break
+        else:
+            return patterns
+
+    # Getting here means that there's a mismatch but we were unable
+
+    if missing:
+        print(f"{len(missing)} missing params in checkpoint:")
+        for name in missing:
+            p = real_params[name]
+            print(name, p.shape, str(p.dtype))
+        print()
+
+    if extra:
+        print(f"{len(extra)} extra params in checkpoint:")
+        for name in extra:
+            p = loaded_params[name]
+            print(name, p.shape, str(p.dtype))
+        print()
+
+    raise ValueError("Automatic generation is not possible. Please see the outputs and create the patterns by hand.")
 
 
 def _load_params(

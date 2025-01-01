@@ -17,6 +17,9 @@ class Args:
 
     action_horizon: int = 25
 
+    num_episodes: int = 1
+    max_episode_steps: int = 1000
+
 
 def main(args: Args) -> None:
     runtime = _runtime.Runtime(
@@ -32,6 +35,8 @@ def main(args: Args) -> None:
         ),
         subscribers=[],
         max_hz=50,
+        num_episodes=args.num_episodes,
+        max_episode_steps=args.max_episode_steps,
     )
 
     runtime.run()

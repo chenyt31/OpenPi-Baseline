@@ -16,11 +16,11 @@ class Environment(abc.ABC):
         """
 
     @abc.abstractmethod
-    def done(self) -> bool:
-        """Allow the environment to signal that the task is done.
+    def is_episode_complete(self) -> bool:
+        """Allow the environment to signal that the episode is complete.
 
-        This will be called after each step. It should return `True` if the task is
-        done (either successfully or unsuccessfully), and `False` otherwise.
+        This will be called after each step. It should return `True` if the episode is
+        complete (either successfully or unsuccessfully), and `False` otherwise.
         """
 
     @abc.abstractmethod

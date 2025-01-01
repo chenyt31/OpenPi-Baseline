@@ -21,7 +21,7 @@ class AlohaRealEnvironment(_environment.Environment):
         self._ts = self._env.reset()
 
     @override
-    def done(self) -> bool:
+    def is_episode_complete(self) -> bool:
         return False
 
     @override

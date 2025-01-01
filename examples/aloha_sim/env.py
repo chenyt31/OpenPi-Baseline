@@ -1,6 +1,7 @@
 import gym_aloha  # noqa: F401
 import gymnasium
 import numpy as np
+from openpi_client import image_tools
 from openpi_client.runtime import environment as _environment
 from typing_extensions import override
 
@@ -38,7 +39,7 @@ class AlohaSimEnvironment(_environment.Environment):
 
     @override
     def apply_action(self, action: dict) -> None:
-        gym_obs, reward, terminated, truncated, info = self._gym.step(action["qpos"])
+        gym_obs, reward, terminated, truncated, info = self._gym.step(action["actions"])
         self._last_obs = self._convert_observation(gym_obs)  # type: ignore
         self._done = terminated or truncated
         self._episode_reward = max(self._episode_reward, reward)
@@ -47,10 +48,9 @@ class AlohaSimEnvironment(_environment.Environment):
         # Convert axis order from [H, W, C] --> [C, H, W]
         img = np.transpose(gym_obs["pixels"]["top"], (2, 0, 1))
 
-        # Add multi-camera dimension, to match the way real aloha provides images as [cam_idx, C, H, W].
-        imgs = np.expand_dims(img, axis=0)
-
         return {
-            "qpos": gym_obs["agent_pos"],
-            "image": imgs,
+            "state": gym_obs["agent_pos"],
+            "images": {
+                "cam_high": image_tools.convert_to_uint8(image_tools.resize_with_pad(img, 224, 224)),
+            },
         }

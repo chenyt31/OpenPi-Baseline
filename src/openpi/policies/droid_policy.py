@@ -11,7 +11,7 @@ class DroidInputs(transforms.DataTransformFn):
     action_dim: int
 
     def __call__(self, data: dict) -> dict:
-        state = np.concatenate([data["observation/joint_position"], data["observation/gripper_position"]], axis=1)
+        state = np.concatenate([data["observation/joint_position"], data["observation/gripper_position"]])
         state = transforms.pad_to_dim(state, self.action_dim)
 
         base_image = data["observation/exterior_image_1_left"]
@@ -24,9 +24,9 @@ class DroidInputs(transforms.DataTransformFn):
                 "right_wrist_0_rgb": np.zeros_like(base_image),
             },
             "image_mask": {
-                "base_0_rgb": np.ones(1, dtype=np.bool_),
-                "left_wrist_0_rgb": np.ones(1, dtype=np.bool_),
-                "right_wrist_0_rgb": np.zeros(1, dtype=np.bool_),
+                "base_0_rgb": np.True_,
+                "left_wrist_0_rgb": np.True_,
+                "right_wrist_0_rgb": np.False_,
             },
         }
 
@@ -40,4 +40,4 @@ class DroidInputs(transforms.DataTransformFn):
 class DroidOutputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Only return the first 8 dims.
-        return {"actions": np.asarray(data["actions"][..., :8])}
+        return {"actions": np.asarray(data["actions"][:, :8])}

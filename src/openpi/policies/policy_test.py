@@ -11,14 +11,8 @@ def create_policy_config() -> _policy_config.PolicyConfig:
     return _policy_config.PolicyConfig(
         model=model,
         norm_stats=model.norm_stats("huggingface_aloha_sim_transfer_cube"),
-        input_layers=[
-            aloha_policy.ActInputsRepack(),
-            aloha_policy.AlohaInputs(action_dim=model.action_dim),
-        ],
-        output_layers=[
-            aloha_policy.AlohaOutputs(),
-            aloha_policy.ActOutputsRepack(),
-        ],
+        input_layers=[aloha_policy.AlohaInputs(action_dim=model.action_dim)],
+        output_layers=[aloha_policy.AlohaOutputs()],
     )
 
 
@@ -29,7 +23,7 @@ def test_infer():
     example = aloha_policy.make_aloha_example()
     outputs = policy.infer(example)
 
-    assert outputs["qpos"].shape == (config.model.action_horizon, 14)
+    assert outputs["actions"].shape == (config.model.action_horizon, 14)
 
 
 def test_broker():
@@ -45,4 +39,4 @@ def test_broker():
     example = aloha_policy.make_aloha_example()
     for _ in range(config.model.action_horizon):
         outputs = broker.infer(example)
-        assert outputs["qpos"].shape == (14,)
+        assert outputs["actions"].shape == (14,)

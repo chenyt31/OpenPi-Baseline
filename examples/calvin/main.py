@@ -14,6 +14,7 @@ import hydra
 import imageio
 import numpy as np
 from omegaconf import OmegaConf
+from openpi_client import image_tools
 from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
@@ -29,6 +30,7 @@ class Args:
     host: str = "0.0.0.0"
     port: int = 8000
     replan_steps: int = 5
+    resize_size: int = 224
 
     #################################################################################################################
     # CALVIN environment-specific parameters
@@ -87,8 +89,12 @@ def main(args: Args) -> None:
                     # Finished executing previous action chunk -- compute new chunk
                     # Prepare observations dict
                     element = {
-                        "observation/rgb_static": img,
-                        "observation/rgb_gripper": wrist_img,
+                        "observation/rgb_static": image_tools.convert_to_uint8(
+                            image_tools.resize_with_pad(img, args.resize_size, args.resize_size)
+                        ),
+                        "observation/rgb_gripper": image_tools.convert_to_uint8(
+                            image_tools.resize_with_pad(wrist_img, args.resize_size, args.resize_size)
+                        ),
                         "observation/state": obs["robot_obs"],
                         "prompt": str(task_instructions[subtask][0]),
                     }

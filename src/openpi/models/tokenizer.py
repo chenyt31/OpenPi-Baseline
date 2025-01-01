@@ -9,14 +9,14 @@ import openpi.shared.download as download
 
 class Tokenizer(abc.ABC):
     @abc.abstractmethod
-    def tokenize(self, batch: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def tokenize(self, prompt: str) -> tuple[np.ndarray, np.ndarray]:
         """Tokenize a batch of prompts.
 
         Args:
-            batch: A batch of text prompts to tokenize.
+            prompt: A text prompt to tokenize.
 
         Returns:
-            A tuple containing the tokenized prompts and the corresponding masks.
+            A tuple containing the tokenized prompt and the corresponding mask.
         """
 
 
@@ -29,23 +29,17 @@ class PaligemmaTokenizer(Tokenizer):
             self._tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
     @override
-    def tokenize(self, batch: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        batch_tokens, batch_masks = [], []
+    def tokenize(self, prompt: str) -> tuple[np.ndarray, np.ndarray]:
+        cleaned_text = prompt.strip().replace("_", " ").replace("\n", " ")
+        # tokenize "\n" separately as the "start of answer" token
+        tokens = self._tokenizer.encode(cleaned_text, add_bos=True) + self._tokenizer.encode("\n")
+        tokens_len = len(tokens)
+        if tokens_len < self._max_len:
+            padding = [0] * (self._max_len - tokens_len)
+            mask = [1] * tokens_len + padding
+            tokens = tokens + padding
+        else:
+            tokens = tokens[: self._max_len]
+            mask = [1] * self._max_len
 
-        for text in batch:
-            cleaned_text = text.lower().strip().replace("_", " ").replace("\n", " ")
-            # tokenize "\n" separately as the "start of answer" token
-            tokens = self._tokenizer.encode(cleaned_text, add_bos=True) + self._tokenizer.encode("\n")
-            tokens_len = len(tokens)
-            if tokens_len < self._max_len:
-                padding = [0] * (self._max_len - tokens_len)
-                mask = [1] * tokens_len + padding
-                tokens = tokens + padding
-            else:
-                tokens = tokens[: self._max_len]
-                mask = [1] * self._max_len
-
-            batch_tokens.append(tokens)
-            batch_masks.append(mask)
-
-        return np.array(batch_tokens), np.array(batch_masks)
+        return np.asarray(tokens), np.asarray(mask)

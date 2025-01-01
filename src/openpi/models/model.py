@@ -205,17 +205,31 @@ class Model(BaseModel):
 def restore_params(
     params_path: pathlib.Path | str,
     *,
+    restore_type: type[np.ndarray] | type[jax.Array] = jax.Array,
     dtype: jnp.dtype | None = None,
     sharding: jax.sharding.Sharding | None = None,
 ) -> at.Params:
-    """Restores unstructured params PyTree from a checkpoint. This works with checkpoints saved with `save_state` during
-    openpi training (see `training/checkpoints.py`) as well as pre-trained checkpoints released for openpi.
+    """Restores unstructured params PyTree from a checkpoint.
+
+    This works with checkpoints saved with `save_state` during openpi training (see `training/checkpoints.py`) as
+    well as pre-trained checkpoints released for openpi.
+
+    Args:
+        params_path: The local path to the checkpoint directory.
+        restore_type: The type to restore the params as. Can be set to `np.ndarray` to load the params as a numpy array.
+        dtype: The dtype to restore all params as. If not provided, will use the original dtype from the checkpoint.
+        sharding: The sharding to use for the params. If not provided, the params will be replicated across all devices.
+
+    Returns:
+        The restored params.
     """
     params_path = pathlib.Path(params_path).resolve()
     if not params_path.exists():
         raise FileNotFoundError(f"Model params not found at: {params_path}")
 
-    restore_type = np.ndarray if sharding is None else jax.Array
+    if restore_type is jax.Array and sharding is None:
+        mesh = jax.sharding.Mesh(jax.devices(), ("x",))
+        sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     with ocp.PyTreeCheckpointer() as ckptr:
         metadata = ckptr.metadata(params_path)

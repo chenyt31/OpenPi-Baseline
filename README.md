@@ -236,7 +236,10 @@ To create a configuration for training on your robot, it will be necessary to ad
 @dataclasses.dataclass(frozen=True)
 class UR5DataConfig(DataConfigFactory):
     # This is the repo id from LeRobot for this dataset repo.
-    repo_id: str
+    # If you are creating a config just for running a model and do not intend to train it,
+    # and therefore might not have a dataset, this default indicates that this config is
+    # not used for training.
+    repo_id: str = tyro.MISSING
     # If true, will convert joint dimensions to deltas with respect to the current state
     # before passing to the model. Most models expect this. Grippers do not use delta.
     use_delta_joint_actions: bool = False
@@ -249,11 +252,11 @@ class UR5DataConfig(DataConfigFactory):
 
     def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
         # This is standard boilerplate for loading norm stats for openpi checkpoints.
-        norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
-        if norm_stats_path.exist():
-            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text())
-        else:
-            norm_stats = None
+        norm_stats = None
+        if self.repo_id is not tyro.MISSING:
+            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
+            if norm_stats_path.exist():
+                norm_stats = _normalize.deserialize_json(norm_stats_path.read_text())
 
         # These transforms are the ones we wrote earlier.
         data_transforms=_transforms.Group(

@@ -104,7 +104,7 @@ uv run scripts/serve_policy.py --env LIBERO --default_prompt "my task"
 This option allows serving a model that was trained using the openpi training code.
 
 ```bash
-uv run scripts/serve_policy.py --env ALOHA_SIM policy:checkpoint --policy.config=pi0_aloha_sim --policy.dir=checkpoints/pi0_aloha_sim/exp_name/10000
+uv run scripts/serve_policy.py --default_prompt "my task" policy:checkpoint --policy.config=pi0_aloha_sim --policy.dir=checkpoints/pi0_aloha_sim/exp_name/10000
 ```
 
 The training config is used to determine which data transformations should be applied to the runtime data before feeding into the model. The norm stats, which are used to normalize the transformed data, are loaded from the checkpoint directory.
@@ -114,10 +114,10 @@ The training config is used to determine which data transformations should be ap
 There are also a number of checkpoints that are available as exported JAX graphs, which we trained ourselves using our internal training code. These can be served using the following command:
 
 ```bash
-uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_aloha/model [--policy.processor=trossen_biarm_single_base_cam_24dim]
+uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_base/model [--policy.processor=trossen_biarm_single_base_cam_24dim]
 ```
 
-For these exported models, norm stats are loaded from processors that are exported along with the model, while data transformations are defined in the corresponding default policy (see `create_default_policy` in [scripts/serve_policy.py](scripts/serve_policy.py)). The processor name is optional, and if not provided, we will do the following:
+For these exported models, norm stats are loaded from processors that are exported along with the model, while data transformations are defined by the --env argument (see `create_exported_policy` in [scripts/serve_policy.py](scripts/serve_policy.py)). The processor name is optional, and if not provided, we will do the following:
 - Load a processor if there is only one available
 - Raise an error if there are multiple processors available and ask to provide a processor name
 

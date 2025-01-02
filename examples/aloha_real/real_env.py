@@ -2,7 +2,7 @@
 # ruff: noqa
 import collections
 import time
-
+from typing import Optional, List
 import dm_env
 from interbotix_xs_modules.arm import InterbotixManipulatorXS
 from interbotix_xs_msgs.msg import JointSingleCommand
@@ -34,7 +34,10 @@ class RealEnv:
                                    "cam_right_wrist": (480x640x3)} # h, w, c, dtype='uint8'
     """
 
-    def __init__(self, init_node, *, setup_robots: bool = True):
+    def __init__(self, init_node, *, reset_position: Optional[List[float]] = None, setup_robots: bool = True):
+        # reset_position = START_ARM_POSE[:6]
+        self._reset_position = reset_position[:6] if reset_position else [0, -1.5, 1.5, 0, 0, 0]
+
         self.puppet_bot_left = InterbotixManipulatorXS(
             robot_model="vx300s",
             group_name="arm",
@@ -101,10 +104,8 @@ class RealEnv:
         self.puppet_bot_right.gripper.core.pub_single.publish(self.gripper_command)
 
     def _reset_joints(self):
-        # reset_position = START_ARM_POSE[:6]
-        reset_position = [0, -1.5, 1.5, 0, 0, 0]
         robot_utils.move_arms(
-            [self.puppet_bot_left, self.puppet_bot_right], [reset_position, reset_position], move_time=1
+            [self.puppet_bot_left, self.puppet_bot_right], [self._reset_position, self._reset_position], move_time=1
         )
 
     def _reset_gripper(self):

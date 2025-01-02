@@ -1,3 +1,5 @@
+from typing import List, Optional  # noqa: UP035
+
 import einops
 from openpi_client import image_tools
 from openpi_client.runtime import environment as _environment
@@ -9,8 +11,13 @@ from examples.aloha_real import real_env as _real_env
 class AlohaRealEnvironment(_environment.Environment):
     """An environment for an Aloha robot on real hardware."""
 
-    def __init__(self, render_height: int = 224, render_width: int = 224) -> None:
-        self._env = _real_env.make_real_env(init_node=True)
+    def __init__(
+        self,
+        reset_position: Optional[List[float]] = None,  # noqa: UP006,UP007
+        render_height: int = 224,
+        render_width: int = 224,
+    ) -> None:
+        self._env = _real_env.make_real_env(init_node=True, reset_position=reset_position)
         self._render_height = render_height
         self._render_width = render_width
 

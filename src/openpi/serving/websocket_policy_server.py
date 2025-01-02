@@ -15,10 +15,17 @@ class WebsocketPolicyServer:
     TODO: Implement the other methods.
     """
 
-    def __init__(self, policy: _base_policy.BasePolicy, host: str = "0.0.0.0", port: int = 8000) -> None:
+    def __init__(
+        self,
+        policy: _base_policy.BasePolicy,
+        host: str = "0.0.0.0",
+        port: int = 8000,
+        metadata: dict | None = None,
+    ) -> None:
         self._policy = policy
         self._host = host
         self._port = port
+        self._metadata = metadata or {}
         logging.getLogger("websockets.server").setLevel(logging.INFO)
 
     def serve_forever(self) -> None:
@@ -37,6 +44,8 @@ class WebsocketPolicyServer:
     async def _handler(self, websocket: websockets.asyncio.server.ServerConnection):
         logging.info(f"Connection from {websocket.remote_address} opened")
         packer = msgpack_numpy.Packer()
+
+        await websocket.send(packer.pack(self._metadata))
 
         while True:
             try:

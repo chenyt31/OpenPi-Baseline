@@ -40,6 +40,7 @@ def main(args: Args) -> None:
         host=args.host,
         port=args.port,
     )
+    logging.info(f"Server metadata: {policy.get_server_metadata()}")
 
     # Send 1 observation to make sure the model is loaded.
     policy.infer(obs_fn())

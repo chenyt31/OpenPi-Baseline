@@ -217,8 +217,16 @@ def main(args: Args) -> None:
     if args.record:
         policy = _policy.PolicyRecorder(policy, "policy_records")
 
+    # TODO: Lookup this value based on the policy.
+    reset_pose = [0, -1.5, 1.5, 0, 0, 0]
+
     logging.info("Creating server...")
-    server = websocket_policy_server.WebsocketPolicyServer(policy=policy, host="0.0.0.0", port=args.port)
+    server = websocket_policy_server.WebsocketPolicyServer(
+        policy=policy,
+        host="0.0.0.0",
+        port=args.port,
+        metadata={"reset_pose": reset_pose},
+    )
 
     logging.info("Serving...")
     server.serve_forever()

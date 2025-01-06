@@ -151,7 +151,8 @@ def _download_boto3(
         if not prefix.endswith("/"):
             prefix = prefix + "/"
 
-    objects = list(bucket.objects.filter(Prefix=prefix))
+    # Get all candidate objects, filter out directories.
+    objects = [x for x in bucket.objects.filter(Prefix=prefix) if not x.key.endswith("/")]
     if not objects:
         raise FileNotFoundError(f"No objects found at {url}")
 

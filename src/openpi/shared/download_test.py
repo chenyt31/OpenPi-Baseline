@@ -5,6 +5,14 @@ import pytest
 import openpi.shared.download as download
 
 
+@pytest.fixture(scope="session", autouse=True)
+def set_openpi_data_home(tmp_path_factory):
+    temp_dir = tmp_path_factory.mktemp("openpi_data")
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setenv("OPENPI_DATA_HOME", str(temp_dir))
+        yield
+
+
 def test_download_local(tmp_path: pathlib.Path):
     local_path = tmp_path / "local"
     local_path.touch()
@@ -16,8 +24,18 @@ def test_download_local(tmp_path: pathlib.Path):
         download.maybe_download("bogus")
 
 
+def test_download_s3_dir():
+    remote_path = "s3://openpi-assets/testdata/random"
+
+    local_path = download.maybe_download(remote_path)
+    assert local_path.exists()
+
+    new_local_path = download.maybe_download(remote_path)
+    assert new_local_path == local_path
+
+
 def test_download_s3():
-    remote_path = "s3://openpi-assets/exported/pi0_aloha_sim/model"
+    remote_path = "s3://openpi-assets/testdata/random/random_512kb.bin"
 
     local_path = download.maybe_download(remote_path)
     assert local_path.exists()

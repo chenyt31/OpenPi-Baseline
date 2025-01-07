@@ -2,6 +2,7 @@ import pathlib
 
 import jax
 import jax.numpy as jnp
+import pytest
 
 import openpi.models.exported as exported
 import openpi.models.model as _model
@@ -9,6 +10,7 @@ import openpi.models.pi0 as pi0
 import openpi.training.checkpoints as _checkpoints
 
 
+@pytest.mark.manual
 def test_sample_actions():
     model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
     actions = model.sample_actions(jax.random.key(0), model.fake_obs(), num_steps=10)
@@ -16,6 +18,7 @@ def test_sample_actions():
     assert actions.shape == (1, model.action_horizon, model.action_dim)
 
 
+@pytest.mark.manual
 def test_exported_as_pi0():
     pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
     model = pi_model.set_module(pi0.Module(), param_path="decoder")
@@ -33,6 +36,7 @@ def test_exported_as_pi0():
     assert diff < 10.0
 
 
+@pytest.mark.manual
 def test_processor_loading():
     pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
     assert pi_model.processor_names() == ["huggingface_aloha_sim_transfer_cube"]
@@ -41,6 +45,7 @@ def test_processor_loading():
     assert sorted(norm_stats) == ["actions", "state"]
 
 
+@pytest.mark.manual
 def test_convert_to_openpi(tmp_path: pathlib.Path):
     output_dir = tmp_path / "output"
 

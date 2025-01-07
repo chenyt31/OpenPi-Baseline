@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import pytest
 
 from openpi.models import model as _model
 from openpi.models import pi0
@@ -30,6 +31,7 @@ def test_model():
     assert actions.shape == (batch_size, model.action_horizon, model.action_dim)
 
 
+@pytest.mark.manual
 def test_model_restore():
     model = create_pi0_model()
 

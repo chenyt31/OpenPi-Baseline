@@ -1,4 +1,5 @@
 from openpi_client import action_chunk_broker
+import pytest
 
 from openpi.models import exported as _exported
 from openpi.policies import aloha_policy
@@ -16,6 +17,7 @@ def create_policy_config() -> _policy_config.PolicyConfig:
     )
 
 
+@pytest.mark.manual
 def test_infer():
     config = create_policy_config()
     policy = _policy_config.create_policy(config)
@@ -26,6 +28,7 @@ def test_infer():
     assert outputs["actions"].shape == (config.model.action_horizon, 14)
 
 
+@pytest.mark.manual
 def test_broker():
     config = create_policy_config()
     policy = _policy_config.create_policy(config)

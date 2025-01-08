@@ -1,7 +1,10 @@
 import dataclasses
+import os
 import pathlib
 
 import pytest
+
+os.environ["JAX_PLATFORMS"] = "cpu"
 
 from openpi.training import config as _config
 

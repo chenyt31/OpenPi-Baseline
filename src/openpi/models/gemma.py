@@ -38,6 +38,7 @@ import jax
 import jax.numpy as jnp
 
 import openpi.shared.array_typing as at
+import openpi.training.sharding as sharding
 
 PALIGEMMA_VOCAB_SIZE = 257_152
 
@@ -466,6 +467,7 @@ class Block(nn.Module):
 
     @nn.compact
     def __call__(self, xs, unused_scan_arg, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
+        xs = sharding.annotate_batch_axis_sharding_on_first_dim(xs)
         drop = nn.Dropout(self.dropout, self.dropout_bdims) if self.dropout else lambda x, _: x
 
         attn = Attention(configs=self.configs, name="attn")
@@ -476,9 +478,13 @@ class Block(nn.Module):
                 x = RMSNorm(name=_name("pre_attention_norm", i))(x)  # noqa: PLW2901
             pre_attn.append(x)
 
+        pre_attn = sharding.annotate_batch_axis_sharding_on_first_dim(pre_attn)
+
         post_attn = attn(pre_attn, positions, attn_mask, decode)
+        post_attn = sharding.annotate_batch_axis_sharding_on_first_dim(post_attn)
         post_attn = jax.tree.map(lambda x: drop(x, deterministic), post_attn)
         xs = jax.tree.map(lambda x, y: x + y, xs, post_attn)
+        xs = sharding.annotate_batch_axis_sharding_on_first_dim(xs)
 
         out = []
         for i, (x, config) in enumerate(zip(xs, self.configs, strict=True)):
@@ -491,8 +497,11 @@ class Block(nn.Module):
                 )(x)
             out.append(x)
 
+        out = sharding.annotate_batch_axis_sharding_on_first_dim(out)
+
         out = jax.tree.map(lambda x: drop(x, deterministic), out)
         xs = jax.tree.map(lambda x, y: x + y, xs, out)
+        xs = sharding.annotate_batch_axis_sharding_on_first_dim(xs)
 
         return xs, unused_scan_arg
 

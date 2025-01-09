@@ -1,14 +1,27 @@
 import logging
 
+from flax import linen as nn
 import jax
 import numpy as np
+
+import openpi.shared.array_typing as at
+
+# logical sharding annotations
+BATCH_AXIS = "batch_axis"
+
+
+def annotate_batch_axis_sharding_on_first_dim(x: at.ArrayLike) -> at.ArrayLike:
+    """Annotate and apply compile constraint that the first dimension of the array is annotated as BATCH_AXIS.
+    Training step compilation will then be able to map the logical BATCH_AXIS to the defined mesh axis.
+    """
+    return nn.with_logical_constraint(x, (BATCH_AXIS,))
 
 
 def fsdp_sharding(
     pytree,
     mesh: jax.sharding.Mesh,
     *,
-    min_size_mbytes: int = 1000,  # 1000 MiB
+    min_size_mbytes: int = 4,  # 4 MiB
     log: bool = False,
     fsdp_dim_name: str = "model",
 ):

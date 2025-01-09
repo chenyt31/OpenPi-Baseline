@@ -21,6 +21,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+import openpi.training.sharding as sharding
+
 
 def posemb_sincos_2d(h, w, width, temperature=10_000.0, dtype=jnp.float32):
     """Follows the MoCo v3 logic."""
@@ -81,7 +83,7 @@ class Encoder1DBlock(nn.Module):
     @nn.compact
     def __call__(self, x, deterministic=True):  # noqa: FBT002
         out = {}
-        x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
+        x = sharding.annotate_batch_axis_sharding_on_first_dim(x)
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
         y = out["sa"] = nn.MultiHeadDotProductAttention(
             num_heads=self.num_heads,
@@ -89,7 +91,7 @@ class Encoder1DBlock(nn.Module):
             deterministic=deterministic,
             dtype=self.dtype_mm,
         )(y, y)
-        y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
+        y = sharding.annotate_batch_axis_sharding_on_first_dim(y)
         y = nn.Dropout(rate=self.dropout)(y, deterministic)
         x = out["+sa"] = x + y
 
@@ -99,10 +101,10 @@ class Encoder1DBlock(nn.Module):
             dropout=self.dropout,
             dtype_mm=self.dtype_mm,
         )(y, deterministic)
-        y = nn.with_logical_constraint(y, ("act_batch", "act_len", "act_emb"))
+        y = sharding.annotate_batch_axis_sharding_on_first_dim(y)
         y = nn.Dropout(rate=self.dropout)(y, deterministic)
         x = out["+mlp"] = x + y
-        x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
+        x = sharding.annotate_batch_axis_sharding_on_first_dim(x)
         return x, out
 
 

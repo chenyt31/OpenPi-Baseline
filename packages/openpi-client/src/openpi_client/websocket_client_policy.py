@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict
+from typing import Dict, Tuple
 
 import websockets.sync.client
 from typing_extensions import override
@@ -23,7 +23,7 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
     def get_server_metadata(self) -> Dict:
         return self._server_metadata
 
-    def _wait_for_server(self) -> tuple[websockets.sync.client.ClientConnection, Dict]:
+    def _wait_for_server(self) -> Tuple[websockets.sync.client.ClientConnection, Dict]:
         logging.info(f"Waiting for server at {self._uri}...")
         while True:
             try:

@@ -83,22 +83,17 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
         config="pi0_aloha_sim",
         dir="s3://openpi-assets/checkpoints/pi0_aloha_sim",
     ),
-}
-
-# Default exported models.
-# TODO(ury): Convert to checkpoints and remove.
-DEFAULT_EXPORTED: dict[EnvMode, Exported] = {
-    EnvMode.DROID: Exported(
-        dir="s3://openpi-assets/exported/pi0_droid/model",
-        processor="openx_droid",
+    EnvMode.DROID: Checkpoint(
+        config="pi0_droid",
+        dir="s3://openpi-assets/checkpoints/pi0_droid",
     ),
-    EnvMode.CALVIN: Exported(
-        dir="s3://openpi-assets/exported/pi0_calvin/model",
-        processor="calvin",
+    EnvMode.CALVIN: Checkpoint(
+        config="pi0_calvin",
+        dir="s3://openpi-assets/checkpoints/pi0_calvin",
     ),
-    EnvMode.LIBERO: Exported(
-        dir="s3://openpi-assets/exported/pi0_libero/model",
-        processor="libero",
+    EnvMode.LIBERO: Checkpoint(
+        config="pi0_libero",
+        dir="s3://openpi-assets/checkpoints/pi0_libero",
     ),
 }
 
@@ -111,8 +106,6 @@ def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) ->
             checkpoint.dir,
             default_prompt=default_prompt,
         )
-    if exported := DEFAULT_EXPORTED.get(env):
-        return create_exported_policy(env, exported, default_prompt=default_prompt)
     raise ValueError(f"Unsupported environment mode: {env}")
 
 
@@ -177,7 +170,7 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
         case EnvMode.DROID:
             config = make_policy_config(
                 input_layers=[droid_policy.DroidInputs(action_dim=model.action_dim)],
-                output_layers=[droid_policy.DroidOutputs(), transforms.SubsampleActions(stride=5)],
+                output_layers=[droid_policy.DroidOutputs()],
             )
         case EnvMode.CALVIN:
             config = make_policy_config(

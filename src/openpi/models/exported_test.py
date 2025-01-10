@@ -51,8 +51,8 @@ def test_convert_to_openpi(tmp_path: pathlib.Path):
 
     exported.convert_to_openpi(
         "s3://openpi-assets/exported/pi0_aloha_sim/model",
-        "huggingface_aloha_sim_transfer_cube",
         output_dir,
+        processor="huggingface_aloha_sim_transfer_cube",
     )
 
     # Make sure that we can load the params and norm stats.

@@ -13,15 +13,18 @@ class LiberoInputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         state = transforms.pad_to_dim(data["observation/state"], self.action_dim)
 
+        base_image = data["observation/image"]
         inputs = {
             "state": state,
             "image": {
-                "image": data["observation/image"],
-                "wrist_image": data["observation/wrist_image"],
+                "base_0_rgb": base_image,
+                "left_wrist_0_rgb": data["observation/wrist_image"],
+                "right_wrist_0_rgb": np.zeros_like(base_image),
             },
             "image_mask": {
-                "image": np.True_,
-                "wrist_image": np.True_,
+                "base_0_rgb": np.True_,
+                "left_wrist_0_rgb": np.True_,
+                "right_wrist_0_rgb": np.False_,
             },
         }
 

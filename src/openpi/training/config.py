@@ -13,6 +13,9 @@ import openpi.models.pi0 as pi0
 import openpi.models.pi0_small as pi0_small
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
+import openpi.policies.calvin_policy as calvin_policy
+import openpi.policies.droid_policy as droid_policy
+import openpi.policies.libero_policy as libero_policy
 import openpi.shared.download as download
 import openpi.shared.normalize as _normalize
 import openpi.training.optimizer as _optimizer
@@ -124,6 +127,42 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
         )
 
 
+class GroupFactory(Protocol):
+    def __call__(self, model: _model.Model) -> _transforms.Group:
+        """Create a group."""
+
+
+@dataclasses.dataclass(frozen=True)
+class SimpleDataConfig(DataConfigFactory):
+    # Factory for the data transforms.
+    data_transforms: tyro.conf.Suppress[GroupFactory]
+    # The LeRobot repo id.
+    repo_id: str = tyro.MISSING
+    # If provided, will determine the default prompt that be used by the model.
+    default_prompt: str | None = None
+
+    def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
+        norm_stats = None
+        if self.repo_id is not tyro.MISSING:
+            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
+            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
+
+        return DataConfig(
+            repo_id=self.repo_id,
+            norm_stats=norm_stats,
+            data_transforms=self.data_transforms(model),
+            model_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.ResizeImages(224, 224),
+                    _transforms.TokenizePrompt(
+                        _tokenizer.PaligemmaTokenizer(model.max_token_len),
+                        default_prompt=self.default_prompt,
+                    ),
+                ]
+            ),
+        )
+
+
 @dataclasses.dataclass(frozen=True)
 class TrainConfig:
     # Name of the config. Must be unique. Will be used to reference this config.
@@ -232,6 +271,45 @@ _CONFIGS = [
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             default_prompt="Transfer cube",
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi0_droid",
+        action_dim=8,
+        action_horizon=10,
+        data=SimpleDataConfig(
+            data_transforms=lambda model: _transforms.Group(
+                inputs=[droid_policy.DroidInputs(action_dim=model.action_dim)],
+                outputs=[droid_policy.DroidOutputs()],
+            )
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi0_calvin",
+        action_dim=7,
+        action_horizon=10,
+        data=SimpleDataConfig(
+            data_transforms=lambda model: _transforms.Group(
+                inputs=[calvin_policy.CalvinInputs(action_dim=model.action_dim)],
+                outputs=[calvin_policy.CalvinOutputs()],
+            )
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi0_libero",
+        action_dim=7,
+        action_horizon=10,
+        data=SimpleDataConfig(
+            data_transforms=lambda model: _transforms.Group(
+                inputs=[libero_policy.LiberoInputs(action_dim=model.action_dim)],
+                outputs=[libero_policy.LiberoOutputs()],
+            )
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,

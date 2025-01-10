@@ -140,22 +140,16 @@ uv run scripts/serve_policy.py --default_prompt=<prompt> policy:checkpoint --pol
 | `s3://openpi-assets/checkpoints/pi0_aloha`       | `pi0_aloha`     | not needed         | $\pi_0$ model fine-tuned on public ALOHA data, supports pen cap/uncap task |
 | `s3://openpi-assets/checkpoints/pi0_aloha_towel` | `pi0_aloha`     | `"fold the towel"` | $\pi_0$ model fine-tuned to perform a towel folding task on ALOHA          |
 | `s3://openpi-assets/checkpoints/pi0_aloha_sim`   | `pi0_aloha_sim` | not needed         | $\pi_0$ model fine-tuned on public simulated ALOHA cube transfer task      |
+| `s3://openpi-assets/checkpoints/pi0_droid`       | `pi0_droid`     | any DROID command  | $\pi_0$ model fine-tuned on public DROID dataset                           |
+| `s3://openpi-assets/checkpoints/pi0_calvin`      | `pi0_calvin`    | any CALVIN command | $\pi_0$ model fine-tuned on public CALVIN simulated dataset                |
+| `s3://openpi-assets/checkpoints/pi0_libero`      | `pi0_libero`    | any LIBERO command | $\pi_0$ model fine-tuned on public LIBERO simulated dataset                |
+
 
 #### Exported models
 
-NOTE: We are in the process of converting all exported fine-tuned models into checkpoints.
+NOTE: All models are now available as checkpoints. Exported models are only used for serving the standard pre-trained $\pi_0$ model.
 
-All available openpi exported models are located in `s3://openpi-assets/exported/`. They can be served using the following command:
-
-```bash
-uv run scripts/serve_policy.py --env=<env> --default_prompt=<prompt> policy:exported --policy.dir=<dir>
-```
-
-| dir                                            | env      | prompt             | description                                                 |
-| ---------------------------------------------- | -------- | ------------------ | ----------------------------------------------------------- |
-| `s3://openpi-assets/exported/pi0_droid/model`  | `DROID`  | any DROID command  | $\pi_0$ model fine-tuned on public DROID dataset            |
-| `s3://openpi-assets/exported/pi0_calvin/model` | `CALVIN` | any CALVIN command | $\pi_0$ model fine-tuned on public CALVIN simulated dataset |
-| `s3://openpi-assets/exported/pi0_libero/model` | `LIBERO` | any LIBERO command | $\pi_0$ model fine-tuned on public LIBERO simulated dataset |
+All available openpi exported models are located in `s3://openpi-assets/exported/`.
 
 #### Standard pre-trained $\pi_0$ model
 

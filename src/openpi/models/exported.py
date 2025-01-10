@@ -26,9 +26,9 @@ import openpi.transforms as _transforms
 
 def convert_to_openpi(
     ckpt_dir: pathlib.Path | str,
-    processor: str,
     out_dir: pathlib.Path | str,
     *,
+    processor: str | None = None,
     param_path: str = "decoder",
     transform: Mapping[str, None] | None = None,
 ) -> None:
@@ -36,8 +36,9 @@ def convert_to_openpi(
 
     Args:
         ckpt_dir: The directory containing the internal exported model.
-        processor: The processor name to use to extract the norm stats.
         out_dir: The directory to save the openpi checkpoint.
+        processor: The processor name to use to extract the norm stats. If None, the first processor
+            in the checkpoint is used if there's only one available.
         param_path: The path to the parameters within the overall param structure. Can include "/" to support nesting.
         transform: Optional transform patterns to use when converting the checkpoint params. Each key maps from the
             original param name to the openpi param name. See `determine_transform_patterns` for more details.
@@ -52,6 +53,18 @@ def convert_to_openpi(
     ckpt_dir = download.maybe_download(str(ckpt_dir))
     sharding = jax.sharding.SingleDeviceSharding(jax.devices("cpu")[0])
     params = _load_params(ckpt_dir, sharding=sharding)
+
+    model = PiModel.from_checkpoint(ckpt_dir, params=params)
+    print("Processors:    ", model.processor_names())
+    print("Action dim:    ", model.action_dim)
+    print("Action horizon:", model.action_horizon)
+    print("Max token len: ", model.max_token_len)
+
+    if processor is None:
+        if len(model.processor_names()) != 1:
+            raise ValueError("Multiple processors found in the checkpoint. Please specify the processor name.")
+        processor = model.processor_names()[0]
+
     norm_stats = _import_norm_stats(ckpt_dir, processor)
 
     for part in param_path.split("/"):
@@ -83,14 +96,15 @@ class PiModel(_model.BaseModel):
     ckpt_dir: pathlib.Path = struct.field(pytree_node=False)
 
     @classmethod
-    def from_checkpoint(cls, ckpt_dir: pathlib.Path | str) -> "PiModel":
+    def from_checkpoint(cls, ckpt_dir: pathlib.Path | str, params: at.Params | None = None) -> "PiModel":
         """Load a model from the internal checkpoint directory. Must point at the "model" sub-directory."""
         ckpt_dir = download.maybe_download(str(ckpt_dir))
         with (ckpt_dir / "graph").open("rb") as f:
             exported = jax.export.deserialize(f.read())
 
         input_spec = jax.tree.unflatten(exported.in_tree, exported.in_avals)[0]
-        params = _load_params(ckpt_dir, input_spec[0])
+        if params is None:
+            params = _load_params(ckpt_dir, input_spec[0])
         example_spec = input_spec[2]
         sample_spec = input_spec[3]
 

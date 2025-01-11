@@ -28,12 +28,14 @@ class Policy(BasePolicy):
         transforms: Sequence[_transforms.DataTransformFn] = (),
         output_transforms: Sequence[_transforms.DataTransformFn] = (),
         sample_kwargs: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self._model = model
         self._input_transform = _transforms.compose(transforms)
         self._output_transform = _transforms.compose(output_transforms)
         self._rng = rng or jax.random.key(0)
         self._sample_kwargs = sample_kwargs or {"num_steps": 10}
+        self._metadata = metadata or {}
 
     @override
     def infer(self, obs: dict) -> dict:  # type: ignore[misc]
@@ -54,6 +56,10 @@ class Policy(BasePolicy):
         # Unbatch and convert to np.ndarray.
         outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
         return self._output_transform(outputs)
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self._metadata
 
 
 class PolicyRecorder(_base_policy.BasePolicy):

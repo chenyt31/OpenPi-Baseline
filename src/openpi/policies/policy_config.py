@@ -98,4 +98,5 @@ def create_trained_policy(
             *repack_transforms.outputs,
         ],
         sample_kwargs=sample_kwargs,
+        metadata=train_config.policy_metadata,
     )

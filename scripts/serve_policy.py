@@ -205,20 +205,18 @@ def create_policy(args: Args) -> _policy.Policy:
 
 def main(args: Args) -> None:
     policy = create_policy(args)
+    policy_metadata = policy.metadata
 
     # Record the policy's behavior.
     if args.record:
         policy = _policy.PolicyRecorder(policy, "policy_records")
-
-    # TODO: Lookup this value based on the policy.
-    reset_pose = [0, -1.5, 1.5, 0, 0, 0]
 
     logging.info("Creating server...")
     server = websocket_policy_server.WebsocketPolicyServer(
         policy=policy,
         host="0.0.0.0",
         port=args.port,
-        metadata={"reset_pose": reset_pose},
+        metadata=policy_metadata,
     )
 
     logging.info("Serving...")

@@ -4,6 +4,12 @@ This example runs the LIBERO benchmark: https://github.com/Lifelong-Robot-Learni
 
 Note: When updating requirements.txt in this directory, there is an additional flag `--extra-index-url https://download.pytorch.org/whl/cu113` that must be added to the `uv pip compile` command.
 
+This example requires git submodules to be initialized. Don't forget to run:
+
+```bash
+git submodule update --init --recursive
+```
+
 ## With Docker
 
 ```bash

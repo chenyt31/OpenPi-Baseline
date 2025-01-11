@@ -104,9 +104,10 @@ select = [
     "W",
 ]
 ignore = [
-    "F722",  # Conflicts with array typing.
-    "T201",  # We use print statements.
-    "PD008", # Lots of false positives.
+    "F722",   # Conflicts with array typing.
+    "T201",   # We use print statements.
+    "PD008",  # Lots of false positives.
+    "ISC001", # Disabling to support ruff format.
 ]
 unfixable = [
     "B905", # Fix defaults to strict=False, which is not what we want.

@@ -11,6 +11,7 @@ class VideoSaver(_subscriber.Subscriber):
     """Saves episode data."""
 
     def __init__(self, out_path: pathlib.Path, subsample: int = 1) -> None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         self._out_path = out_path
         self._images: list[np.ndarray] = []
         self._subsample = subsample
@@ -21,7 +22,7 @@ class VideoSaver(_subscriber.Subscriber):
 
     @override
     def on_step(self, observation: dict, action: dict) -> None:
-        im = observation["image"][0]  # [C, H, W]
+        im = observation["images"]["cam_high"]  # [C, H, W]
         im = np.transpose(im, (1, 2, 0))  # [H, W, C]
         self._images.append(im)
 

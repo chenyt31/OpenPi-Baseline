@@ -13,7 +13,7 @@ import tyro
 
 @dataclasses.dataclass
 class Args:
-    out_path: pathlib.Path = pathlib.Path("out.mp4")
+    out_path: pathlib.Path = pathlib.Path("data/aloha_sim/videos/out.mp4")
 
     task: str = "gym_aloha/AlohaTransferCube-v0"
     seed: int = 0

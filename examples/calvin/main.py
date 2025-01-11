@@ -83,7 +83,7 @@ def main(args: Args) -> None:
             for _ in range(args.max_subtask_steps):
                 img = obs["rgb_obs"]["rgb_static"]
                 wrist_img = obs["rgb_obs"]["rgb_gripper"]
-                rollout_images.append(img.transpose(2, 0, 1))
+                rollout_images.append(img)
 
                 if not action_plan:
                     # Finished executing previous action chunk -- compute new chunk
@@ -106,7 +106,7 @@ def main(args: Args) -> None:
                     ), f"We want to replan every {args.replan_steps} steps, but policy only predicts {len(action_chunk)} steps."
                     action_plan.extend(action_chunk[: args.replan_steps])
 
-                action = action_plan.popleft()
+                action = action_plan.popleft().copy()
 
                 # Round gripper action since env expects gripper_action in (-1, 1)
                 action[-1] = 1 if action[-1] > 0 else -1
@@ -130,8 +130,10 @@ def main(args: Args) -> None:
         if len(episode_solved_subtasks) < args.num_save_videos:
             # Save rollout video.
             idx = len(episode_solved_subtasks)
+            out_path = pathlib.Path(args.video_out_path) / f"rollout_{idx}.mp4"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             imageio.mimwrite(
-                pathlib.Path(args.video_out_path) / f"rollout_{idx}.mp4",
+                out_path,
                 [np.asarray(x) for x in rollout_images[:: args.video_temp_subsample]],
                 fps=50 // args.video_temp_subsample,
             )

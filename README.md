@@ -135,14 +135,14 @@ All available openpi checkpoints are located in `s3://openpi-assets/checkpoints/
 uv run scripts/serve_policy.py --default_prompt=<prompt> policy:checkpoint --policy.config=<config> --policy.dir=<dir>
 ```
 
-| dir                                              | config          | prompt             | description                                                                |
-| ------------------------------------------------ | --------------- | ------------------ | -------------------------------------------------------------------------- |
-| `s3://openpi-assets/checkpoints/pi0_aloha`       | `pi0_aloha`     | not needed         | $\pi_0$ model fine-tuned on public ALOHA data, supports pen cap/uncap task |
-| `s3://openpi-assets/checkpoints/pi0_aloha_towel` | `pi0_aloha`     | `"fold the towel"` | $\pi_0$ model fine-tuned to perform a towel folding task on ALOHA          |
-| `s3://openpi-assets/checkpoints/pi0_aloha_sim`   | `pi0_aloha_sim` | not needed         | $\pi_0$ model fine-tuned on public simulated ALOHA cube transfer task      |
-| `s3://openpi-assets/checkpoints/pi0_droid`       | `pi0_droid`     | any DROID command  | $\pi_0$ model fine-tuned on public DROID dataset                           |
-| `s3://openpi-assets/checkpoints/pi0_calvin`      | `pi0_calvin`    | any CALVIN command | $\pi_0$ model fine-tuned on public CALVIN simulated dataset                |
-| `s3://openpi-assets/checkpoints/pi0_libero`      | `pi0_libero`    | any LIBERO command | $\pi_0$ model fine-tuned on public LIBERO simulated dataset                |
+| dir                                                      | config                    | prompt             | description                                                                |
+| -------------------------------------------------------- | ------------------------- | ------------------ | -------------------------------------------------------------------------- |
+| `s3://openpi-assets/checkpoints/pi0_aloha`               | `pi0_aloha`               | not needed         | $\pi_0$ model fine-tuned on public ALOHA data, supports pen cap/uncap task |
+| `s3://openpi-assets/checkpoints/pi0_aloha_towel_diverse` | `pi0_aloha_towel_diverse` | `"fold the towel"` | $\pi_0$ model fine-tuned to perform a towel folding task on ALOHA          |
+| `s3://openpi-assets/checkpoints/pi0_aloha_sim`           | `pi0_aloha_sim`           | not needed         | $\pi_0$ model fine-tuned on public simulated ALOHA cube transfer task      |
+| `s3://openpi-assets/checkpoints/pi0_droid`               | `pi0_droid`               | any DROID command  | $\pi_0$ model fine-tuned on public DROID dataset                           |
+| `s3://openpi-assets/checkpoints/pi0_calvin`              | `pi0_calvin`              | any CALVIN command | $\pi_0$ model fine-tuned on public CALVIN simulated dataset                |
+| `s3://openpi-assets/checkpoints/pi0_libero`              | `pi0_libero`              | any LIBERO command | $\pi_0$ model fine-tuned on public LIBERO simulated dataset                |
 
 
 #### Exported models

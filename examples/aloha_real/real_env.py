@@ -11,6 +11,9 @@ import numpy as np
 from examples.aloha_real import constants
 from examples.aloha_real import robot_utils
 
+# This is the reset position that is used by the standard Aloha runtime.
+DEFAULT_RESET_POSITION = [0, -0.96, 1.16, 0, -0.3, 0]
+
 
 class RealEnv:
     """
@@ -36,7 +39,7 @@ class RealEnv:
 
     def __init__(self, init_node, *, reset_position: Optional[List[float]] = None, setup_robots: bool = True):
         # reset_position = START_ARM_POSE[:6]
-        self._reset_position = reset_position[:6] if reset_position else [0, -1.5, 1.5, 0, 0, 0]
+        self._reset_position = reset_position[:6] if reset_position else DEFAULT_RESET_POSITION
 
         self.puppet_bot_left = InterbotixManipulatorXS(
             robot_model="vx300s",
@@ -164,5 +167,5 @@ def get_action(master_bot_left, master_bot_right):
     return action
 
 
-def make_real_env(init_node, *, setup_robots: bool = True) -> RealEnv:
-    return RealEnv(init_node, setup_robots=setup_robots)
+def make_real_env(init_node, *, reset_position: Optional[List[float]] = None, setup_robots: bool = True) -> RealEnv:
+    return RealEnv(init_node, reset_position=reset_position, setup_robots=setup_robots)

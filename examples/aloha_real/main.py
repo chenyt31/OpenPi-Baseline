@@ -28,8 +28,9 @@ def main(args: Args) -> None:
     )
     logging.info(f"Server metadata: {ws_client_policy.get_server_metadata()}")
 
+    metadata = ws_client_policy.get_server_metadata()
     runtime = _runtime.Runtime(
-        environment=_env.AlohaRealEnvironment(reset_position=ws_client_policy.get_server_metadata()["reset_pose"]),
+        environment=_env.AlohaRealEnvironment(reset_position=metadata.get("reset_pose")),
         agent=_policy_agent.PolicyAgent(
             policy=action_chunk_broker.ActionChunkBroker(
                 policy=ws_client_policy,

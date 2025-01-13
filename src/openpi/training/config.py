@@ -265,12 +265,28 @@ _CONFIGS = [
     #
     TrainConfig(
         name="pi0_aloha",
+        action_dim=24,
+        action_horizon=50,
         data=LeRobotAlohaDataConfig(use_delta_joint_actions=True, adapt_to_pi=True),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     TrainConfig(
+        name="pi0_aloha_towel_diverse",
+        action_dim=32,
+        action_horizon=50,
+        data=LeRobotAlohaDataConfig(use_delta_joint_actions=True, adapt_to_pi=True),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+        policy_metadata={
+            # Adjust the reset pose to align better with the internal training data.
+            "reset_pose": [0, -1.5, 1.5, 0, 0, 0]
+        },
+    ),
+    TrainConfig(
         name="pi0_aloha_sim",
+        action_dim=24,
+        action_horizon=50,
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             default_prompt="Transfer cube",

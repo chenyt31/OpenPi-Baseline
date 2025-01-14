@@ -4,6 +4,14 @@ openpi holds open-source models and packages for robotics, published by the [Phy
 
 Currently, it is focused on the `pi0` model described in [this blog post](https://www.physicalintelligence.company/blog/pi0).
 
+## Prerequisites
+
+openpi utilizes Python virtual environments via `uv` and (optionally) Docker to manage dependencies, which should insulate most users from system conflicts. However, there are still some basic requirements:
+
+- AMD64 architecture
+- Ubuntu 22.04: other Linux distributions will likely work, but are not tested. We can only offer best-effort support for these, and we recommend using Docker if OS conflicts are encountered.
+- NVIDIA GPU: most examples in this repo require a GPU for performant behavior, and the code is tested on NVIDIA GPUs.
+
 ## Setup
 
 When cloning this repo, make sure to update submodules:

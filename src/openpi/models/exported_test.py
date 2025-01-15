@@ -12,7 +12,7 @@ import openpi.training.checkpoints as _checkpoints
 
 @pytest.mark.manual
 def test_sample_actions():
-    model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
+    model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_base/model")
     actions = model.sample_actions(jax.random.key(0), model.fake_obs(), num_steps=10)
 
     assert actions.shape == (1, model.action_horizon, model.action_dim)
@@ -20,7 +20,7 @@ def test_sample_actions():
 
 @pytest.mark.manual
 def test_exported_as_pi0():
-    pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
+    pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_base/model")
     model = pi_model.set_module(pi0.Module(), param_path="decoder")
 
     key = jax.random.key(0)
@@ -38,10 +38,10 @@ def test_exported_as_pi0():
 
 @pytest.mark.manual
 def test_processor_loading():
-    pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
-    assert pi_model.processor_names() == ["huggingface_aloha_sim_transfer_cube"]
+    pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_base/model")
+    assert "trossen_biarm_single_base_cam_24dim" in pi_model.processor_names()
 
-    norm_stats = pi_model.norm_stats("huggingface_aloha_sim_transfer_cube")
+    norm_stats = pi_model.norm_stats("trossen_biarm_single_base_cam_24dim")
     assert sorted(norm_stats) == ["actions", "state"]
 
 
@@ -50,9 +50,9 @@ def test_convert_to_openpi(tmp_path: pathlib.Path):
     output_dir = tmp_path / "output"
 
     exported.convert_to_openpi(
-        "s3://openpi-assets/exported/pi0_aloha_sim/model",
+        "s3://openpi-assets/exported/pi0_base/model",
         output_dir,
-        processor="huggingface_aloha_sim_transfer_cube",
+        processor="trossen_biarm_single_base_cam_24dim",
     )
 
     # Make sure that we can load the params and norm stats.

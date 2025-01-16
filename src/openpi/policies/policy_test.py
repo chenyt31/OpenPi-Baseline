@@ -7,11 +7,11 @@ from openpi.policies import policy_config as _policy_config
 
 
 def create_policy_config() -> _policy_config.PolicyConfig:
-    model = _exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_aloha_sim/model")
+    model = _exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_base/model")
 
     return _policy_config.PolicyConfig(
         model=model,
-        norm_stats=model.norm_stats("huggingface_aloha_sim_transfer_cube"),
+        norm_stats=model.norm_stats("trossen_biarm_single_base_cam_24dim"),
         input_layers=[aloha_policy.AlohaInputs(action_dim=model.action_dim)],
         output_layers=[aloha_policy.AlohaOutputs()],
     )

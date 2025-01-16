@@ -11,39 +11,41 @@ def make_from_spec(spec: jax.ShapeDtypeStruct):
     return jnp.zeros(shape=spec.shape, dtype=spec.dtype)
 
 
-def create_pi0_model():
-    return _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
+def create_pi0_config():
+    return pi0.Pi0Config(action_dim=24, action_horizon=50, max_token_len=48)
 
 
 def test_model():
-    model = create_pi0_model()
+    config = create_pi0_config()
+    model = config.create(jax.random.key(0))
 
     batch_size = 2
-    obs, act = model.fake_obs(batch_size), model.fake_act(batch_size)
+    obs, act = config.fake_obs(batch_size), config.fake_act(batch_size)
 
-    rng = jax.random.key(0)
-    model = model.set_params(model.init_params(rng, obs, act))
+    loss = model.compute_loss(jax.random.key(0), obs, act)
+    assert loss.shape == (batch_size, config.action_horizon)
 
-    loss = model.compute_loss(rng, obs, act)
-    assert loss.shape == ()
-
-    actions = model.sample_actions(rng, obs, num_steps=10)
+    actions = model.sample_actions(jax.random.key(0), obs, num_steps=10)
     assert actions.shape == (batch_size, model.action_horizon, model.action_dim)
 
 
 @pytest.mark.manual
 def test_model_restore():
-    model = create_pi0_model()
+    config = create_pi0_config()
 
     batch_size = 2
-    obs, act = model.fake_obs(batch_size), model.fake_act(batch_size)
+    obs, act = config.fake_obs(batch_size), config.fake_act(batch_size)
 
-    params = _model.restore_params(download.maybe_download("s3://openpi-assets/checkpoints/pi0_base/params"))
-    model = model.set_params(params)
+    model = config.load(
+        _model.restore_params(download.maybe_download("s3://openpi-assets/checkpoints/pi0_base/params"))
+    )
 
-    rng = jax.random.key(0)
-    loss = model.compute_loss(rng, obs, act)
-    assert loss.shape == ()
+    loss = model.compute_loss(jax.random.key(0), obs, act)
+    assert loss.shape == (batch_size, config.action_horizon)
 
-    actions = model.sample_actions(rng, obs, num_steps=10)
+    actions = model.sample_actions(jax.random.key(0), obs, num_steps=10)
     assert actions.shape == (batch_size, model.action_horizon, model.action_dim)
+
+
+if __name__ == "__main__":
+    test_model_restore()

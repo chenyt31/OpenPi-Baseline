@@ -1,6 +1,7 @@
 import contextlib
 import functools as ft
 import inspect
+from typing import TypeVar, cast
 
 import beartype
 import jax
@@ -29,8 +30,12 @@ _original_check_dataclass_annotations = jaxtyping._decorator._check_dataclass_an
 
 
 def _check_dataclass_annotations(self, typechecker):
-    if not any(frame.frame.f_globals["__name__"] == "jax._src.tree_util" for frame in inspect.stack()):  # noqa: RET503
+    if not any(
+        frame.frame.f_globals["__name__"] in {"jax._src.tree_util", "flax.nnx.transforms.compilation"}
+        for frame in inspect.stack()
+    ):
         return _original_check_dataclass_annotations(self, typechecker)
+    return None
 
 
 jaxtyping._decorator._check_dataclass_annotations = _check_dataclass_annotations  # noqa: SLF001
@@ -40,8 +45,12 @@ KeyArrayLike = jax.typing.ArrayLike
 Params = PyTree[Float[ArrayLike, "..."]]
 Batch = PyTree[Shaped[ArrayLike, "b ..."]]
 
+T = TypeVar("T")
+
+
 # runtime type-checking decorator
-typecheck = ft.partial(jaxtyped, typechecker=beartype.beartype)
+def typecheck(t: T) -> T:
+    return cast(T, ft.partial(jaxtyped, typechecker=beartype.beartype)(t))
 
 
 @contextlib.contextmanager

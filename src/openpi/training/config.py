@@ -7,10 +7,8 @@ from typing import Any, Protocol, runtime_checkable
 
 import tyro
 
-import openpi.models.common as common
 import openpi.models.model as _model
 import openpi.models.pi0 as pi0
-import openpi.models.pi0_small as pi0_small
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.calvin_policy as calvin_policy
@@ -53,12 +51,12 @@ class DataConfig:
 
 @runtime_checkable
 class DataConfigFactory(Protocol):
-    def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         """Create a data config."""
 
 
 class FakeDataConfig(DataConfigFactory):
-    def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         return DataConfig(repo_id="fake")
 
 
@@ -79,7 +77,7 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     # Repack transforms. Default is used if not provided.
     repack_transforms: tyro.conf.Suppress[_transforms.Group | None] = None
 
-    def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         norm_stats = None
         if self.repo_id is not tyro.MISSING:
             norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
@@ -98,7 +96,7 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
         )
 
         data_transforms = _transforms.Group(
-            inputs=[aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=self.adapt_to_pi)],
+            inputs=[aloha_policy.AlohaInputs(action_dim=model_config.action_dim, adapt_to_pi=self.adapt_to_pi)],
             outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
         )
 
@@ -118,7 +116,7 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
                 inputs=[
                     _transforms.ResizeImages(224, 224),
                     _transforms.TokenizePrompt(
-                        _tokenizer.PaligemmaTokenizer(model.max_token_len),
+                        _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
                         default_prompt=self.default_prompt,
                     ),
                 ]
@@ -128,7 +126,7 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 
 
 class GroupFactory(Protocol):
-    def __call__(self, model: _model.Model) -> _transforms.Group:
+    def __call__(self, model_config: _model.BaseModelConfig) -> _transforms.Group:
         """Create a group."""
 
 
@@ -141,7 +139,7 @@ class SimpleDataConfig(DataConfigFactory):
     # If provided, will determine the default prompt that be used by the model.
     default_prompt: str | None = None
 
-    def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         norm_stats = None
         if self.repo_id is not tyro.MISSING:
             norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
@@ -150,12 +148,12 @@ class SimpleDataConfig(DataConfigFactory):
         return DataConfig(
             repo_id=self.repo_id,
             norm_stats=norm_stats,
-            data_transforms=self.data_transforms(model),
+            data_transforms=self.data_transforms(model_config),
             model_transforms=_transforms.Group(
                 inputs=[
                     _transforms.ResizeImages(224, 224),
                     _transforms.TokenizePrompt(
-                        _tokenizer.PaligemmaTokenizer(model.max_token_len),
+                        _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
                         default_prompt=self.default_prompt,
                     ),
                 ]
@@ -172,16 +170,11 @@ class TrainConfig:
     # Experiment name. Will be used to name the metadata and checkpoint directories.
     exp_name: str = tyro.MISSING
 
-    # Number of action dimensions.
-    action_dim: int = 24
-    # Number of action steps in the horizon.
-    action_horizon: int = 50
-    # Maximum token length for the prompt.
-    max_token_len: int = 48
+    # Defines the model config. Some attributes (action_dim, action_horizon, and max_token_len) are shared by all models
+    # -- see BaseModelConfig. Specific model implementations (e.g., Pi0Config) inherit from BaseModelConfig and may
+    # define additional attributes.
+    model: _model.BaseModelConfig = dataclasses.field(default_factory=pi0.Pi0Config)
 
-    # The Flax module representing the neural network implementation; must adhere to the BaseModule interface. We can put
-    # it directly into the config like this because unbound Flax modules are just dataclasses.
-    module: common.BaseModule = dataclasses.field(default_factory=pi0.Module)
     # A weight loader can optionally load (possibly partial) weights from disk after the model is initialized.
     weight_loader: weight_loaders.WeightLoader = dataclasses.field(default_factory=weight_loaders.NoOpWeightLoader)
 
@@ -218,9 +211,6 @@ class TrainConfig:
     # If true, will resume training from the last checkpoint.
     resume: bool = False
 
-    # Keyword arguments to pass to the policy's sample method.
-    sample_kwargs: dict[str, Any] | None = None
-
     # If true, will enable wandb logging.
     wandb_enabled: bool = True
 
@@ -245,15 +235,6 @@ class TrainConfig:
             raise ValueError("--exp_name must be set")
         return (pathlib.Path(self.checkpoint_base_dir) / self.name / self.exp_name).resolve()
 
-    def create_model(self) -> _model.Model:
-        """Create a model for this config."""
-        return _model.Model(
-            module=self.module,
-            action_dim=self.action_dim,
-            action_horizon=self.action_horizon,
-            max_token_len=self.max_token_len,
-        )
-
     def __post_init__(self) -> None:
         if self.resume and self.overwrite:
             raise ValueError("Cannot resume and overwrite at the same time.")
@@ -265,16 +246,12 @@ _CONFIGS = [
     #
     TrainConfig(
         name="pi0_aloha",
-        action_dim=24,
-        action_horizon=50,
         data=LeRobotAlohaDataConfig(use_delta_joint_actions=True, adapt_to_pi=True),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     TrainConfig(
         name="pi0_aloha_towel_diverse",
-        action_dim=32,
-        action_horizon=50,
         data=LeRobotAlohaDataConfig(use_delta_joint_actions=True, adapt_to_pi=True),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
@@ -285,8 +262,6 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_aloha_sim",
-        action_dim=24,
-        action_horizon=50,
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             default_prompt="Transfer cube",
@@ -296,8 +271,7 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_droid",
-        action_dim=8,
-        action_horizon=10,
+        model=pi0.Pi0Config(action_horizon=10),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[droid_policy.DroidInputs(action_dim=model.action_dim)],
@@ -309,8 +283,7 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_calvin",
-        action_dim=7,
-        action_horizon=10,
+        model=pi0.Pi0Config(action_horizon=10),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[calvin_policy.CalvinInputs(action_dim=model.action_dim)],
@@ -322,8 +295,7 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_libero",
-        action_dim=7,
-        action_horizon=10,
+        model=pi0.Pi0Config(action_horizon=10),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[libero_policy.LiberoInputs(action_dim=model.action_dim)],
@@ -339,11 +311,6 @@ _CONFIGS = [
     TrainConfig(
         name="pi0_paligemma",
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),
-    ),
-    TrainConfig(
-        name="pi0_small",
-        module=pi0_small.Module(),
-        weight_loader=weight_loaders.GoogleViTWeightLoader(),
     ),
     #
     # Example configs.
@@ -384,7 +351,7 @@ _CONFIGS = [
     TrainConfig(
         name="debug",
         batch_size=2,
-        module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
+        model=pi0.Pi0Config(paligemma_variant="dummy", action_expert_variant="dummy"),
         save_interval=100,
         overwrite=True,
         exp_name="debug",
@@ -394,7 +361,7 @@ _CONFIGS = [
     TrainConfig(
         name="debug_restore",
         batch_size=2,
-        module=pi0.Module(paligemma_variant="dummy", action_expert_variant="dummy"),
+        model=pi0.Pi0Config(paligemma_variant="dummy", action_expert_variant="dummy"),
         weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/debug/debug/9/params"),
         overwrite=True,
         exp_name="debug",

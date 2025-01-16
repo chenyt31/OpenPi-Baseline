@@ -8,14 +8,12 @@ import pathlib
 from typing import Any
 
 import flax.serialization
-import flax.struct as struct
 import jax
 import jax.export
 import jax.numpy as jnp
 import orbax.checkpoint as ocp
 from typing_extensions import override
 
-from openpi.models import common
 from openpi.models import model as _model
 from openpi.shared import image_tools
 from openpi.shared import normalize as _normalize
@@ -84,16 +82,15 @@ def convert_to_openpi(
     _normalize.save(out_dir / "assets", norm_stats)
 
 
-@struct.dataclass
 class PiModel(_model.BaseModel):
     """A model loaded from an internal exported model directory."""
 
     params: at.Params
 
-    exported: jax.export.Exported = struct.field(pytree_node=False)
-    example_spec: Any = struct.field(pytree_node=False)
-    sample_spec: Any = struct.field(pytree_node=False)
-    ckpt_dir: pathlib.Path = struct.field(pytree_node=False)
+    exported: jax.export.Exported
+    example_spec: Any
+    sample_spec: Any
+    ckpt_dir: pathlib.Path
 
     @classmethod
     def from_checkpoint(cls, ckpt_dir: pathlib.Path | str, params: at.Params | None = None) -> "PiModel":
@@ -126,9 +123,8 @@ class PiModel(_model.BaseModel):
             max_token_len=max_token_len,
         )
 
-    @jax.jit
     @override
-    def sample_actions(self, rng: at.KeyArrayLike, observation: common.Observation, **sample_kwargs) -> common.Actions:
+    def sample_actions(self, rng: at.KeyArrayLike, observation: _model.Observation, **sample_kwargs) -> _model.Actions:
         if observation.state.ndim == 2 and observation.state.shape[0] != 1:
             raise ValueError("Only batch_size=1 is supported.")
 
@@ -159,15 +155,15 @@ class PiModel(_model.BaseModel):
     def compute_loss(
         self,
         rng: at.KeyArrayLike,
-        observation: common.Observation,
-        actions: common.Actions,
+        observation: _model.Observation,
+        actions: _model.Actions,
         *,
         train: bool = False,
         params: at.Params | None = None,
     ) -> at.Float[at.Array, "*b ah"]:
         raise NotImplementedError("Not implemented.")
 
-    def fake_obs(self) -> common.Observation:
+    def fake_obs(self) -> _model.Observation:
         example = jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), self.example_spec)
         return _example_to_obs(_make_batch(example))
 
@@ -180,33 +176,9 @@ class PiModel(_model.BaseModel):
         processor_dir = self.ckpt_dir / "processors"
         return [x.name for x in processor_dir.iterdir() if x.is_dir()]
 
-    def set_module(self, module: common.BaseModule, param_path: str) -> _model.Model:
-        """Creates a new model that uses the same parameters but a different module.
-
-        Args:
-            module: The module to use for the model.
-            param_path: Location of the parameter sub-tree that should be loaded (e.g., decoder).
-                Can include "/" to support nesting.
-
-        Returns:
-            A new model with the parameters loaded from the checkpoint.
-        """
-        params = self.params
-        for part in param_path.split("/"):
-            if part not in params:
-                raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
-            params = params[part]
-        return _model.Model(
-            module=module,
-            params=params,
-            action_dim=self.action_dim,
-            action_horizon=self.action_horizon,
-            max_token_len=self.max_token_len,
-        )
-
 
 def determine_transform_patterns(
-    pi_model: PiModel, module: common.BaseModule, *, param_path: str = "decoder"
+    pi_model: PiModel, module: _model.BaseModule, *, param_path: str = "decoder"
 ) -> dict[str, str]:
     """Determine the transform patterns to use when converting an internal checkpoint to an openpi checkpoint.
 
@@ -282,7 +254,7 @@ def _load_params(
         )["params"]
 
 
-def _obs_to_example(obs: common.Observation, example_spec: dict) -> dict:
+def _obs_to_example(obs: _model.Observation, example_spec: dict) -> dict:
     def to_uint8(v):
         return (255.0 * (v + 1.0) / 2.0).astype(jnp.uint8)
 
@@ -319,7 +291,7 @@ def _obs_to_example(obs: common.Observation, example_spec: dict) -> dict:
     return result
 
 
-def _example_to_obs(example: dict) -> common.Observation:
+def _example_to_obs(example: dict) -> _model.Observation:
     images, image_masks = {}, {}
     for k, v in example["image"].items():
         if k.endswith("_mask"):
@@ -331,7 +303,7 @@ def _example_to_obs(example: dict) -> common.Observation:
     if "mask_prompt_input" in example:
         example["mask_input"] = example["mask_prompt_input"]
 
-    return common.Observation.from_dict(
+    return _model.Observation.from_dict(
         {
             "image": images,
             "image_mask": image_masks,

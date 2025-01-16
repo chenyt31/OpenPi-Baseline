@@ -13,4 +13,4 @@ def test_create_trained_policy():
     example = aloha_policy.make_aloha_example()
     result = policy.infer(example)
 
-    assert result["actions"].shape == (config.action_horizon, 14)
+    assert result["actions"].shape == (config.model.action_horizon, 14)

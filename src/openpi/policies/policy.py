@@ -12,7 +12,6 @@ from openpi_client import base_policy as _base_policy
 from typing_extensions import override
 
 from openpi import transforms as _transforms
-from openpi.models import common
 from openpi.models import model as _model
 from openpi.shared import array_typing as at
 
@@ -49,7 +48,7 @@ class Policy(BasePolicy):
         outputs = {
             "state": inputs["state"],
             "actions": self._model.sample_actions(
-                sample_rng, common.Observation.from_dict(inputs), **self._sample_kwargs
+                sample_rng, _model.Observation.from_dict(inputs), **self._sample_kwargs
             ),
         }
 

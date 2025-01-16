@@ -5,7 +5,7 @@ import platform
 from typing import Any
 
 import etils.epath as epath
-import flax.linen as nn
+import flax.nnx as nnx
 from flax.training import common_utils
 import jax
 import jax._src.tree_util as private_tree_util
@@ -15,7 +15,6 @@ import optax
 import tqdm_loggable.auto as tqdm
 import wandb
 
-import openpi.models.common as _common
 import openpi.models.model as _model
 import openpi.shared.array_typing as at
 import openpi.training.checkpoints as _checkpoints
@@ -97,63 +96,48 @@ def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader, para
 
 @at.typecheck
 def init_train_state(
-    config: _config.TrainConfig,
-    model: _model.Model,
-    init_rng: at.KeyArrayLike,
-    batch: tuple[_common.Observation, _common.Actions],
-    mesh: jax.sharding.Mesh,
-    data_sharding: jax.sharding.Sharding,
-    *,
-    resume: bool,
+    config: _config.TrainConfig, init_rng: at.KeyArrayLike, mesh: jax.sharding.Mesh, *, resume: bool
 ) -> tuple[training_utils.TrainState, Any]:
     weight_decay_mask = None
     freeze_mask = None
     tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask, freeze_mask)
 
-    def init(
-        rng: at.KeyArrayLike,
-        data: tuple[_common.Observation, _common.Actions],
-        params_sharding: jax.sharding.Sharding | None = None,
-    ) -> training_utils.TrainState:
-        rng, model_rng = jax.random.split(rng)
-        observation, actions = data
-        params = model.init_params(model_rng, observation, actions)
-        # jax.experimental.io_callback raises spmd partitioning warnings, setting constraints
-        # to replicate params to avoid the warnings. the returned train state will be sharded still
-        # since fsdp sharding is specified as output_sharding when jitting this function.
-        if params_sharding is not None:
-            params = jax.lax.with_sharding_constraint(params, params_sharding)
-        params = jax.experimental.io_callback(
-            partial(_load_weights_and_validate, config.weight_loader),
-            params,
-            params,
-            ordered=True,
-        )
-        if params_sharding is not None:
-            params = jax.lax.with_sharding_constraint(params, params_sharding)
-        return training_utils.TrainState(
-            step=0,
-            params=params,
-            opt_state=tx.init(params),
-            tx=tx,
-            ema_decay=config.ema_decay,
-            ema_params=None if config.ema_decay is None else params,
-        )
-
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
-    train_state_shape = jax.eval_shape(init, init_rng, batch)
+    def init(rng: at.KeyArrayLike) -> training_utils.TrainState:
+        rng, model_rng = jax.random.split(rng)
+        # initialize the model (and its parameters)
+        model = config.model.create(model_rng)
+        # extract a pure PyTree of params
+        graphdef, state = nnx.split(model)
+        params = state.to_pure_dict()
+        # run the weight loader on this pure PyTree
+        params = jax.lax.with_sharding_constraint(params, replicated_sharding)
+        params = jax.pure_callback(partial(_load_weights_and_validate, config.weight_loader), params, params)
+        params = jax.lax.with_sharding_constraint(params, replicated_sharding)
+        # update the model with loaded params
+        state.replace_by_pure_dict(params)
+        model = nnx.merge(graphdef, state)
+
+        # initialize the optimizer
+        optimizer = nnx.Optimizer(model, tx)
+        return training_utils.TrainState(
+            step=0,
+            params=nnx.state(model),
+            model_def=nnx.graphdef(model),
+            opt_state=nnx.state(optimizer),
+            opt_def=nnx.graphdef(optimizer),
+            ema_decay=config.ema_decay,
+            ema_params=None if config.ema_decay is None else nnx.state(model),
+        )
+
+    train_state_shape = jax.eval_shape(init, init_rng)
     state_sharding = sharding.fsdp_sharding(train_state_shape, mesh, log=True)
 
     if resume:
         return train_state_shape, state_sharding
 
-    train_state = jax.jit(
-        init,
-        in_shardings=(replicated_sharding, data_sharding),
-        out_shardings=state_sharding,
-        static_argnums=(2,),
-    )(init_rng, batch, replicated_sharding)
+    train_state = jax.jit(init, in_shardings=replicated_sharding, out_shardings=state_sharding)(init_rng)
     return train_state, state_sharding
 
 
@@ -161,29 +145,32 @@ def init_train_state(
 def train_step(
     rng: at.KeyArrayLike,
     state: training_utils.TrainState,
-    model: _model.Model,
-    batch: tuple[_common.Observation, _common.Actions],
+    batch: tuple[_model.Observation, _model.Actions],
 ) -> tuple[training_utils.TrainState, dict[str, at.Array]]:
-    def loss_fn(params: at.Params, rng: at.KeyArrayLike, observation: _common.Observation, actions: _common.Actions):
-        chunked_loss = model.compute_loss(rng, observation, actions, params=params, train=True)
+    model = nnx.merge(state.model_def, state.params)
+    optimizer = nnx.merge(state.opt_def, state.opt_state)
+
+    @at.typecheck
+    def loss_fn(
+        model: _model.BaseModel, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions
+    ):
+        chunked_loss = model.compute_loss(rng, observation, actions, train=True)
         return jnp.mean(chunked_loss)
 
     train_rng = jax.random.fold_in(rng, state.step)
     observation, actions = batch
-    loss, grads = jax.value_and_grad(loss_fn)(state.params, train_rng, observation, actions)
-    updates, new_opt_state = state.tx.update(grads, state.opt_state, state.params)
-    new_params = optax.apply_updates(state.params, updates)
+    loss, grads = nnx.value_and_grad(loss_fn)(model, train_rng, observation, actions)
+    optimizer.update(grads)  # updates the model and optimizer params in-place
 
-    new_state = state.replace(step=state.step + 1, params=new_params, opt_state=new_opt_state)
+    new_state = state.replace(step=state.step + 1, params=nnx.state(model), opt_state=nnx.state(optimizer))
     if state.ema_decay is not None:
         new_state = new_state.replace(
             ema_params=jax.tree.map(
-                lambda old, new: state.ema_decay * old + (1 - state.ema_decay) * new, state.ema_params, new_params
+                lambda old, new: state.ema_decay * old + (1 - state.ema_decay) * new, state.ema_params, nnx.state(model)
             )
         )
 
-    kernel_mask = training_utils.mask_from_regex(r".*\['kernel'\]", state.params)
-    kernel_params = jax.tree.map(lambda p, m: p if m else None, state.params, kernel_mask)
+    kernel_params = nnx.state(model, lambda path, _: path[-1] == "kernel")
     info = {
         "loss": loss,
         "grad_norm": optax.global_norm(grads),  # TODO: do not compute norm for frozen params
@@ -212,8 +199,8 @@ def main(config: _config.TrainConfig):
             f"Number of devices {jax.device_count()} must be divisible by the number of FSDP devices {config.fsdp_devices}."
         )
     mesh_shape = (jax.device_count() // config.fsdp_devices, config.fsdp_devices)
-    # Define data axis that across both batch and model axis to make sure data is sharded across all devices.
-    data_axis = ("batch", "model")
+    # In FSDP, the data is sharded accross both the batch and model axes.
+    data_axis = (sharding.BATCH_AXIS, sharding.FSDP_AXIS)
     mesh = jax.make_mesh(mesh_shape, data_axis)
     data_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(data_axis))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
@@ -226,11 +213,8 @@ def main(config: _config.TrainConfig):
     )
     init_wandb(config, resuming=resuming, enabled=config.wandb_enabled)
 
-    model = config.create_model()
-
     data_loader = _data_loader.create_data_loader(
         config,
-        model,
         sharding=data_sharding,
         num_workers=config.num_workers,
         shuffle=True,
@@ -239,9 +223,7 @@ def main(config: _config.TrainConfig):
     batch = next(data_iter)
     logging.info(f"Initialized data loader:\n{training_utils.array_tree_to_info(batch)}")
 
-    train_state, train_state_sharding = init_train_state(
-        config, model, init_rng, batch, mesh, data_sharding, resume=resuming
-    )
+    train_state, train_state_sharding = init_train_state(config, init_rng, mesh, resume=resuming)
     jax.block_until_ready(train_state)
     logging.info(f"Initialized train state:\n{training_utils.array_tree_to_info(train_state.params)}")
 
@@ -250,7 +232,7 @@ def main(config: _config.TrainConfig):
 
     ptrain_step = jax.jit(
         train_step,
-        in_shardings=(replicated_sharding, train_state_sharding, None, data_sharding),
+        in_shardings=(replicated_sharding, train_state_sharding, data_sharding),
         out_shardings=(train_state_sharding, replicated_sharding),
         donate_argnums=(1,),
     )
@@ -265,10 +247,8 @@ def main(config: _config.TrainConfig):
 
     infos = []
     for step in pbar:
-        # Map the logical "BATCH_AXIS" to the data axis so that the variable dimension that applies the BATCH_AXIS constraint
-        # in the model code will be sharded across all devices.
-        with mesh, nn.logical_axis_rules([(sharding.BATCH_AXIS, data_axis)]):
-            train_state, info = ptrain_step(train_rng, train_state, model, batch)
+        with mesh:
+            train_state, info = ptrain_step(train_rng, train_state, batch)
         infos.append(info)
         if step % config.log_interval == 0:
             stacked_infos = common_utils.stack_forest(infos)

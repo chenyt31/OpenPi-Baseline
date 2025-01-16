@@ -3,16 +3,17 @@ from collections.abc import Sequence
 import dataclasses
 import logging
 import pathlib
+from typing import TypeAlias
 
 import augmax
+from flax import nnx
 from flax import struct
+from flax import traverse_util
 import jax
 import jax.numpy as jnp
 import numpy as np
 import orbax.checkpoint as ocp
-from typing_extensions import override
 
-from openpi.models import common
 from openpi.shared import image_tools
 import openpi.shared.array_typing as at
 
@@ -31,14 +32,64 @@ IMAGE_KEYS = (
 IMAGE_RESOLUTION = (224, 224)
 
 
+@at.typecheck
+@struct.dataclass
+class Observation:
+    """Holds observations, i.e., inputs to the model."""
+
+    # Images, in [-1, 1] float32.
+    images: dict[str, at.Float[at.Array, "*b h w c"]]
+    # Image masks, with same keys as images.
+    image_masks: dict[str, at.Bool[at.Array, "*b"]]
+    # Low-dimensional robot state.
+    state: at.Float[at.Array, "*b s"]
+    # Tokenized prompt.
+    tokenized_prompt: at.Int[at.Array, "*b l"] | None = None
+    # Tokenized prompt mask.
+    tokenized_prompt_mask: at.Bool[at.Array, "*b l"] | None = None
+
+    @classmethod
+    def from_dict(cls, data: at.PyTree[at.ArrayLike]) -> "Observation":
+        """This method defines the mapping between unstructured data (i.e., nested dict) to the structured Observation format."""
+        # Ensure that tokenized_prompt and tokenized_prompt_mask are provided together.
+        if ("tokenized_prompt" in data) != ("tokenized_prompt_mask" in data):
+            raise ValueError("tokenized_prompt and tokenized_prompt_mask must be provided together.")
+        # If images are uint8, convert them to [-1, 1] float32.
+        for key in data["image"]:
+            if data["image"][key].dtype == np.uint8:
+                data["image"][key] = data["image"][key].astype(np.float32) / 255.0 * 2.0 - 1.0
+        return cls(
+            images=data["image"],
+            image_masks=data["image_mask"],
+            state=data["state"],
+            tokenized_prompt=data.get("tokenized_prompt"),
+            tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
+        )
+
+    def to_dict(self) -> at.PyTree[at.ArrayLike]:
+        """Convert the Observation to a nested dict."""
+        result = dataclasses.asdict(self)
+        # TODO(ury): This is awkward. Adjust the names to be the same.
+        result["image"] = result.pop("images")
+        result["image_mask"] = result.pop("image_masks")
+        return result
+
+
+Actions: TypeAlias = at.Float[at.ArrayLike, "*b ah ad"]
+
+
 def preprocess_observation(
-    rng: at.KeyArrayLike,
-    observation: common.Observation,
+    rng: at.KeyArrayLike | None,
+    observation: Observation,
     *,
     train: bool = False,
     image_keys: Sequence[str] = IMAGE_KEYS,
     image_resolution: tuple[int, int] = IMAGE_RESOLUTION,
-) -> common.Observation:
+) -> Observation:
+    """Preprocess the observations by performing image augmentations (if train=True), resizing (if necessary), and
+    filling in a default image mask (if necessary).
+    """
+
     if not set(image_keys).issubset(observation.images):
         raise ValueError(f"images dict missing keys: expected {image_keys}, got {list(observation.images)}")
 
@@ -83,7 +134,7 @@ def preprocess_observation(
         else:
             out_masks[key] = jnp.asarray(observation.image_masks[key])
 
-    return common.Observation(
+    return Observation(
         images=out_images,
         image_masks=out_masks,
         state=observation.state,
@@ -92,114 +143,94 @@ def preprocess_observation(
     )
 
 
-@struct.dataclass
-class BaseModel(abc.ABC):
+@dataclasses.dataclass(frozen=True)
+class BaseModelConfig(abc.ABC):
+    """Configuration shared by all models. Specific models should inherit from this class, and implement the `create`
+    method to create the corresponding model.
+    """
+
     # Action space dimension.
-    action_dim: int = struct.field(pytree_node=False)
+    action_dim: int = 24
     # Action sequence length.
-    action_horizon: int = struct.field(pytree_node=False)
+    action_horizon: int = 50
     # Tokenized prompt maximum length.
-    max_token_len: int = struct.field(pytree_node=False)
+    max_token_len: int = 48
+
+    @abc.abstractmethod
+    def create(self, rng: at.KeyArrayLike) -> "BaseModel":
+        """Create a new model, initializing parameters."""
+
+    def load(self, params: at.Params) -> "BaseModel":
+        """Create a model with the given parameters."""
+        model = nnx.eval_shape(self.create, jax.random.key(0))
+        graphdef, state = nnx.split(model)
+
+        def check(kp, x, y):
+            if x.shape != y.shape:
+                raise ValueError(
+                    f"Shape mismatch: model expected {x.shape} but params have {y.shape} at {jax.tree_util.keystr(kp)}"
+                )
+
+        jax.tree_util.tree_map_with_path(check, state.to_pure_dict(), params)
+
+        state.replace_by_pure_dict(params)
+        return nnx.merge(graphdef, state)
+
+    def inputs_spec(self, *, batch_size: int = 1) -> tuple[Observation, at.Float[at.Array, "ah ad"]]:
+        image_spec = jax.ShapeDtypeStruct([batch_size, *IMAGE_RESOLUTION, 3], jnp.float32)
+        image_mask_spec = jax.ShapeDtypeStruct([batch_size], jnp.bool_)
+
+        with at.disable_typechecking():
+            observation_spec = Observation(
+                images={
+                    "base_0_rgb": image_spec,
+                    "left_wrist_0_rgb": image_spec,
+                    "right_wrist_0_rgb": image_spec,
+                },
+                image_masks={
+                    "base_0_rgb": image_mask_spec,
+                    "left_wrist_0_rgb": image_mask_spec,
+                    "right_wrist_0_rgb": image_mask_spec,
+                },
+                state=jax.ShapeDtypeStruct([batch_size, self.action_dim], jnp.float32),
+                tokenized_prompt=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
+                tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
+            )
+        action_spec = jax.ShapeDtypeStruct([batch_size, self.action_horizon, self.action_dim], jnp.float32)
+
+        return observation_spec, action_spec
+
+    def fake_obs(self, batch_size: int = 1) -> Observation:
+        observation_spec, _ = self.inputs_spec(batch_size=batch_size)
+        return jax.tree.map(lambda x: jnp.ones(x.shape, x.dtype), observation_spec)
+
+    def fake_act(self, batch_size: int = 1) -> Actions:
+        _, action_spec = self.inputs_spec(batch_size=batch_size)
+        return jax.tree.map(lambda x: jnp.ones(x.shape, x.dtype), action_spec)
+
+
+@dataclasses.dataclass
+class BaseModel(nnx.Module, abc.ABC):
+    """Base class for all model implementations. Specific models should inherit from this class. They should call
+    super().__init__() to initialize the shared attributes (action_dim, action_horizon, and max_token_len).
+    """
+
+    action_dim: int
+    action_horizon: int
+    max_token_len: int
 
     @abc.abstractmethod
     def compute_loss(
         self,
         rng: at.KeyArrayLike,
-        observation: common.Observation,
-        actions: common.Actions,
+        observation: Observation,
+        actions: Actions,
         *,
         train: bool = False,
-        params: at.Params | None = None,
     ) -> at.Float[at.Array, "*b ah"]: ...
 
     @abc.abstractmethod
-    def sample_actions(
-        self,
-        rng: at.KeyArrayLike,
-        observation: common.Observation,
-        **sample_kwargs,
-    ) -> common.Actions: ...
-
-
-@struct.dataclass
-class Model(BaseModel):
-    module: common.BaseModule = struct.field(pytree_node=False)
-    params: at.Params | None = None
-
-    def init_params(self, rng: at.KeyArrayLike, observation: common.Observation, actions: common.Actions) -> at.Params:
-        """Initialize and return the parameters by tracing the module's `compute_loss` function."""
-        preprocess_rng, init_rng = jax.random.split(rng)
-        obs = preprocess_observation(preprocess_rng, observation)
-
-        return self.module.init(init_rng, obs, actions, method=self.module.compute_loss)["params"]
-
-    @at.typecheck
-    @override
-    def compute_loss(
-        self,
-        rng: at.KeyArrayLike,
-        observation: common.Observation,
-        actions: common.Actions,
-        params: at.Params | None = None,
-        *,
-        train: bool = False,
-    ) -> at.Float[at.Array, ""]:
-        if params is None:
-            if self.params is None:
-                raise ValueError(
-                    "No parameters found. Either bind the model to parameters using `set_params` or provide params directly."
-                )
-            params = self.params
-
-        loss_rng, preprocess_rng = jax.random.split(rng)
-
-        obs = preprocess_observation(preprocess_rng, observation, train=train)
-        loss_args = (obs, actions)
-
-        return jnp.mean(
-            self.module.apply({"params": params}, *loss_args, rngs={"loss": loss_rng}, method=self.module.compute_loss)  # type: ignore
-        )
-
-    @jax.jit
-    @at.typecheck
-    @override
-    def sample_actions(
-        self,
-        rng: at.KeyArrayLike,
-        observation: common.Observation,
-        **sample_kwargs,
-    ) -> common.Actions:
-        if self.params is None:
-            raise ValueError(
-                "No parameters found. Bind the model to parameters using `set_params` before calling `sample_actions`."
-            )
-
-        preprocess_rng, sample_rng = jax.random.split(rng)
-
-        obs = preprocess_observation(preprocess_rng, observation)
-        sample_args = (self.action_horizon, self.action_dim, obs)
-
-        actions, _ = self.module.apply(
-            {"params": self.params},
-            *sample_args,
-            rngs={"sample": sample_rng},
-            method=self.module.sample_actions,
-            mutable=["cache"],
-            **sample_kwargs,
-        )
-        return actions
-
-    def set_params(self, params: at.Params) -> "Model":
-        """Returns a copy of the model bound to `params`."""
-        return dataclasses.replace(self, params=params)
-
-    def fake_obs(self, batch_size: int = 1) -> common.Observation:
-        observation_spec, _ = create_inputs_spec(self, batch_size=batch_size)
-        return jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), observation_spec)
-
-    def fake_act(self, batch_size: int = 1) -> common.Actions:
-        _, action_spec = create_inputs_spec(self, batch_size=batch_size)
-        return jax.tree.map(lambda x: jnp.zeros(x.shape, x.dtype), action_spec)
+    def sample_actions(self, rng: at.KeyArrayLike, observation: Observation) -> Actions: ...
 
 
 def restore_params(
@@ -233,42 +264,21 @@ def restore_params(
 
     with ocp.PyTreeCheckpointer() as ckptr:
         metadata = ckptr.metadata(params_path)
-        # Use EMA params if they exist, otherwise regular params. See `training.utils.TrainState`.
-        params_name = "ema_params" if metadata.get("ema_params") is not None else "params"
-        item = {params_name: metadata[params_name]}
+        item = {"params": metadata["params"]}
 
-        return ckptr.restore(
+        params = ckptr.restore(
             params_path,
             ocp.args.PyTreeRestore(
                 item=item,
                 restore_args=jax.tree.map(
                     lambda _: ocp.ArrayRestoreArgs(sharding=sharding, restore_type=restore_type, dtype=dtype), item
                 ),
-                transforms={},  # required to load a partial PyTree (e.g., only params from a full TrainState)
             ),
-        )[params_name]
+        )["params"]
 
-
-def create_inputs_spec(model: Model, *, batch_size: int = 1) -> tuple[common.Observation, at.Float[at.Array, "ah ad"]]:
-    image_spec = jax.ShapeDtypeStruct([batch_size, 224, 224, 3], jnp.float32)
-    image_mask_spec = jax.ShapeDtypeStruct([batch_size], jnp.bool_)
-
-    with at.disable_typechecking():
-        observation_spec = common.Observation(
-            images={
-                "base_0_rgb": image_spec,
-                "left_wrist_0_rgb": image_spec,
-                "right_wrist_0_rgb": image_spec,
-            },
-            image_masks={
-                "base_0_rgb": image_mask_spec,
-                "left_wrist_0_rgb": image_mask_spec,
-                "right_wrist_0_rgb": image_mask_spec,
-            },
-            state=jax.ShapeDtypeStruct([batch_size, model.action_dim], jnp.float32),
-            tokenized_prompt=jax.ShapeDtypeStruct([batch_size, model.max_token_len], jnp.int32),
-            tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, model.max_token_len], jnp.int32),
-        )
-    action_spec = jax.ShapeDtypeStruct([batch_size, model.action_horizon, model.action_dim], jnp.float32)
-
-    return observation_spec, action_spec
+    # If the params were saved with `save_state` during openpi training, every key path will end with "value", which is
+    # added by `nnx.State`. We remove the "value" suffix here and always return what NNX calls a "pure dict".
+    flat_params = traverse_util.flatten_dict(params)
+    if all(kp[-1] == "value" for kp in flat_params):
+        flat_params = {kp[:-1]: v for kp, v in flat_params.items()}
+    return traverse_util.unflatten_dict(flat_params)

@@ -36,7 +36,7 @@ def get_cache_dir() -> pathlib.Path:
 
 
 def maybe_download(url: str, **kwargs) -> pathlib.Path:
-    """Download a file or directoryfrom a remote filesystem to the local cache, and return the local path.
+    """Download a file or directory from a remote filesystem to the local cache, and return the local path.
 
     If the local file already exists, it will be returned directly.
 

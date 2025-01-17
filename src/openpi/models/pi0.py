@@ -12,6 +12,7 @@ from openpi.models import model as _model
 import openpi.models.gemma as _gemma
 import openpi.models.siglip as _siglip
 from openpi.shared import array_typing as at
+from openpi.shared import nnx_utils
 
 logger = logging.getLogger("openpi")
 
@@ -198,7 +199,7 @@ class Pi0(_model.BaseModel):
 
         return jnp.mean(jnp.square(v_t - u_t), axis=-1)
 
-    @nnx.jit
+    @nnx_utils.pure_jit
     @override
     def sample_actions(
         self,

@@ -1,35 +1,40 @@
 from collections.abc import Callable
 import functools
+import inspect
+from typing import ParamSpec, TypeVar
 
 import flax.nnx as nnx
 import jax
 
+P = ParamSpec("P")
+R = TypeVar("R")
 
-def pure_jit(fn: Callable, *jit_args, **jit_kwargs):
-    """A decorator that can be used to JIT-compile methods of `nnx.Module`.
 
-    Why not `nnx.jit`? For some reason, naively applying `nnx.jit` to `nnx.Module` methods uses much more memory than
-    necessary. I'm guessing it has something to do with the fact that it must keep track of module mutations.
+def module_jit(meth: Callable[P, R], *jit_args, **jit_kwargs) -> Callable[P, R]:
+    """A higher-order function to JIT-compile `nnx.Module` methods, freezing the module's state in the process.
 
-    `pure_jit` is an alternative that works on `nnx.Module` methods that are *completely* pure. Unlike `nnx.jit`, the
-    wrapped method must not return any `nnx.Module`s. Mutations to the `self` module are allowed, and will persist for
-    the duration of the method, but they will not be propagated back to the caller.
+    Why not `nnx.jit`? For some reason, naively applying `nnx.jit` to `nnx.Module` methods, bound or unbound, uses much
+    more memory than necessary. I'm guessing it has something to do with the fact that it must keep track of module
+    mutations. Also, `nnx.jit` has some inherent overhead compared to a standard `jax.jit`, since every call must
+    traverse the NNX module graph. See https://github.com/google/flax/discussions/4224 for details.
 
-    Similarly to `nnx.jit`, `pure_jit` incurs some performance overhead compared to a standard `jax.jit`. This is because
-    the NNX graph traversal logic must run on every call (for `nnx.split`). On my workstation, I measured this overhead
-    to be about 0.5ms on average for the Pi0 model, which seems acceptable. Hopefully this overhead will become
-    negligible once flaxlib is complete; see https://github.com/google/flax/discussions/4224 for context.
+    `module_jit` is an alternative that avoids these issues by freezing the module's state. The function returned by
+    `module_jit` acts exactly like the original method, except that the state of the module is frozen to whatever it was
+    when `module_jit` was called. Mutations to the module within `meth` are still allowed, but they will be discarded
+    after the method call completes.
     """
+    if not (inspect.ismethod(meth) and isinstance(meth.__self__, nnx.Module)):
+        raise ValueError("module_jit must only be used on bound methods of nnx.Modules.")
+
+    graphdef, state = nnx.split(meth.__self__)
 
     @functools.partial(jax.jit, *jit_args, **jit_kwargs)
-    def pure_fn(graphdef_and_state, *args, **kwargs):
-        return fn(nnx.merge(*graphdef_and_state), *args, **kwargs)
+    def jitted_fn(state: nnx.State, *args: P.args, **kwargs: P.kwargs) -> R:
+        module = nnx.merge(graphdef, state)
+        return meth.__func__(module, *args, **kwargs)
 
-    @functools.wraps(fn)
-    def wrapper(module: nnx.Module, *args, **kwargs):
-        if not isinstance(module, nnx.Module):
-            raise ValueError("pure_jit must only be used on methods of nnx.Module.")
-
-        return pure_fn(nnx.split(module), *args, **kwargs)
+    @functools.wraps(meth)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        return jitted_fn(state, *args, **kwargs)
 
     return wrapper

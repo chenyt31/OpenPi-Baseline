@@ -36,7 +36,6 @@ import flax.linen as nn
 import flax.traverse_util as traverse_util
 import jax
 import jax.numpy as jnp
-from jax.sharding import PartitionSpec
 
 import openpi.shared.array_typing as at
 import openpi.training.sharding as sharding
@@ -463,7 +462,7 @@ class Block(nn.Module):
 
     @nn.compact
     def __call__(self, xs, kv_cache, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
-        xs = jax.lax.with_sharding_constraint(xs, PartitionSpec(sharding.BATCH_AXIS))
+        xs = sharding.activation_sharding_constraint(xs)
         drop = nn.Dropout(self.dropout, self.dropout_bdims) if self.dropout else lambda x, _: x
 
         attn = Attention(configs=self.configs, name="attn")
@@ -474,12 +473,12 @@ class Block(nn.Module):
                 x = RMSNorm(name=_name("pre_attention_norm", i))(x)  # noqa: PLW2901
             pre_attn.append(x)
 
-        pre_attn = jax.lax.with_sharding_constraint(pre_attn, PartitionSpec(sharding.BATCH_AXIS))
+        pre_attn = sharding.activation_sharding_constraint(pre_attn)
         post_attn, kv_cache = attn(pre_attn, positions, attn_mask, kv_cache)
         post_attn = jax.tree.map(lambda x: drop(x, deterministic), post_attn)
-        post_attn = jax.lax.with_sharding_constraint(post_attn, PartitionSpec(sharding.BATCH_AXIS))
+        post_attn = sharding.activation_sharding_constraint(post_attn)
         xs = jax.tree.map(lambda x, y: x + y, xs, post_attn)
-        xs = jax.lax.with_sharding_constraint(xs, PartitionSpec(sharding.BATCH_AXIS))
+        xs = sharding.activation_sharding_constraint(xs)
 
         out = []
         for i, (x, config) in enumerate(zip(xs, self.configs, strict=True)):
@@ -492,11 +491,11 @@ class Block(nn.Module):
                 )(x)
             out.append(x)
 
-        out = jax.lax.with_sharding_constraint(out, PartitionSpec(sharding.BATCH_AXIS))
+        out = sharding.activation_sharding_constraint(out)
 
         out = jax.tree.map(lambda x: drop(x, deterministic), out)
         xs = jax.tree.map(lambda x, y: x + y, xs, out)
-        xs = jax.lax.with_sharding_constraint(xs, PartitionSpec(sharding.BATCH_AXIS))
+        xs = sharding.activation_sharding_constraint(xs)
 
         return xs, kv_cache
 

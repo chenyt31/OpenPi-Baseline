@@ -247,7 +247,7 @@ def main(config: _config.TrainConfig):
 
     infos = []
     for step in pbar:
-        with mesh:
+        with sharding.set_mesh(mesh):
             train_state, info = ptrain_step(train_rng, train_state, batch)
         infos.append(info)
         if step % config.log_interval == 0:

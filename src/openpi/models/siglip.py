@@ -19,7 +19,6 @@ from collections.abc import Sequence
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from jax.sharding import PartitionSpec
 import numpy as np
 
 import openpi.training.sharding as sharding
@@ -84,7 +83,7 @@ class Encoder1DBlock(nn.Module):
     @nn.compact
     def __call__(self, x, deterministic=True):  # noqa: FBT002
         out = {}
-        x = jax.lax.with_sharding_constraint(x, PartitionSpec(sharding.BATCH_AXIS))
+        x = sharding.activation_sharding_constraint(x)
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
         y = out["sa"] = nn.MultiHeadDotProductAttention(
             num_heads=self.num_heads,
@@ -92,7 +91,7 @@ class Encoder1DBlock(nn.Module):
             deterministic=deterministic,
             dtype=self.dtype_mm,
         )(y, y)
-        y = jax.lax.with_sharding_constraint(y, PartitionSpec(sharding.BATCH_AXIS))
+        y = sharding.activation_sharding_constraint(y)
         y = nn.Dropout(rate=self.dropout)(y, deterministic)
         x = out["+sa"] = x + y
 
@@ -102,10 +101,10 @@ class Encoder1DBlock(nn.Module):
             dropout=self.dropout,
             dtype_mm=self.dtype_mm,
         )(y, deterministic)
-        y = jax.lax.with_sharding_constraint(y, PartitionSpec(sharding.BATCH_AXIS))
+        y = sharding.activation_sharding_constraint(y)
         y = nn.Dropout(rate=self.dropout)(y, deterministic)
         x = out["+mlp"] = x + y
-        x = jax.lax.with_sharding_constraint(x, PartitionSpec(sharding.BATCH_AXIS))
+        x = sharding.activation_sharding_constraint(x)
         return x, out
 
 

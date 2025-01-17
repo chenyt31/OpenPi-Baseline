@@ -5,8 +5,8 @@ Used to test internal pi checkpoints and provides utilities to convert them to o
 
 from collections.abc import Mapping
 import pathlib
-from typing import Any
 
+import flax.nnx as nnx
 import flax.serialization
 import jax
 import jax.export
@@ -52,7 +52,7 @@ def convert_to_openpi(
     sharding = jax.sharding.SingleDeviceSharding(jax.devices("cpu")[0])
     params = _load_params(ckpt_dir, sharding=sharding)
 
-    model = PiModel.from_checkpoint(ckpt_dir, params=params)
+    model = PiModel(ckpt_dir, params=params)
     print("Processors:    ", model.processor_names())
     print("Action dim:    ", model.action_dim)
     print("Action horizon:", model.action_horizon)
@@ -85,43 +85,28 @@ def convert_to_openpi(
 class PiModel(_model.BaseModel):
     """A model loaded from an internal exported model directory."""
 
-    params: at.Params
-
-    exported: jax.export.Exported
-    example_spec: Any
-    sample_spec: Any
-    ckpt_dir: pathlib.Path
-
-    @classmethod
-    def from_checkpoint(cls, ckpt_dir: pathlib.Path | str, params: at.Params | None = None) -> "PiModel":
+    def __init__(self, ckpt_dir: pathlib.Path | str, params: at.Params | None = None) -> "PiModel":
         """Load a model from the internal checkpoint directory. Must point at the "model" sub-directory."""
-        ckpt_dir = download.maybe_download(str(ckpt_dir))
-        with (ckpt_dir / "graph").open("rb") as f:
-            exported = jax.export.deserialize(f.read())
+        self.ckpt_dir = download.maybe_download(str(ckpt_dir))
+        with (self.ckpt_dir / "graph").open("rb") as f:
+            self.exported = jax.export.deserialize(f.read())
 
-        input_spec = jax.tree.unflatten(exported.in_tree, exported.in_avals)[0]
+        input_spec = jax.tree.unflatten(self.exported.in_tree, self.exported.in_avals)[0]
         if params is None:
-            params = _load_params(ckpt_dir, input_spec[0])
-        example_spec = input_spec[2]
-        sample_spec = input_spec[3]
+            params = _load_params(self.ckpt_dir, input_spec[0])
+        self.example_spec = input_spec[2]
+        self.sample_spec = input_spec[3]
 
         # Extract the action properties from the output spec.
-        output_spec = jax.tree.unflatten(exported.out_tree, exported.out_avals)
+        output_spec = jax.tree.unflatten(self.exported.out_tree, self.exported.out_avals)
         actions_spec = output_spec["actions"]
         action_horizon, action_dim = actions_spec.shape
+        max_token_len = self.example_spec["prompt_tokens"].shape[-1]
 
-        max_token_len = example_spec["prompt_tokens"].shape[-1]
+        super().__init__(action_dim=action_dim, action_horizon=action_horizon, max_token_len=max_token_len)
 
-        return cls(
-            params=params,
-            exported=exported,
-            example_spec=example_spec,
-            sample_spec=sample_spec,
-            ckpt_dir=ckpt_dir,
-            action_horizon=action_horizon,
-            action_dim=action_dim,
-            max_token_len=max_token_len,
-        )
+        # wrap arrays in nnx.Param to make nnx happy
+        self.params = jax.tree.map(lambda x: nnx.Param(x), params)
 
     @override
     def sample_actions(self, rng: at.KeyArrayLike, observation: _model.Observation, **sample_kwargs) -> _model.Actions:
@@ -147,20 +132,12 @@ class PiModel(_model.BaseModel):
             )
 
         rng_data = jax.random.key_data(rng)
-        result = self.exported.call(self.params, rng_data, example, sample_kwargs)
+        result = self.exported.call(jax.tree.map(lambda x: x.value, self.params), rng_data, example, sample_kwargs)
 
         return _make_batch(result)["actions"]
 
     @override
-    def compute_loss(
-        self,
-        rng: at.KeyArrayLike,
-        observation: _model.Observation,
-        actions: _model.Actions,
-        *,
-        train: bool = False,
-        params: at.Params | None = None,
-    ) -> at.Float[at.Array, "*b ah"]:
+    def compute_loss(self):
         raise NotImplementedError("Not implemented.")
 
     def fake_obs(self) -> _model.Observation:
@@ -175,59 +152,6 @@ class PiModel(_model.BaseModel):
         """List of processor names available in the checkpoint."""
         processor_dir = self.ckpt_dir / "processors"
         return [x.name for x in processor_dir.iterdir() if x.is_dir()]
-
-
-def determine_transform_patterns(
-    pi_model: PiModel, module: _model.BaseModule, *, param_path: str = "decoder"
-) -> dict[str, str]:
-    """Determine the transform patterns to use when converting an internal checkpoint to an openpi checkpoint.
-
-    The returned pattern can be used by `transforms.transform_dict` to convert the checkpoint params to the openpi format.
-    """
-    model = pi_model.set_module(module, param_path=param_path)
-
-    obs, act = model.fake_obs(), model.fake_act()
-    real_params = model.init_params(jax.random.key(0), obs, act)
-
-    real_params = _transforms.flatten_dict(real_params)
-    loaded_params = _transforms.flatten_dict(model.params)
-
-    missing = sorted(set(real_params) - set(loaded_params), key=lambda n: (real_params[n].shape, n))
-    extra = sorted(set(loaded_params) - set(real_params), key=lambda n: (loaded_params[n].shape, n))
-
-    if not missing:
-        return {}
-
-    if missing and (len(missing) == len(extra)):
-        patterns = dict(zip(extra, missing, strict=True))
-        # Confirm that all shapes match.
-        for k, v in patterns.items():
-            if loaded_params[k].shape != real_params[v].shape:
-                print("Shape mismatch between checkpoint and model candidates:")
-                print(k, loaded_params[k].shape)
-                print(v, real_params[v].shape)
-                print()
-                break
-        else:
-            return patterns
-
-    # Getting here means that there's a mismatch but we were unable
-
-    if missing:
-        print(f"{len(missing)} missing params in checkpoint:")
-        for name in missing:
-            p = real_params[name]
-            print(name, p.shape, str(p.dtype))
-        print()
-
-    if extra:
-        print(f"{len(extra)} extra params in checkpoint:")
-        for name in extra:
-            p = loaded_params[name]
-            print(name, p.shape, str(p.dtype))
-        print()
-
-    raise ValueError("Automatic generation is not possible. Please see the outputs and create the patterns by hand.")
 
 
 def _load_params(
@@ -285,7 +209,7 @@ def _obs_to_example(obs: _model.Observation, example_spec: dict) -> dict:
     else:
         result = {
             **result,
-            "mask_input": obs.tokenized_prompt_mask,
+            "mask_input": obs.tokenized_prompt_mask.astype(jnp.int32),
         }
 
     return result
@@ -309,7 +233,7 @@ def _example_to_obs(example: dict) -> _model.Observation:
             "image_mask": image_masks,
             "state": example["state"],
             "tokenized_prompt": example["prompt_tokens"],
-            "tokenized_prompt_mask": example["mask_input"],
+            "tokenized_prompt_mask": example["mask_input"].astype(bool),
         }
     )
 

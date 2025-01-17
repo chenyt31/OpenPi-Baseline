@@ -115,7 +115,7 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
     processor = exported.processor
 
     logging.info("Loading model...")
-    model = _exported.PiModel.from_checkpoint(checkpoint_dir)
+    model = _exported.PiModel(checkpoint_dir)
 
     processors = model.processor_names()
     if not processors:

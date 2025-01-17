@@ -5,6 +5,7 @@ import platform
 from typing import Any
 
 import etils.epath as epath
+import flax.linen as nn
 from flax.training import common_utils
 import jax
 import jax._src.tree_util as private_tree_util
@@ -211,8 +212,10 @@ def main(config: _config.TrainConfig):
             f"Number of devices {jax.device_count()} must be divisible by the number of FSDP devices {config.fsdp_devices}."
         )
     mesh_shape = (jax.device_count() // config.fsdp_devices, config.fsdp_devices)
-    mesh = jax.make_mesh(mesh_shape, ("batch", "model"))
-    data_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(("batch", "model")))
+    # Define data axis that across both batch and model axis to make sure data is sharded across all devices.
+    data_axis = ("batch", "model")
+    mesh = jax.make_mesh(mesh_shape, data_axis)
+    data_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(data_axis))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint_dir(
@@ -262,7 +265,10 @@ def main(config: _config.TrainConfig):
 
     infos = []
     for step in pbar:
-        train_state, info = ptrain_step(train_rng, train_state, model, batch)
+        # Map the logical "BATCH_AXIS" to the data axis so that the variable dimension that applies the BATCH_AXIS constraint
+        # in the model code will be sharded across all devices.
+        with mesh, nn.logical_axis_rules([(sharding.BATCH_AXIS, data_axis)]):
+            train_state, info = ptrain_step(train_rng, train_state, model, batch)
         infos.append(info)
         if step % config.log_interval == 0:
             stacked_infos = common_utils.stack_forest(infos)

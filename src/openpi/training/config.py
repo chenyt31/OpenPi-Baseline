@@ -252,8 +252,8 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_aloha_towel_diverse",
+        model=pi0.Pi0Config(action_dim=32),
         data=LeRobotAlohaDataConfig(use_delta_joint_actions=True, adapt_to_pi=True),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
         policy_metadata={
             # Adjust the reset pose to align better with the internal training data.
@@ -271,38 +271,35 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_droid",
-        model=pi0.Pi0Config(action_horizon=10),
+        model=pi0.Pi0Config(action_dim=8, action_horizon=10),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[droid_policy.DroidInputs(action_dim=model.action_dim)],
                 outputs=[droid_policy.DroidOutputs()],
             )
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     TrainConfig(
         name="pi0_calvin",
-        model=pi0.Pi0Config(action_horizon=10),
+        model=pi0.Pi0Config(action_dim=7, action_horizon=10),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[calvin_policy.CalvinInputs(action_dim=model.action_dim)],
                 outputs=[calvin_policy.CalvinOutputs()],
             )
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     TrainConfig(
         name="pi0_libero",
-        model=pi0.Pi0Config(action_horizon=10),
+        model=pi0.Pi0Config(action_dim=7, action_horizon=10),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[libero_policy.LiberoInputs(action_dim=model.action_dim)],
                 outputs=[libero_policy.LiberoOutputs()],
             )
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     #

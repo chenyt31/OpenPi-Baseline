@@ -176,7 +176,7 @@ class BaseModelConfig(abc.ABC):
         state.replace_by_pure_dict(params)
         return nnx.merge(graphdef, state)
 
-    def inputs_spec(self, *, batch_size: int = 1) -> tuple[Observation, at.Float[at.Array, "ah ad"]]:
+    def inputs_spec(self, *, batch_size: int = 1) -> tuple[Observation, Actions]:
         image_spec = jax.ShapeDtypeStruct([batch_size, *IMAGE_RESOLUTION, 3], jnp.float32)
         image_mask_spec = jax.ShapeDtypeStruct([batch_size], jnp.bool_)
 

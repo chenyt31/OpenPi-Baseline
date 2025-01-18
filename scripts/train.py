@@ -175,15 +175,8 @@ def main(config: _config.TrainConfig):
     rng = jax.random.key(config.seed)
     train_rng, init_rng = jax.random.split(rng)
 
-    if jax.device_count() % config.fsdp_devices != 0:
-        raise ValueError(
-            f"Number of devices {jax.device_count()} must be divisible by the number of FSDP devices {config.fsdp_devices}."
-        )
-    mesh_shape = (jax.device_count() // config.fsdp_devices, config.fsdp_devices)
-    # In FSDP, the data is sharded accross both the batch and model axes.
-    data_axis = (sharding.BATCH_AXIS, sharding.FSDP_AXIS)
-    mesh = jax.make_mesh(mesh_shape, data_axis)
-    data_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(data_axis))
+    mesh = sharding.make_mesh(config.fsdp_devices)
+    data_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec(sharding.DATA_AXIS))
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     checkpoint_manager, resuming = _checkpoints.initialize_checkpoint_dir(

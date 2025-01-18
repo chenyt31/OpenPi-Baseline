@@ -8,7 +8,6 @@ import etils.epath as epath
 import flax.nnx as nnx
 from flax.training import common_utils
 import jax
-import jax._src.tree_util as private_tree_util
 import jax.experimental
 import jax.numpy as jnp
 import optax
@@ -72,25 +71,7 @@ def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader, para
     """Runs the weight loader and validates that the params structure, shapes, and dtypes are unchanged."""
     new_params = weight_loader.load(jax.tree.map(lambda x: x, params))
 
-    if errors := list(private_tree_util.equality_errors(params, new_params)):
-        raise ValueError(
-            "Weight loading changed the params structure:\n"
-            + (
-                "\n".join(
-                    f"   - {jax.tree_util.keystr(path)} changed from {thing1} to {thing2}, so {explanation}.\n"
-                    for path, thing1, thing2, explanation in errors
-                )
-            )
-        )
-
-    def check(kp, x, y):
-        if (x := jax.ShapeDtypeStruct(x.shape, x.dtype)) != (y := jax.ShapeDtypeStruct(y.shape, y.dtype)):
-            raise ValueError(
-                f"Weight loading changed the params structure: expected {y}, got {x} at {jax.tree_util.keystr(kp)}"
-            )
-
-    jax.tree_util.tree_map_with_path(check, params, new_params)
-
+    at.check_pytree_equality(expected=params, got=new_params, check_shapes=True, check_dtypes=True)
     return new_params
 
 

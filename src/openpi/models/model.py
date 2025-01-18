@@ -160,19 +160,13 @@ class BaseModelConfig(abc.ABC):
     def create(self, rng: at.KeyArrayLike) -> "BaseModel":
         """Create a new model, initializing parameters."""
 
-    def load(self, params: at.Params) -> "BaseModel":
+    def load(self, params: at.Params, *, allow_extra_params: bool = False) -> "BaseModel":
         """Create a model with the given parameters."""
         model = nnx.eval_shape(self.create, jax.random.key(0))
         graphdef, state = nnx.split(model)
-
-        def check(kp, x, y):
-            if x.shape != y.shape:
-                raise ValueError(
-                    f"Shape mismatch: model expected {x.shape} but params have {y.shape} at {jax.tree_util.keystr(kp)}"
-                )
-
-        jax.tree_util.tree_map_with_path(check, state.to_pure_dict(), params)
-
+        if allow_extra_params:
+            params = ocp.transform_utils.intersect_trees(state.to_pure_dict(), params)
+        at.check_pytree_equality(expected=state.to_pure_dict(), got=params, check_shapes=True, check_dtypes=False)
         state.replace_by_pure_dict(params)
         return nnx.merge(graphdef, state)
 

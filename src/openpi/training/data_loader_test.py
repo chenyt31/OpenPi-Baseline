@@ -2,15 +2,14 @@ import dataclasses
 
 import jax
 
-from openpi.models import model as _model
 from openpi.models import pi0
 from openpi.training import config as _config
 from openpi.training import data_loader as _data_loader
 
 
 def test_torch_data_loader():
-    model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
-    dataset = _data_loader.FakeDataset(model, 16)
+    config = pi0.Pi0Config(action_dim=24, action_horizon=50, max_token_len=48)
+    dataset = _data_loader.FakeDataset(config, 16)
 
     loader = _data_loader.TorchDataLoader(
         dataset,
@@ -25,8 +24,8 @@ def test_torch_data_loader():
 
 
 def test_torch_data_loader_infinite():
-    model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
-    dataset = _data_loader.FakeDataset(model, 4)
+    config = pi0.Pi0Config(action_dim=24, action_horizon=50, max_token_len=48)
+    dataset = _data_loader.FakeDataset(config, 4)
 
     loader = _data_loader.TorchDataLoader(dataset, local_batch_size=4)
     data_iter = iter(loader)
@@ -36,8 +35,8 @@ def test_torch_data_loader_infinite():
 
 
 def test_torch_data_loader_parallel():
-    model = _model.Model(module=pi0.Module(), action_dim=24, action_horizon=50, max_token_len=48)
-    dataset = _data_loader.FakeDataset(model, 10)
+    config = pi0.Pi0Config(action_dim=24, action_horizon=50, max_token_len=48)
+    dataset = _data_loader.FakeDataset(config, 10)
 
     loader = _data_loader.TorchDataLoader(dataset, local_batch_size=4, num_batches=2, num_workers=2)
     batches = list(loader)
@@ -50,9 +49,8 @@ def test_torch_data_loader_parallel():
 
 def test_with_fake_dataset():
     config = _config.get_config("debug")
-    model = config.create_model()
 
-    loader = _data_loader.create_data_loader(config, model, skip_norm_stats=True, num_batches=2)
+    loader = _data_loader.create_data_loader(config, skip_norm_stats=True, num_batches=2)
     batches = list(loader)
 
     assert len(batches) == 2
@@ -61,18 +59,15 @@ def test_with_fake_dataset():
         assert all(x.shape[0] == config.batch_size for x in jax.tree.leaves(batch))
 
     for _, actions in batches:
-        assert actions.shape == (config.batch_size, config.action_horizon, config.action_dim)
+        assert actions.shape == (config.batch_size, config.model.action_horizon, config.model.action_dim)
 
 
 def test_with_real_dataset():
     config = _config.get_config("pi0_aloha_sim")
     config = dataclasses.replace(config, batch_size=4)
 
-    model = config.create_model()
-
     loader = _data_loader.create_data_loader(
         config,
-        model,
         # Skip since we may not have the data available.
         skip_norm_stats=True,
         num_batches=2,
@@ -86,4 +81,4 @@ def test_with_real_dataset():
     assert len(batches) == 2
 
     for _, actions in batches:
-        assert actions.shape == (config.batch_size, config.action_horizon, config.action_dim)
+        assert actions.shape == (config.batch_size, config.model.action_horizon, config.model.action_dim)

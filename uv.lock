@@ -2771,6 +2771,7 @@ dependencies = [
     { name = "sentencepiece" },
     { name = "torch" },
     { name = "tqdm-loggable" },
+    { name = "treescope" },
     { name = "types-boto3", extra = ["boto3", "s3"] },
     { name = "typing-extensions" },
     { name = "tyro" },
@@ -2816,6 +2817,7 @@ requires-dist = [
     { name = "sentencepiece", specifier = ">=0.2.0" },
     { name = "torch", specifier = ">=2.5.1" },
     { name = "tqdm-loggable", specifier = ">=0.2" },
+    { name = "treescope", specifier = ">=0.1.7" },
     { name = "types-boto3", extras = ["boto3", "s3"], specifier = ">=1.35.7" },
     { name = "typing-extensions", specifier = ">=4.12.2" },
     { name = "tyro", specifier = ">=0.9.5" },
@@ -4230,6 +4232,18 @@ dependencies = [
     { name = "svgwrite" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/29/3f/63cbed2909786f0e5ac30a4ae5791ad597c6b5fec7167e161c55bba511ce/Tree-0.2.4.tar.gz", hash = "sha256:f84d8ec9bf50dd69f551da78925a23d110864e7706551f590cdade27646f7883", size = 6489 }
+
+[[package]]
+name = "treescope"
+version = "0.1.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/40/34/8ad5475c26837ca400c77951bcc0788b5f291d1509ae2eda5f97b042c24a/treescope-0.1.7.tar.gz", hash = "sha256:2c82ecb633f18d50e5809dd473703cf05aa074a4f3d1add74de7cf7ccdf81ae3", size = 530052 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/7d/f6da2b223749c58ec8ff95c87319196765fed05bd44dd86fb9bc4bf35f77/treescope-0.1.7-py3-none-any.whl", hash = "sha256:14e6527d4bfe6770ac9cbb8058e49b6685444d7cd0d3f85fd10c42491848b102", size = 175566 },
+]
 
 [[package]]
 name = "triton"

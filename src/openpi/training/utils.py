@@ -2,10 +2,11 @@ from collections.abc import Callable
 import re
 from typing import Any
 
+from flax import nnx
 from flax import struct
 import jax
-import optax
 
+from openpi.models import model as _model
 from openpi.shared import array_typing as at
 
 
@@ -13,12 +14,13 @@ from openpi.shared import array_typing as at
 @struct.dataclass
 class TrainState:
     step: at.Int[at.ArrayLike, ""]
-    params: at.Params
-    opt_state: at.PyTree
-    tx: optax.GradientTransformation = struct.field(pytree_node=False)
+    params: nnx.State
+    model_def: nnx.GraphDef[_model.BaseModel]
+    opt_state: nnx.State
+    opt_def: nnx.GraphDef[nnx.Optimizer]
 
     ema_decay: float | None = struct.field(pytree_node=False)
-    ema_params: at.Params | None
+    ema_params: nnx.State | None = None
 
 
 @at.typecheck

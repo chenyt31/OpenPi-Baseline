@@ -73,8 +73,9 @@ def create_trained_policy(
     checkpoint_dir = download.maybe_download(str(checkpoint_dir))
 
     logging.info("Loading model...")
-    model = train_config.create_model()
-    model = model.set_params(_model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16))
+    model = train_config.model.load(
+        _model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16), allow_extra_params=True
+    )
 
     data_config = train_config.data.create(train_config.metadata_dir, model)
     if norm_stats is None:

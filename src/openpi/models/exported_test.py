@@ -12,7 +12,7 @@ import openpi.training.checkpoints as _checkpoints
 
 @pytest.mark.manual
 def test_sample_actions():
-    model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_base/model")
+    model = exported.PiModel("s3://openpi-assets/exported/pi0_base/model")
     actions = model.sample_actions(jax.random.key(0), model.fake_obs(), num_steps=10)
 
     assert actions.shape == (1, model.action_horizon, model.action_dim)
@@ -20,25 +20,25 @@ def test_sample_actions():
 
 @pytest.mark.manual
 def test_exported_as_pi0():
-    pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_base/model")
-    model = pi_model.set_module(pi0.Module(), param_path="decoder")
+    exported_model = exported.PiModel("s3://openpi-assets/exported/pi0_base/model")
+    live_model = pi0.Pi0Config().load(exported_model.params["decoder"])
 
     key = jax.random.key(0)
-    obs = model.fake_obs()
+    obs = exported_model.fake_obs()
 
-    pi_actions = pi_model.sample_actions(key, obs, num_steps=10)
-    actions = model.sample_actions(key, obs, num_steps=10)
+    exported_actions = exported_model.sample_actions(key, obs, num_steps=10)
+    live_actions = live_model.sample_actions(key, obs, num_steps=10)
 
-    assert pi_actions.shape == (1, model.action_horizon, model.action_dim)
-    assert actions.shape == (1, model.action_horizon, model.action_dim)
+    assert exported_actions.shape == (1, exported_model.action_horizon, exported_model.action_dim)
+    assert live_actions.shape == (1, live_model.action_horizon, live_model.action_dim)
 
-    diff = jnp.max(jnp.abs(pi_actions - actions))
+    diff = jnp.max(jnp.abs(exported_actions - live_actions))
     assert diff < 10.0
 
 
 @pytest.mark.manual
 def test_processor_loading():
-    pi_model = exported.PiModel.from_checkpoint("s3://openpi-assets/exported/pi0_base/model")
+    pi_model = exported.PiModel("s3://openpi-assets/exported/pi0_base/model")
     assert "trossen_biarm_single_base_cam_24dim" in pi_model.processor_names()
 
     norm_stats = pi_model.norm_stats("trossen_biarm_single_base_cam_24dim")

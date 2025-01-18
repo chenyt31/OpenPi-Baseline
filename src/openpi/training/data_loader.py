@@ -10,7 +10,6 @@ import lerobot.common.datasets.lerobot_dataset as lerobot_dataset
 import numpy as np
 import torch
 
-import openpi.models.common as _common
 import openpi.models.model as _model
 import openpi.training.config as _config
 import openpi.transforms as _transforms
@@ -52,9 +51,9 @@ class TransformedDataset(Dataset[T_co]):
 
 
 class FakeDataset(Dataset):
-    def __init__(self, model: _model.Model, num_samples: int):
+    def __init__(self, model_config: _model.BaseModelConfig, num_samples: int):
         self._num_samples = num_samples
-        self._observation_spec, self._action_spec = _model.create_inputs_spec(model)
+        self._observation_spec, self._action_spec = model_config.inputs_spec()
 
     def __getitem__(self, index: SupportsIndex) -> dict:
         rng = jax.random.key(index.__index__())
@@ -82,18 +81,18 @@ class FakeDataset(Dataset):
         return self._num_samples
 
 
-def create_dataset(data_config: _config.DataConfig, model: _model.Model) -> Dataset:
+def create_dataset(data_config: _config.DataConfig, model_config: _model.BaseModelConfig) -> Dataset:
     """Create a dataset for training."""
     repo_id = data_config.repo_id
     if repo_id == "fake":
-        return FakeDataset(model, num_samples=1024)
+        return FakeDataset(model_config, num_samples=1024)
 
     dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(
         repo_id, root=data_config.dataset_root, local_files_only=data_config.local_files_only
     )
     return lerobot_dataset.LeRobotDataset(
         data_config.repo_id,
-        delta_timestamps={"action": [t / dataset_meta.fps for t in range(model.action_horizon)]},
+        delta_timestamps={"action": [t / dataset_meta.fps for t in range(model_config.action_horizon)]},
         root=data_config.dataset_root,
         local_files_only=data_config.local_files_only,
     )
@@ -123,19 +122,17 @@ def transform_dataset(dataset: Dataset, data_config: _config.DataConfig, *, skip
 
 def create_data_loader(
     config: _config.TrainConfig,
-    model: _model.Model,
     *,
     sharding: jax.sharding.Sharding | None = None,
     skip_norm_stats: bool = False,
     shuffle: bool = False,
     num_batches: int | None = None,
     num_workers: int = 0,
-) -> DataLoader[tuple[_common.Observation, _common.Actions]]:
+) -> DataLoader[tuple[_model.Observation, _model.Actions]]:
     """Create a data loader for training.
 
     Args:
         config: The training configuration.
-        model: The model to use for the data loader.
         sharding: The sharding to use for the data loader. If None, the data loader will
             use a single device sharding.
         skip_norm_stats: Whether to skip data normalization.
@@ -146,9 +143,9 @@ def create_data_loader(
         num_workers: The number of worker processes to use. If zero, the data loader will
             execute in the main process.
     """
-    data_config = config.data.create(config.metadata_dir, model)
+    data_config = config.data.create(config.metadata_dir, config.model)
 
-    dataset = create_dataset(data_config, model)
+    dataset = create_dataset(data_config, config.model)
     dataset = transform_dataset(dataset, data_config, skip_norm_stats=skip_norm_stats)
 
     data_loader = TorchDataLoader(
@@ -171,7 +168,7 @@ def create_data_loader(
 
         def __iter__(self):
             for batch in self._data_loader:
-                yield _common.Observation.from_dict(batch), batch["actions"]
+                yield _model.Observation.from_dict(batch), batch["actions"]
 
     return DataLoaderImpl(data_config, data_loader)
 

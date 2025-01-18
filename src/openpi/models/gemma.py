@@ -29,7 +29,7 @@ from collections.abc import Callable, Sequence
 import dataclasses
 import logging
 import math
-from typing import Literal
+from typing import Literal, TypeAlias
 
 import einops
 import flax.linen as nn
@@ -304,7 +304,7 @@ class Attention(nn.Module):
     configs: Sequence[Config]
 
     @nn.compact
-    def __call__(self, xs, positions, attn_mask, decode: bool):  # noqa: FBT001
+    def __call__(self, xs, positions, attn_mask, kv_cache):
         # all experts must share the same head dim, num heads, and num kv heads for self-attention to work
         assert all(config.head_dim == self.configs[0].head_dim for config in self.configs)
         assert all(config.num_heads == self.configs[0].num_heads for config in self.configs)
@@ -372,15 +372,10 @@ class Attention(nn.Module):
         # should still be half-precision here (if input was half-precision)
         assert q.dtype == k.dtype == v.dtype == dtype
 
-        if decode:
-            if not self.has_variable("cache", "k_cache"):
-                # initial prefill
-                self.put_variable("cache", "k_cache", k)
-                self.put_variable("cache", "v_cache", v)
-            else:
-                # decoding
-                k = jnp.concatenate([self.get_variable("cache", "k_cache"), k], axis=1)
-                v = jnp.concatenate([self.get_variable("cache", "v_cache"), v], axis=1)
+        if kv_cache is not None:
+            cache_k, cache_v = kv_cache
+            k = jnp.concatenate([cache_k, k], axis=1)
+            v = jnp.concatenate([cache_v, v], axis=1)
 
         q = einops.rearrange(q, "B T (K G) H -> B T K G H", K=self.configs[0].num_kv_heads)
         logits = jnp.einsum("BTKGH,BSKH->BKGTS", q, k, preferred_element_type=jnp.float32)
@@ -422,7 +417,7 @@ class Attention(nn.Module):
             else:
                 out.append(None)
 
-        return out
+        return out, (k, v)
 
 
 @at.typecheck
@@ -466,8 +461,8 @@ class Block(nn.Module):
     dropout_bdims: tuple[int, ...] = ()
 
     @nn.compact
-    def __call__(self, xs, unused_scan_arg, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
-        xs = sharding.annotate_batch_axis_sharding_on_first_dim(xs)
+    def __call__(self, xs, kv_cache, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
+        xs = sharding.activation_sharding_constraint(xs)
         drop = nn.Dropout(self.dropout, self.dropout_bdims) if self.dropout else lambda x, _: x
 
         attn = Attention(configs=self.configs, name="attn")
@@ -478,13 +473,12 @@ class Block(nn.Module):
                 x = RMSNorm(name=_name("pre_attention_norm", i))(x)  # noqa: PLW2901
             pre_attn.append(x)
 
-        pre_attn = sharding.annotate_batch_axis_sharding_on_first_dim(pre_attn)
-
-        post_attn = attn(pre_attn, positions, attn_mask, decode)
-        post_attn = sharding.annotate_batch_axis_sharding_on_first_dim(post_attn)
+        pre_attn = sharding.activation_sharding_constraint(pre_attn)
+        post_attn, kv_cache = attn(pre_attn, positions, attn_mask, kv_cache)
         post_attn = jax.tree.map(lambda x: drop(x, deterministic), post_attn)
+        post_attn = sharding.activation_sharding_constraint(post_attn)
         xs = jax.tree.map(lambda x, y: x + y, xs, post_attn)
-        xs = sharding.annotate_batch_axis_sharding_on_first_dim(xs)
+        xs = sharding.activation_sharding_constraint(xs)
 
         out = []
         for i, (x, config) in enumerate(zip(xs, self.configs, strict=True)):
@@ -497,13 +491,16 @@ class Block(nn.Module):
                 )(x)
             out.append(x)
 
-        out = sharding.annotate_batch_axis_sharding_on_first_dim(out)
+        out = sharding.activation_sharding_constraint(out)
 
         out = jax.tree.map(lambda x: drop(x, deterministic), out)
         xs = jax.tree.map(lambda x, y: x + y, xs, out)
-        xs = sharding.annotate_batch_axis_sharding_on_first_dim(xs)
+        xs = sharding.activation_sharding_constraint(xs)
 
-        return xs, unused_scan_arg
+        return xs, kv_cache
+
+
+KVCache: TypeAlias = tuple[at.Float[at.Array, "l b _t _k _h"], at.Float[at.Array, "l b _t _v _h"]]
 
 
 @at.typecheck
@@ -516,68 +513,66 @@ class Module(nn.Module):
     dropout: float = 0.0
     dropout_bdims: tuple[int, ...] = ()  # Every float is dropped independently.
 
-    @nn.compact
-    @at.typecheck
-    def __call__(
-        self,
-        *,
-        tokens: at.Int[at.Array, "b t"] | None,
-        # list of token arrays, one for each expert, or None if that expert should not be run
-        embedded: Sequence[at.Float[at.Array, "b _t _d"] | None] | None,
-        positions: at.Int[at.Array, "b t"] | None = None,
-        mask: at.Bool[at.Array, "b t s"] | None = None,
-        decode: bool = False,
-        deterministic: bool = True,
-    ) -> at.Float[at.Array, "b t d"] | Sequence[at.Float[at.Array, "b _t _d"] | None]:
+    def setup(self):
         # all experts must have the same depth
         assert all(config.depth == self.configs[0].depth for config in self.configs)
 
-        # embedder for first expert only
-        embedder = Embedder(
+        self.embedder = Embedder(
             vocab_size=PALIGEMMA_VOCAB_SIZE,
-            embed_dim=self.configs[0].width,
+            embed_dim=self.configs[0].width,  # embedder for first expert only
             name="embedder",
         )
-
-        if tokens is not None:
-            # embed only
-            assert embedded is None, "Cannot pass both tokens and embedded"
-            return embedder.encode(tokens).astype(self.embed_dtype)
-
-        assert embedded is not None
-        assert positions is not None
-        assert mask is not None
-
-        embedded = jax.tree.map(lambda e: e.astype(self.embed_dtype), embedded)
-
-        mask = jnp.asarray(mask)[:, None, :, :]
-
         block_cls = nn.remat(
             Block,
             prevent_cse=False,
-            static_argnums=(5, 6),  # 0=self, 5=decode, 6=deterministic
+            static_argnums=(5,),  # 0=self, 5=deterministic
             policy=jax.checkpoint_policies.nothing_saveable,
         )
-
-        block = nn.scan(
+        self.layers = nn.scan(
             block_cls,
-            # cache has axis 1 since we want leading dimension to be batch size.
-            variable_axes={"params": 0, "cache": 1},
+            variable_axes={"params": 0},
             split_rngs={"params": True, "dropout": True},
-            in_axes=nn.broadcast,
+            in_axes=(0, nn.broadcast, nn.broadcast, nn.broadcast),  # 0=kv_cache, 1=positions, 2=mask, 3=decode
             length=self.configs[0].depth,
         )(
-            parent=self.scope.push("layers"),
             configs=self.configs,
             dropout=self.dropout,
             dropout_bdims=self.dropout_bdims,
         )
+        self.final_norms = [RMSNorm(name=_name("final_norm", i)) for i in range(len(self.configs))]
 
-        embedded, _ = block(embedded, (), positions, mask, decode, deterministic)
+    @at.typecheck
+    def embed(self, tokens: at.Int[at.Array, "b t"]) -> at.Float[at.Array, "b t d"]:
+        return self.embedder.encode(tokens).astype(self.embed_dtype)
+
+    @at.typecheck
+    def __call__(
+        self,
+        # list of token arrays, one for each expert, or None if that expert should not be run
+        embedded: Sequence[at.Float[at.Array, "b _t _d"] | None],
+        positions: at.Int[at.Array, "b t"],
+        mask: at.Bool[at.Array, "b t s"],
+        *,
+        kv_cache: KVCache | None = None,
+        deterministic: bool = True,
+    ) -> tuple[Sequence[at.Float[at.Array, "b _t _d"] | None], KVCache]:
+        embedded = jax.tree.map(lambda e: e.astype(self.embed_dtype), embedded)
+        mask = jnp.asarray(mask)[:, None, :, :]
+
+        embedded, kv_cache = self.layers(embedded, kv_cache, positions, mask, deterministic)
 
         assert all(e.dtype == jnp.dtype(self.embed_dtype) for e in embedded if e is not None)
 
-        return [RMSNorm(name=_name("final_norm", i))(e) if e is not None else e for i, e in enumerate(embedded)]
+        return [f(e) if e is not None else e for f, e in zip(self.final_norms, embedded, strict=True)], kv_cache
+
+    def init(self):
+        """Convenience method for initializing all parameters, necessary due to the quirks of linen."""
+        self.embed(jnp.zeros((1, 1), dtype=jnp.int32))
+        self(
+            [jnp.zeros((1, 1, c.width)) for c in self.configs],
+            jnp.zeros((1, len(self.configs)), dtype=jnp.int32),
+            jnp.zeros((1, len(self.configs), len(self.configs)), dtype=bool),
+        )
 
 
 def _apply_rope(x, *, positions, max_wavelength=10_000):

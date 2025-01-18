@@ -35,11 +35,11 @@ class PaligemmaTokenizer(Tokenizer):
         tokens = self._tokenizer.encode(cleaned_text, add_bos=True) + self._tokenizer.encode("\n")
         tokens_len = len(tokens)
         if tokens_len < self._max_len:
-            padding = [0] * (self._max_len - tokens_len)
-            mask = [1] * tokens_len + padding
+            padding = [False] * (self._max_len - tokens_len)
+            mask = [True] * tokens_len + padding
             tokens = tokens + padding
         else:
             tokens = tokens[: self._max_len]
-            mask = [1] * self._max_len
+            mask = [True] * self._max_len
 
         return np.asarray(tokens), np.asarray(mask)

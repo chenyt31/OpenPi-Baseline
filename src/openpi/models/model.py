@@ -47,6 +47,10 @@ class Observation:
     tokenized_prompt: at.Int[at.Array, "*b l"] | None = None
     # Tokenized prompt mask.
     tokenized_prompt_mask: at.Bool[at.Array, "*b l"] | None = None
+    # Token auto-regressive mask (for FAST autoregressive model).
+    token_ar_mask: at.Int[at.Array, "*b l"] | None = None
+    # Token loss mask (for FAST autoregressive model).
+    token_loss_mask: at.Bool[at.Array, "*b l"] | None = None
 
     @classmethod
     def from_dict(cls, data: at.PyTree[at.ArrayLike]) -> "Observation":
@@ -64,6 +68,8 @@ class Observation:
             state=data["state"],
             tokenized_prompt=data.get("tokenized_prompt"),
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
+            tokenized_targets=data.get("tokenized_targets"),
+            token_loss_mask=data.get("token_loss_mask"),
         )
 
     def to_dict(self) -> at.PyTree[at.ArrayLike]:

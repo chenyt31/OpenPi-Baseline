@@ -15,16 +15,13 @@ import openpi.training.data_loader as _data_loader
 
 
 def create_dataset(config: _config.TrainConfig) -> tuple[str, _data_loader.Dataset]:
-    model = config.create_model()
-    data_config = config.data.create(config.metadata_dir, model)
+    data_config = config.data.create(config.metadata_dir, config.model)
     if data_config.repo_id is None:
         raise ValueError("Data config must have a repo_id")
+    dataset = _data_loader.create_dataset(data_config, config.model)
     dataset = _data_loader.TransformedDataset(
-        _data_loader.create_dataset(data_config, model),
-        [
-            *data_config.repack_transforms.inputs,
-            *data_config.data_transforms.inputs,
-        ],
+        dataset,
+        [*data_config.repack_transforms.inputs, *data_config.data_transforms.inputs],
     )
     return data_config.repo_id, dataset
 

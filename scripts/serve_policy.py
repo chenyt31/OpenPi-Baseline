@@ -25,6 +25,7 @@ class EnvMode(enum.Enum):
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
     DROID_FAST = "droid_fast"
+    DROID_FAST_EXPERT = "droid_fast_expert"
     CALVIN = "calvin"
     LIBERO = "libero"
 
@@ -174,6 +175,14 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
                 output_layers=[droid_policy.DroidOutputs()],
             )
         case EnvMode.DROID_FAST:
+            tokenizer_path = "physical-intelligence/fast"
+            config = make_policy_config(
+                input_layers=[droid_policy.DroidInputsFAST(action_dim=model.action_dim)],
+                output_layers=[droid_policy.DroidOutputs()],
+                sample_kwargs={},
+            )
+        case EnvMode.DROID_FAST_EXPERT:
+            tokenizer_path = "KarlP/fast-droid"
             config = make_policy_config(
                 input_layers=[droid_policy.DroidInputsFAST(action_dim=model.action_dim)],
                 output_layers=[droid_policy.DroidOutputs()],
@@ -192,7 +201,11 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
         case _:
             raise ValueError(f"Unknown environment mode: {env}")
 
-    return _policy_config.create_fast_policy(config) if "FAST" in str(env) else _policy_config.create_policy(config)
+    return (
+        _policy_config.create_fast_policy(config, tokenizer_path)
+        if "FAST" in str(env)
+        else _policy_config.create_policy(config)
+    )
 
 
 def create_policy(args: Args) -> _policy.Policy:

@@ -47,7 +47,7 @@ def create_policy(config: PolicyConfig) -> _policy.Policy:
     )
 
 
-def create_fast_policy(config: PolicyConfig) -> _policy.Policy:
+def create_fast_policy(config: PolicyConfig, tokenizer_path: str) -> _policy.Policy:
     """Creates a pi0 FAST policy."""
     return _policy.Policy(
         config.model,
@@ -55,12 +55,13 @@ def create_fast_policy(config: PolicyConfig) -> _policy.Policy:
             *config.input_layers,
             transforms.NormalizeQuantile(config.norm_stats),
             transforms.TokenizeFASTInputs(
-                tokenizer.FASTTokenizer(config.model.max_token_len), default_prompt=config.default_prompt
+                tokenizer.FASTTokenizer(config.model.max_token_len, tokenizer_path),
+                default_prompt=config.default_prompt,
             ),
         ],
         output_transforms=[
             transforms.ExtractFASTActions(
-                tokenizer.FASTTokenizer(config.model.max_token_len),
+                tokenizer.FASTTokenizer(config.model.max_token_len, tokenizer_path),
                 action_horizon=15,
                 action_dim=8,
             ),

@@ -100,16 +100,15 @@ def init_train_state(
         state.replace_by_pure_dict(params)
         model = nnx.merge(graphdef, state)
 
-        # initialize the optimizer
-        optimizer = nnx.Optimizer(model, tx)
+        params = nnx.state(model)
         return training_utils.TrainState(
             step=0,
-            params=nnx.state(model),
+            params=params,
             model_def=nnx.graphdef(model),
-            opt_state=nnx.state(optimizer),
-            opt_def=nnx.graphdef(optimizer),
+            tx=tx,
+            opt_state=tx.init(params),
             ema_decay=config.ema_decay,
-            ema_params=None if config.ema_decay is None else nnx.state(model),
+            ema_params=None if config.ema_decay is None else params,
         )
 
     train_state_shape = jax.eval_shape(init, init_rng)
@@ -129,7 +128,7 @@ def train_step(
     batch: tuple[_model.Observation, _model.Actions],
 ) -> tuple[training_utils.TrainState, dict[str, at.Array]]:
     model = nnx.merge(state.model_def, state.params)
-    optimizer = nnx.merge(state.opt_def, state.opt_state)
+    model.train()
 
     @at.typecheck
     def loss_fn(
@@ -141,13 +140,13 @@ def train_step(
     train_rng = jax.random.fold_in(rng, state.step)
     observation, actions = batch
     loss, grads = nnx.value_and_grad(loss_fn)(model, train_rng, observation, actions)
-    optimizer.update(grads)  # updates the model and optimizer params in-place
-
-    new_state = state.replace(step=state.step + 1, params=nnx.state(model), opt_state=nnx.state(optimizer))
+    updates, new_opt_state = state.tx.update(grads, state.opt_state, state.params)
+    new_params = optax.apply_updates(state.params, updates)
+    new_state = state.replace(step=state.step + 1, params=new_params, opt_state=new_opt_state)
     if state.ema_decay is not None:
         new_state = new_state.replace(
             ema_params=jax.tree.map(
-                lambda old, new: state.ema_decay * old + (1 - state.ema_decay) * new, state.ema_params, nnx.state(model)
+                lambda old, new: state.ema_decay * old + (1 - state.ema_decay) * new, state.ema_params, new_params
             )
         )
 

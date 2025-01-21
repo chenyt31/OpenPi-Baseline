@@ -24,6 +24,7 @@ class EnvMode(enum.Enum):
     ALOHA = "aloha"
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
+    DROID_FAST = "droid_fast"
     CALVIN = "calvin"
     LIBERO = "libero"
 
@@ -138,7 +139,7 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
         output_layers: Sequence[transforms.DataTransformFn],
         sample_kwargs: dict[str, Any] | None = None,
     ):
-        sample_kwargs = sample_kwargs or {"num_steps": 10}
+        sample_kwargs = sample_kwargs if sample_kwargs is not None else {"num_steps": 10}
         return _policy_config.PolicyConfig(
             model=model,
             norm_stats=model.norm_stats(processor),
@@ -172,6 +173,12 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
                 input_layers=[droid_policy.DroidInputs(action_dim=model.action_dim)],
                 output_layers=[droid_policy.DroidOutputs()],
             )
+        case EnvMode.DROID_FAST:
+            config = make_policy_config(
+                input_layers=[droid_policy.DroidInputsFAST(action_dim=model.action_dim)],
+                output_layers=[droid_policy.DroidOutputs()],
+                sample_kwargs={},
+            )
         case EnvMode.CALVIN:
             config = make_policy_config(
                 input_layers=[calvin_policy.CalvinInputs(action_dim=model.action_dim)],
@@ -185,7 +192,7 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
         case _:
             raise ValueError(f"Unknown environment mode: {env}")
 
-    return _policy_config.create_policy(config)
+    return _policy_config.create_fast_policy(config) if "FAST" in str(env) else _policy_config.create_policy(config)
 
 
 def create_policy(args: Args) -> _policy.Policy:

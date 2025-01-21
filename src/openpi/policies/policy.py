@@ -34,7 +34,7 @@ class Policy(BasePolicy):
         self._input_transform = _transforms.compose(transforms)
         self._output_transform = _transforms.compose(output_transforms)
         self._rng = rng or jax.random.key(0)
-        self._sample_kwargs = sample_kwargs or {"num_steps": 10}
+        self._sample_kwargs = sample_kwargs if sample_kwargs is not None else {"num_steps": 10}
         self._metadata = metadata or {}
 
     @override

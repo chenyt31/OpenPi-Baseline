@@ -10,8 +10,8 @@ import pydantic
 class NormStats:
     mean: numpydantic.NDArray
     std: numpydantic.NDArray
-    q01: numpydantic.NDArray  # 1st quantile
-    q99: numpydantic.NDArray  # 99th quantile
+    q01: numpydantic.NDArray | None = None  # 1st quantile
+    q99: numpydantic.NDArray | None = None  # 99th quantile
 
 
 class RunningStats:

@@ -117,6 +117,10 @@ class FASTTokenizer(Tokenizer):
             return np.zeros((action_horizon, action_dim))
 
         # Extract actions from decoded tokens
-        raw_action_tokens = decoded_tokens.split("Action: ")[1].split("|")[0].strip()
-        action_tokens = self._fast_tokenizer.vocab_size() - 1 - self._fast_skip_tokens - raw_action_tokens
-        return self._fast_tokenizer.decode(action_tokens.tolist(), action_horizon, action_dim)
+        raw_action_tokens = np.array(
+            self._paligemma_tokenizer.encode(decoded_tokens.split("Action: ")[1].split("|")[0].strip())
+        )
+        action_tokens = self._paligemma_tokenizer.vocab_size() - 1 - self._fast_skip_tokens - raw_action_tokens
+        return self._fast_tokenizer.decode(
+            [action_tokens.tolist()], time_horizon=action_horizon, action_dim=action_dim
+        )[0]

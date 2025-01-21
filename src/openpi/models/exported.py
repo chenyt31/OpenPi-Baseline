@@ -99,8 +99,14 @@ class PiModel(_model.BaseModel):
 
         # Extract the action properties from the output spec.
         output_spec = jax.tree.unflatten(self.exported.out_tree, self.exported.out_avals)
-        actions_spec = output_spec["actions"]
-        action_horizon, action_dim = actions_spec.shape
+        if "actions" in output_spec:
+            actions_spec = output_spec["actions"]
+            action_horizon, action_dim = actions_spec.shape
+        else:
+            # FAST models only have tokenized actions in the output spec.
+            # Need to guess dimensionality for now.
+            action_horizon = 15
+            action_dim = 8
         max_token_len = self.example_spec["prompt_tokens"].shape[-1]
 
         super().__init__(action_dim=action_dim, action_horizon=action_horizon, max_token_len=max_token_len)
@@ -134,7 +140,10 @@ class PiModel(_model.BaseModel):
         rng_data = jax.random.key_data(rng)
         result = self.exported.call(jax.tree.map(lambda x: x.value, self.params), rng_data, example, sample_kwargs)
 
-        return _make_batch(result)["actions"]
+        if "actions" in result:
+            return _make_batch(result)["actions"]
+        # For FAST models, the output is the tokenized actions.
+        return _make_batch(result)["output_tokens"]
 
     @override
     def compute_loss(self):
@@ -191,8 +200,17 @@ def _obs_to_example(obs: _model.Observation, example_spec: dict) -> dict:
         "prompt_tokens": obs.tokenized_prompt,
     }
 
-    # NOTE(ury): This is used to support the new version with DCT co-training.
-    if "mask_prompt_input" in example_spec:
+    if obs.token_ar_mask is not None:
+        # FAST models
+        result = {
+            **result,
+            "mask_prompt_input": obs.tokenized_prompt_mask.astype(jnp.int32),
+            "mask_ar": obs.token_ar_mask,
+            "tokens": obs.tokenized_prompt,
+            "mask_input": obs.tokenized_prompt_mask.astype(jnp.int32),
+        }
+    elif "mask_prompt_input" in example_spec:
+        # NOTE(ury): This is used to support the new version with DCT co-training.
         allow_action_diffusion_attention = example_spec["allow_action_diffusion_attention"]
         mask_ar = example_spec["mask_ar"]
 
@@ -257,10 +275,24 @@ def _import_norm_stats(ckpt_dir: pathlib.Path | str, processor_name: str) -> dic
         # This is the new Normalize processor.
         if "input_norms" in norm_stats:
             actions = norm_stats["output_norms"]["actions"]
-            outputs.append(_normalize.NormStats(mean=actions["mean"], std=actions["std"]))
+            outputs.append(
+                _normalize.NormStats(
+                    mean=actions["mean"],
+                    std=actions["std"],
+                    q01=actions.get("q01"),
+                    q99=actions.get("q99"),
+                )
+            )
 
             state = norm_stats["input_norms"]["state"]
-            outputs.append(_normalize.NormStats(mean=state["mean"], std=state["std"]))
+            outputs.append(
+                _normalize.NormStats(
+                    mean=state["mean"],
+                    std=state["std"],
+                    q01=state.get("q01"),
+                    q99=state.get("q99"),
+                )
+            )
 
         # This is to support the old NormalizeActions / NormalizeState processor combo.
         else:

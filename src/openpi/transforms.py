@@ -145,6 +145,36 @@ class Unnormalize(DataTransformFn):
 
 
 @dataclasses.dataclass(frozen=True)
+class NormalizeQuantile(DataTransformFn):
+    norm_stats: at.PyTree[NormStats] | None
+    strict: bool = False
+
+    def __call__(self, data: DataDict) -> DataDict:
+        def normalize(x, stats: NormStats):
+            return (x - stats.q01) / (stats.q99 - stats.q01 + 1e-6) * 2.0 - 1.0
+
+        if self.norm_stats is None:
+            return data
+
+        return apply_tree(data, self.norm_stats, normalize, strict=self.strict)
+
+
+@dataclasses.dataclass(frozen=True)
+class UnnormalizeQuantile(DataTransformFn):
+    norm_stats: at.PyTree[NormStats] | None
+
+    def __call__(self, data: DataDict) -> DataDict:
+        def unnormalize(x, stats: NormStats):
+            return (x + 1.0) / 2.0 * (stats.q99 - stats.q01 + 1e-6) + stats.q01
+
+        if self.norm_stats is None:
+            return data
+
+        # Make sure that all the keys in the norm stats are present in the data.
+        return apply_tree(data, self.norm_stats, unnormalize, strict=True)
+
+
+@dataclasses.dataclass(frozen=True)
 class ResizeImages(DataTransformFn):
     height: int
     width: int
@@ -224,6 +254,54 @@ class TokenizePrompt(DataTransformFn):
 
         tokens, token_masks = self.tokenizer.tokenize(prompt)
         return {**data, "tokenized_prompt": tokens, "tokenized_prompt_mask": token_masks}
+
+
+@dataclasses.dataclass(frozen=True)
+class TokenizeFASTInputs(DataTransformFn):
+    tokenizer: _tokenizer.FASTTokenizer
+
+    # Default prompt that should be used if "prompt" is not present in the data.
+    # If None, `DEFAULT_PROMPT` is used.
+    default_prompt: str | None = None
+
+    def __call__(self, data: DataDict) -> DataDict:
+        if (prompt := data.pop("prompt", None)) is None:
+            prompt = self.default_prompt or DEFAULT_PROMPT
+
+        if not isinstance(prompt, str):
+            prompt = prompt.item()
+
+        state = data["state"]
+        actions = data.get("actions", None)
+
+        tokens, token_mask, ar_mask, loss_mask = self.tokenizer.tokenize(prompt, state, actions)
+        return {
+            **data,
+            "tokenized_prompt": tokens,
+            "tokenized_prompt_mask": token_mask,
+            "token_ar_mask": ar_mask,
+            "token_loss_mask": loss_mask,
+        }
+
+
+@dataclasses.dataclass(frozen=True)
+class ExtractFASTActions(DataTransformFn):
+    tokenizer: _tokenizer.FASTTokenizer
+    action_horizon: int
+    action_dim: int
+
+    def __call__(self, data: DataDict) -> DataDict:
+        if "actions" not in data:
+            return data
+
+        # Model outputs are saved in "actions", but for FAST models they represent tokens.
+        tokens = data.pop("actions")
+
+        actions = self.tokenizer.extract_actions(tokens, self.action_horizon, self.action_dim)
+        return {
+            **data,
+            "actions": actions,
+        }
 
 
 def flatten_dict(tree: at.PyTree) -> dict:

@@ -1,13 +1,19 @@
 """
-Gemma model implementation from big_vision/models/ppp/gemma.py
+Gemma model implementation from big_vision/models/ppp/gemma.py (with small modifications for NNX compatibility)
 Used for FAST autoregressive policies.
 """
+
+from typing import Literal, TypeAlias
 
 import einops
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import ml_collections
+
+import openpi.shared.array_typing as at
+
+Variant = Literal["gemma_2b"]
 
 
 def get_config(variant):
@@ -44,47 +50,6 @@ def _apply_rope(x, *, positions, max_wavelength=10_000):
     res = jnp.concatenate([x1 * cos - x2 * sin, x2 * cos + x1 * sin], axis=-1)
     assert res.dtype == jnp.float32
     return res
-
-
-def _update_kv_cache(module, k, v, cache_size, cache_dtype):
-    """Updates KV cache and returns its current contents."""
-    initialized = module.has_variable("cache", "idx")
-    batch_size, update_len, num_heads, head_dim = k.shape
-    cache_dtype = cache_dtype or k.dtype
-
-    # Idx of which cache row to update next is the same for all examples, so that
-    # it allows to update with dynamic_update_slice. But in order to keep things
-    # nicely partitioned we store it with leading batch dimension and use only
-    # the first entry.
-    idx = module.variable("cache", "idx", jnp.zeros, (batch_size,), jnp.int32)
-
-    kv_shape = (batch_size, cache_size, num_heads, head_dim)
-    k_cache = module.variable("cache", "k_cache", jnp.zeros, kv_shape, cache_dtype)
-    v_cache = module.variable("cache", "v_cache", jnp.zeros, kv_shape, cache_dtype)
-
-    if initialized:  # write k, v in the next cache position.
-        assert update_len == 1, update_len
-        # Note: idx is the same for all examples. Use value from example 0.
-        indices = (0, idx.value[0], 0, 0)
-        k_cache.value = jax.lax.dynamic_update_slice(k_cache.value, k.astype(cache_dtype), indices)
-        v_cache.value = jax.lax.dynamic_update_slice(v_cache.value, v.astype(cache_dtype), indices)
-        idx.value = idx.value + 1
-    else:  # init cache with k, v after padding to cache_size.
-        prefill_len = k.shape[1]
-        pad_width = ((0, 0), (0, cache_size - prefill_len), (0, 0), (0, 0))
-        k_cache.value = jnp.pad(k.astype(cache_dtype), pad_width)
-        v_cache.value = jnp.pad(v.astype(cache_dtype), pad_width)
-        idx.value = idx.value + prefill_len
-
-    return k_cache.value.astype(k.dtype), v_cache.value.astype(v.dtype)
-
-
-def _get_kv_cache(module, k, v):
-    """Just retrieves the KV cache (with current keys and values appended), does not update it."""
-    assert module.has_variable("cache", "idx"), "Cache has not been initialized"
-    k = jnp.concatenate([module.get_variable("cache", "k_cache"), k], axis=1)
-    v = jnp.concatenate([module.get_variable("cache", "v_cache"), v], axis=1)
-    return k, v
 
 
 class Einsum(nn.Module):
@@ -132,6 +97,9 @@ class Embedder(nn.Module):
         return jnp.dot(x, self.input_embedding_table.T)
 
 
+KVCache: TypeAlias = tuple[at.Int[at.Array, " b"], at.Float[at.Array, "b _t _k _h"], at.Float[at.Array, "b _t _v _h"]]
+
+
 class Attention(nn.Module):
     """Attention module."""
 
@@ -159,8 +127,28 @@ class Attention(nn.Module):
             shape=(self.num_heads, self.head_dim, self.features),
         )
 
+    def _init_cache(self, k, v, cache_size):
+        """Initialize KV cache"""
+        prefill_len = k.shape[1]
+        pad_width = ((0, 0), (0, cache_size - prefill_len), (0, 0), (0, 0))
+        cache_dtype = self.cache_dtype or k.dtype
+        k_cache = jnp.pad(k.astype(cache_dtype), pad_width)
+        v_cache = jnp.pad(v.astype(cache_dtype), pad_width)
+        idx = jnp.zeros((k.shape[0],), dtype=jnp.int32) + prefill_len
+        return idx, k_cache, v_cache
+
+    def _update_cache(self, k, v, idx, k_cache, v_cache):
+        """Update KV cache with new values"""
+        assert k.shape[1] == 1, "Only support kv-cache updates of length 1"
+        indices = (0, idx[0], 0, 0)
+        cache_dtype = self.cache_dtype or k.dtype
+        k_new = jax.lax.dynamic_update_slice(k_cache, k.astype(cache_dtype), indices)
+        v_new = jax.lax.dynamic_update_slice(v_cache, v.astype(cache_dtype), indices)
+        idx_new = idx + 1
+        return idx_new, k_new, v_new
+
     @nn.compact
-    def __call__(self, x, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
+    def __call__(self, x, positions, attn_mask, kv_cache, decode, deterministic=True):  # noqa: FBT002
         dtype = x.dtype  # original dtype, could be half-precision
         if self.num_kv_heads == self.num_heads:
             q, k, v = self.qkv_einsum("BSD,3KDH->3BSKH", x)
@@ -173,15 +161,14 @@ class Attention(nn.Module):
 
         k = _apply_rope(k, positions=positions)  # promotes to float32
 
-        if decode:
-            # only update the KV cache during initial prefill and subsequent extend_cache calls, where k.shape[1] == 1
-            # indicates a single token is being decoded
-            if not self.has_variable("cache", "idx") or k.shape[1] == 1:
-                k, v = _update_kv_cache(self, k, v, cache_size=attn_mask.shape[-1], cache_dtype=self.cache_dtype)
-            else:
-                # otherwise, when decoding multiple tokens at once, we can still use the cache from the initial prefill but we will
-                # not extend it
-                k, v = _get_kv_cache(self, k, v)
+        if kv_cache is None:
+            idx, k_cache, v_cache = self._init_cache(k, v, attn_mask.shape[-1])
+        else:
+            idx, k_cache, v_cache = kv_cache
+            idx, k_cache, v_cache = self._update_cache(k, v, idx, k_cache, v_cache)
+
+        k, v = k_cache, v_cache
+        kv_cache = (idx, k_cache, v_cache)
 
         q = einops.rearrange(q, "B T (K G) H -> B T K G H", K=self.num_kv_heads)
         logits = jnp.einsum("BTKGH,BSKH->BKGTS", q, k, preferred_element_type=jnp.float32)
@@ -199,7 +186,7 @@ class Attention(nn.Module):
 
         encoded = jnp.einsum("BKGTS,BSKH->BTKGH", probs, v)
         encoded = einops.rearrange(encoded, "B T K G H -> B T (K G) H")
-        return self.attn_vec_einsum("BTNH,NHD->BTD", encoded)
+        return self.attn_vec_einsum("BTNH,NHD->BTD", encoded), kv_cache
 
 
 class FeedForward(nn.Module):
@@ -261,10 +248,10 @@ class Block(nn.Module):
         else:
             self.drop = lambda x, _: x
 
-    def __call__(self, x, unused_scan_arg, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
+    def __call__(self, x, kv_cache, positions, attn_mask, decode, deterministic=True):  # noqa: FBT002
         x = nn.with_logical_constraint(x, ("act_batch", "act_len", "act_emb"))
         inputs_normalized = self.pre_attention_norm(x)
-        attn_output = self.attn(inputs_normalized, positions, attn_mask, decode, deterministic)
+        attn_output, kv_cache = self.attn(inputs_normalized, positions, attn_mask, kv_cache, decode, deterministic)
         attn_output = self.drop(attn_output, deterministic)
         attn_output += x
         residual = attn_output
@@ -272,10 +259,10 @@ class Block(nn.Module):
         outputs = self.mlp(attn_output)
         outputs = self.drop(outputs, deterministic)
         outputs = residual + outputs
-        return outputs, unused_scan_arg
+        return outputs, kv_cache
 
 
-class Model(nn.Module):
+class Module(nn.Module):
     """gemma model."""
 
     variant: str
@@ -300,15 +287,15 @@ class Model(nn.Module):
     @nn.compact
     def __call__(
         self,
-        tokens,
-        *,
+        tokens=None,
         embedded_prefix=None,
-        embed_only=False,
+        embed_only=False,  # noqa: FBT002
         pre_logits=None,
         positions=None,
         mask=None,
-        decode=False,
-        deterministic=True,
+        decode=False,  # noqa: FBT002
+        kv_cache=None,
+        deterministic=True,  # noqa: FBT002
     ):
         """Embed only, or complete forward pass.
 
@@ -386,28 +373,17 @@ class Model(nn.Module):
             "cache_dtype": self.cache_dtype,
         }
         layers = self.scope.push("layers")
-        if self.scan:
-            blocks = [
-                nn.scan(
-                    block_cls,
-                    # cache has axis 1 since we want leading dimension to be batch size.
-                    variable_axes={"params": 0, "cache": 1},
-                    split_rngs={"params": True, "dropout": True},
-                    in_axes=nn.broadcast,
-                    length=self.depth,
-                )(parent=layers, **block_kw)
-            ]
-        else:
-            blocks = [
-                block_cls(
-                    parent=layers.push(str(layer)),
-                    **block_kw,
-                )
-                for layer in range(self.depth)
-            ]
-        unused_scan_arg = ()
+        blocks = [
+            nn.scan(
+                block_cls,
+                variable_axes={"params": 0},
+                split_rngs={"params": True, "dropout": True},
+                in_axes=(0, nn.broadcast, nn.broadcast, nn.broadcast, nn.broadcast),  # 0=kv_cache, 1=positions, 2=mask
+                length=self.depth,
+            )(parent=layers, **block_kw)
+        ]
         for block in blocks:
-            x, unused_scan_arg = block(x, unused_scan_arg, positions, mask, decode, deterministic)
+            x, kv_cache = block(x, kv_cache, positions, mask, decode, deterministic)
 
         assert x.dtype == jnp.dtype(self.embed_dtype)  # Sanity check.
         out["encoded"] = x
@@ -418,4 +394,8 @@ class Model(nn.Module):
         x = embedder.decode(x)
         out["logits"] = x
 
-        return x, out
+        return x, kv_cache, out
+
+    def init(self):
+        """Convenience method for initializing all parameters, necessary due to the quirks of linen."""
+        self(jnp.zeros((1, 1), dtype=jnp.int32))

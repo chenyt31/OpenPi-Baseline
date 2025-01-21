@@ -9,6 +9,7 @@ import tyro
 
 import openpi.models.model as _model
 import openpi.models.pi0 as pi0
+import openpi.models.pi0_fast as pi0_fast
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.calvin_policy as calvin_policy
@@ -32,6 +33,8 @@ class DataConfig:
     repo_id: str | None = None
     # Contains precomputed normalization stats.
     norm_stats: dict[str, _transforms.NormStats] | None = None
+    # If true, will use quantile normalization instead of mean/std normalization.
+    use_quantile_norm: bool = False
 
     # Used to adopt the inputs from a dataset specific format to a common format
     # which is expected by the data transforms.
@@ -120,6 +123,79 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
                         default_prompt=self.default_prompt,
                     ),
                 ]
+            ),
+            local_files_only=self.local_files_only,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class LeRobotAlohaFASTDataConfig(DataConfigFactory):
+    # The LeRobot repo id.
+    repo_id: str = tyro.MISSING
+    # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
+    # Gripper dimensions will remain in absolute values.
+    use_delta_joint_actions: bool = False
+    # If provided, will determine the default prompt that be used by the model.
+    default_prompt: str | None = None
+    # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
+    # fine-tuning a pretrained model.
+    adapt_to_pi: bool = False
+    # If true, will disable syncing the dataset from the huggingface hub.
+    local_files_only: bool = False
+    # Repack transforms. Default is used if not provided.
+    repack_transforms: tyro.conf.Suppress[_transforms.Group | None] = None
+
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        norm_stats = None
+        if self.repo_id is not tyro.MISSING:
+            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
+            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
+
+        repack_transforms = self.repack_transforms or _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {"cam_high": "observation.images.top"},
+                        "state": "observation.state",
+                        "actions": "action",
+                    }
+                )
+            ]
+        )
+
+        data_transforms = _transforms.Group(
+            inputs=[aloha_policy.AlohaInputs(action_dim=model_config.action_dim, adapt_to_pi=self.adapt_to_pi)],
+            outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
+        )
+
+        if self.use_delta_joint_actions:
+            delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
+
+        return DataConfig(
+            repo_id=self.repo_id,
+            norm_stats=norm_stats,
+            use_quantile_norm=True,
+            repack_transforms=repack_transforms,
+            data_transforms=data_transforms,
+            model_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.ResizeImages(224, 224),
+                    _transforms.TokenizeFASTInputs(
+                        _tokenizer.FASTTokenizer(model_config.max_token_len),
+                        default_prompt=self.default_prompt,
+                    ),
+                ],
+                outputs=[
+                    _transforms.ExtractFASTActions(
+                        _tokenizer.FASTTokenizer(model_config.max_token_len),
+                        action_horizon=50,
+                        action_dim=14,
+                    )
+                ],
             ),
             local_files_only=self.local_files_only,
         )
@@ -262,6 +338,7 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_aloha_sim",
+        batch_size=1,
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             default_prompt="Transfer cube",
@@ -300,6 +377,24 @@ _CONFIGS = [
                 outputs=[libero_policy.LiberoOutputs()],
             )
         ),
+        num_train_steps=30_000,
+    ),
+    #
+    # FAST model configs.
+    #
+    TrainConfig(
+        name="pi0_fast_aloha_sim",
+        batch_size=2,
+        model=pi0_fast.Pi0FASTConfig(
+            action_horizon=50,
+            action_dim=14,
+            max_token_len=256,
+        ),
+        data=LeRobotAlohaFASTDataConfig(
+            repo_id="lerobot/aloha_sim_transfer_cube_human",
+            default_prompt="Transfer cube",
+        ),
+        # weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     #

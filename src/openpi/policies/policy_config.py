@@ -83,18 +83,21 @@ def create_trained_policy(
         # that the policy is using the same normalization stats as the original training process.
         norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets")
 
+    norm_cls = transforms.NormalizeQuantile if data_config.use_quantile_norm else transforms.Normalize
+    unnorm_cls = transforms.UnnormalizeQuantile if data_config.use_quantile_norm else transforms.Unnormalize
+
     return _policy.Policy(
         model,
         transforms=[
             *repack_transforms.inputs,
             transforms.InjectDefaultPrompt(default_prompt),
             *data_config.data_transforms.inputs,
-            transforms.Normalize(norm_stats),
+            norm_cls(norm_stats),
             *data_config.model_transforms.inputs,
         ],
         output_transforms=[
             *data_config.model_transforms.outputs,
-            transforms.Unnormalize(norm_stats),
+            unnorm_cls(norm_stats),
             *data_config.data_transforms.outputs,
             *repack_transforms.outputs,
         ],

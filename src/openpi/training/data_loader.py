@@ -108,13 +108,14 @@ def transform_dataset(dataset: Dataset, data_config: _config.DataConfig, *, skip
                 "Make sure to run `scripts/compute_norm_stats.py --config-name=<your-config>`."
             )
         norm_stats = data_config.norm_stats
+    norm_cls = _transforms.NormalizeQuantile if data_config.use_quantile_norm else _transforms.Normalize
 
     return TransformedDataset(
         dataset,
         [
             *data_config.repack_transforms.inputs,
             *data_config.data_transforms.inputs,
-            _transforms.Normalize(norm_stats),
+            norm_cls(norm_stats),
             *data_config.model_transforms.inputs,
         ],
     )

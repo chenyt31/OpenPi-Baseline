@@ -66,8 +66,9 @@ class FASTTokenizer(Tokenizer):
         # Convention: state gets discretized into 256 discrete bins (assumed range after normalization: [-1, 1])
         discretized_state = np.digitize(state, bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
 
-        # Convention: prefix includes prompt and state, followed by ';'
-        prefix = f"Task: {cleaned_text}, State: {discretized_state};\n"
+        # Convention: prefix includes prompt and string-representation of state, followed by ';'
+        state_str = " ".join(map(str, discretized_state))
+        prefix = f"Task: {cleaned_text}, State: {state_str};\n"
         prefix_tokens = self._paligemma_tokenizer.encode(prefix, add_bos=True)
 
         if actions is not None:

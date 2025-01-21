@@ -128,6 +128,22 @@ class PaliGemmaWeightLoader(WeightLoader):
 
 
 @dataclasses.dataclass(frozen=True)
+class PaliGemmaFASTWeightLoader(WeightLoader):
+    """Loads weights from the official PaliGemma checkpoint for FAST policies."""
+
+    def load(self, params: at.Params) -> at.Params:
+        path = download.maybe_download(
+            "gs://vertex-model-garden-paligemma-us/paligemma/pt_224.npz", gs={"token": "anon"}
+        )
+        logger.info(f"Loading PaliGemma weights from {path}")
+        with path.open("rb") as f:
+            flat_params = dict(np.load(f, allow_pickle=False))
+        paligemma_params = _recover_tree(flat_params)["params"]
+        logger.info(f"Loaded PaliGemma weights from {path}")
+        return {**params, "PaliGemma": paligemma_params}
+
+
+@dataclasses.dataclass(frozen=True)
 class GoogleViTWeightLoader(WeightLoader):
     """Loads weights from a Google ViT checkpoint. Compatible with the Pi0-small model. Only overwrites weights from the
     image backbones in the encoder.

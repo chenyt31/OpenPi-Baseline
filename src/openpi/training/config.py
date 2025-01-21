@@ -338,7 +338,6 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_aloha_sim",
-        batch_size=1,
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             default_prompt="Transfer cube",
@@ -384,7 +383,6 @@ _CONFIGS = [
     #
     TrainConfig(
         name="pi0_fast_aloha_sim",
-        batch_size=2,
         model=pi0_fast.Pi0FASTConfig(
             action_horizon=50,
             action_dim=14,
@@ -394,8 +392,12 @@ _CONFIGS = [
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             default_prompt="Transfer cube",
         ),
-        # weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        weight_loader=weight_loaders.PaliGemmaFASTWeightLoader(),
         num_train_steps=30_000,
+        batch_size=64,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000, peak_lr=5e-5, decay_steps=30_000, decay_lr=2.5e-6
+        ),
     ),
     #
     # Additional configs.

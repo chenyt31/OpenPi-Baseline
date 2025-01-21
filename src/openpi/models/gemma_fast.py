@@ -29,7 +29,7 @@ def get_config(variant):
                 "num_kv_heads": 1,
                 "head_dim": 256,
                 "norm_eps": 1e-6,
-                "vocab_size": 256_128,
+                "vocab_size": 257_152,
                 "scan": True,
                 "remat_policy": "nothing_saveable",
             }

@@ -297,7 +297,7 @@ class ExtractFASTActions(DataTransformFn):
         # Model outputs are saved in "actions", but for FAST models they represent tokens.
         tokens = data.pop("actions")
 
-        actions = self.tokenizer.extract_actions(tokens, self.action_horizon, self.action_dim)
+        actions = self.tokenizer.extract_actions(tokens.astype(np.int32), self.action_horizon, self.action_dim)
         return {
             **data,
             "actions": actions,

@@ -80,6 +80,32 @@ class Pi0FASTConfig(_model.BaseModelConfig):
     def create(self, rng: at.KeyArrayLike) -> "Pi0FAST":
         return Pi0FAST(self, rngs=nnx.Rngs(rng))
 
+    def inputs_spec(self, *, batch_size: int = 1) -> tuple[_model.Observation, _model.Actions]:
+        image_spec = jax.ShapeDtypeStruct([batch_size, *_model.IMAGE_RESOLUTION, 3], jnp.float32)
+        image_mask_spec = jax.ShapeDtypeStruct([batch_size], jnp.bool_)
+
+        with at.disable_typechecking():
+            observation_spec = _model.Observation(
+                images={
+                    "base_0_rgb": image_spec,
+                    "base_1_rgb": image_spec,
+                    "wrist_0_rgb": image_spec,
+                },
+                image_masks={
+                    "base_0_rgb": image_mask_spec,
+                    "base_1_rgb": image_mask_spec,
+                    "wrist_0_rgb": image_mask_spec,
+                },
+                state=jax.ShapeDtypeStruct([batch_size, self.action_dim], jnp.float32),
+                tokenized_prompt=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
+                tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
+                token_ar_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
+                token_loss_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.bool_),
+            )
+        action_spec = jax.ShapeDtypeStruct([batch_size, self.action_horizon, self.action_dim], jnp.float32)
+
+        return observation_spec, action_spec
+
 
 class Pi0FAST(_model.BaseModel):
     def __init__(self, config: Pi0FASTConfig, rngs: nnx.Rngs):
@@ -171,7 +197,10 @@ class Pi0FAST(_model.BaseModel):
         max_decoding_steps: int | at.Int[at.Array, ""] = 256,
         temperature: float = 0.0,
     ) -> _model.Actions:
-        observation = _model.preprocess_observation(None, observation, train=False)
+        # TODO: this is a hack to get the image keys.
+        observation = _model.preprocess_observation(
+            None, observation, train=False, image_keys=observation.images.keys()
+        )
 
         # embed inputs
         prefix_token_embeddings, prefix_mask, prefix_ar_mask = self.embed_inputs(observation)
@@ -181,15 +210,20 @@ class Pi0FAST(_model.BaseModel):
         prefix_token_embeddings, prefix_mask, prefix_attn_mask = left_to_right_align(
             prefix_token_embeddings, prefix_mask, prefix_attn_mask
         )
+        prefill_size = prefix_token_embeddings.shape[1]
+        prefill_len = jnp.sum(prefix_mask, axis=-1)
+        prefix_start = prefill_size - prefill_len
 
         # first fill KV cache with a forward pass of the prefix
-        positions = jnp.cumsum(prefix_mask, axis=-1) - 1
+        # pad attention mask to set the size of the KV cache (prefill_size + max_decoding_steps)
+        prefix_attn_mask = jnp.pad(prefix_attn_mask, ((0, 0), (0, 0), (0, max_decoding_steps)))
+        prefix_positions = jnp.cumsum(prefix_mask, axis=-1) - 1
         prefix_logits, kv_cache, _ = self.PaliGemma.llm(
-            embedded_prefix=prefix_token_embeddings, mask=prefix_attn_mask, positions=positions
+            embedded_prefix=prefix_token_embeddings, mask=prefix_attn_mask, positions=prefix_positions, decode=True
         )
 
         # prepare decoding -- final logit decodes the first token
-        last_logit = prefix_logits[:, -1]
+        last_logit = prefix_logits[:, -1:]
         output_tokens = jnp.zeros((last_logit.shape[0], max_decoding_steps))
 
         def step(carry):
@@ -201,7 +235,7 @@ class Pi0FAST(_model.BaseModel):
                 token = jax.random.categorical(rng, last_logit, axis=-1)
             else:
                 token = jnp.argmax(last_logit, axis=-1)
-            output_tokens = put_along_last_axis(output_tokens, step, token)
+            output_tokens = put_along_last_axis(output_tokens, jnp.broadcast_to(step, (token.shape[0], 1)), token)
 
             # Check for early stopping --> stop if all batch elements have EOS token
             has_eos = jnp.any(token == PALIGEMMA_EOS_TOKEN, axis=-1)
@@ -209,13 +243,21 @@ class Pi0FAST(_model.BaseModel):
 
             # Decode one step
             token_embedding = self.PaliGemma.llm(token, embed_only=True)
-            last_logit, kv_cache = self.PaliGemma.llm(token_embedding, kv_cache=cache)
+            positions = prefill_len[:, None] + step + 1
+            mask = jnp.logical_and(
+                jnp.arange(prefill_size + max_decoding_steps)[None, None, :] >= prefix_start[:, None, None],
+                jnp.arange(prefill_size + max_decoding_steps)[None, None, :]
+                < (jnp.broadcast_to(prefill_size + step + 1, (prefix_start.shape[0], 1, 1))),
+            )
+            last_logit, kv_cache, _ = self.PaliGemma.llm(
+                embedded_prefix=token_embedding, mask=mask, positions=positions, decode=True, kv_cache=cache
+            )
 
             return last_logit, output_tokens, kv_cache, all_eos, step + 1
 
         def cond(carry):
             _, _, _, all_eos, step = carry
-            return not all_eos and step < max_decoding_steps
+            return (~all_eos) & (step < max_decoding_steps)
 
         _, output_tokens, _, _, _ = jax.lax.while_loop(cond, step, (last_logit, output_tokens, kv_cache, False, 0))
         return output_tokens

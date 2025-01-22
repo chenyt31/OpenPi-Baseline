@@ -399,6 +399,38 @@ _CONFIGS = [
             warmup_steps=1_000, peak_lr=5e-5, decay_steps=30_000, decay_lr=2.5e-6
         ),
     ),
+    TrainConfig(
+        name="pi0_fast_droid",
+        model=pi0_fast.Pi0FASTConfig(
+            action_horizon=15,
+            action_dim=8,
+            max_token_len=180,
+        ),
+        data=DataConfig(
+            data_transforms=_transforms.Group(
+                inputs=[droid_policy.DroidInputsFAST(action_dim=8)],
+                outputs=[droid_policy.DroidOutputs()],
+            ),
+            use_quantile_norm=True,
+            model_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.ResizeImages(224, 224),
+                    _transforms.TokenizeFASTInputs(
+                        _tokenizer.FASTTokenizer(180),
+                        default_prompt="",
+                    ),
+                ],
+                outputs=[
+                    _transforms.ExtractFASTActions(
+                        _tokenizer.FASTTokenizer(180),
+                        action_horizon=15,
+                        action_dim=8,
+                    )
+                ],
+            ),
+        ),
+        num_train_steps=30_000,
+    ),
     #
     # Additional configs.
     #

@@ -23,6 +23,7 @@ class EnvMode(enum.Enum):
 
     ALOHA = "aloha"
     ALOHA_SIM = "aloha_sim"
+    ALOHA_SIM_FAST = "aloha_sim_fast"
     DROID = "droid"
     DROID_FAST = "droid_fast"
     DROID_FAST_EXPERT = "droid_fast_expert"
@@ -140,7 +141,6 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
         output_layers: Sequence[transforms.DataTransformFn],
         sample_kwargs: dict[str, Any] | None = None,
     ):
-        sample_kwargs = sample_kwargs if sample_kwargs is not None else {"num_steps": 10}
         return _policy_config.PolicyConfig(
             model=model,
             norm_stats=model.norm_stats(processor),
@@ -212,10 +212,12 @@ def create_policy(args: Args) -> _policy.Policy:
     """Create a policy from the given arguments."""
     match args.policy:
         case Checkpoint():
+            sample_kwargs = {} if "FAST" in str(args.env) else None
             return _policy_config.create_trained_policy(
                 _config.get_config(args.policy.config),
                 args.policy.dir,
                 default_prompt=args.default_prompt,
+                sample_kwargs=sample_kwargs,
             )
         case Exported():
             return create_exported_policy(args.env, args.policy, default_prompt=args.default_prompt)

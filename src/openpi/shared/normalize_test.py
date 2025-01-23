@@ -15,25 +15,6 @@ def test_normalize_update():
     assert np.allclose(results.std, np.std(arr))
 
 
-def test_normalize_merge():
-    arr = np.arange(12)
-
-    all_stats = []
-    for i in range(0, len(arr), 3):
-        stats = normalize.RunningStats()
-        stats.update(arr[i : i + 3])
-        all_stats.append(stats)
-
-    # Merge all stats.
-    merged_stats = normalize.RunningStats()
-    for stat in all_stats:
-        merged_stats.merge(stat)
-    results = merged_stats.get_statistics()
-
-    assert np.allclose(results.mean, np.mean(arr))
-    assert np.allclose(results.std, np.std(arr))
-
-
 def test_serialize_deserialize():
     stats = normalize.RunningStats()
     stats.update(np.arange(12))

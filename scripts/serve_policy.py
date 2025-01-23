@@ -32,11 +32,13 @@ class EnvMode(enum.Enum):
 class Exported:
     """Load an exported checkpoint."""
 
-    # Checkpoint directory (e.g., "s3://openpi-assets/exported/pi0_aloha/model").
+    # Checkpoint directory (e.g., "s3://openpi-assets/exported/pi0_base/model").
     dir: str
     # Processor name to load the norm stats from. If not provided, will automatically load a processor if there is only
     # one available. If there are multiple processors, raise an error and ask the user to provide a processor name.
     processor: str | None = None
+    # Name of the FAST tokenizer to use (only relevant for FAST model checkpoints).
+    fast_tokenizer: str | None = None
 
 
 @dataclasses.dataclass
@@ -138,13 +140,14 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
         output_layers: Sequence[transforms.DataTransformFn],
         sample_kwargs: dict[str, Any] | None = None,
     ):
-        sample_kwargs = sample_kwargs or {"num_steps": 10}
         return _policy_config.PolicyConfig(
             model=model,
             norm_stats=model.norm_stats(processor),
             default_prompt=default_prompt,
             input_layers=input_layers,
             output_layers=output_layers,
+            model_type=model.model_type,
+            fast_tokenizer=exported.fast_tokenizer,
             sample_kwargs=sample_kwargs,
         )
 
@@ -169,7 +172,7 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
             )
         case EnvMode.DROID:
             config = make_policy_config(
-                input_layers=[droid_policy.DroidInputs(action_dim=model.action_dim)],
+                input_layers=[droid_policy.DroidInputs(action_dim=model.action_dim, model_type=model.model_type)],
                 output_layers=[droid_policy.DroidOutputs()],
             )
         case EnvMode.CALVIN:

@@ -19,6 +19,14 @@ def test_sample_actions():
 
 
 @pytest.mark.manual
+def test_sample_actions_droid():
+    model = exported.PiModel("s3://openpi-assets/exported/droid_fast/model")
+    actions = model.sample_actions(jax.random.key(0), model.fake_obs())
+
+    assert actions.shape == (1, 256)
+
+
+@pytest.mark.manual
 def test_exported_as_pi0():
     exported_model = exported.PiModel("s3://openpi-assets/exported/pi0_base/model")
     live_model = pi0.Pi0Config().load(exported_model.params["decoder"])

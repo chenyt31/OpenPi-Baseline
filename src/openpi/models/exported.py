@@ -85,28 +85,47 @@ def convert_to_openpi(
 class PiModel(_model.BaseModel):
     """A model loaded from an internal exported model directory."""
 
-    def __init__(self, ckpt_dir: pathlib.Path | str, params: at.Params | None = None) -> "PiModel":
+    def __init__(self, ckpt_dir: pathlib.Path | str, params: at.Params | None = None):
         """Load a model from the internal checkpoint directory. Must point at the "model" sub-directory."""
         self.ckpt_dir = download.maybe_download(str(ckpt_dir))
         with (self.ckpt_dir / "graph").open("rb") as f:
-            self.exported = jax.export.deserialize(f.read())
+            self._exported = jax.export.deserialize(bytearray(f.read()))
 
-        input_spec = jax.tree.unflatten(self.exported.in_tree, self.exported.in_avals)[0]
+        input_spec = jax.tree.unflatten(self._exported.in_tree, self._exported.in_avals)[0]
         if params is None:
             params = _load_params(self.ckpt_dir, input_spec[0])
         self.example_spec = input_spec[2]
         self.sample_spec = input_spec[3]
 
         # Extract the action properties from the output spec.
-        output_spec = jax.tree.unflatten(self.exported.out_tree, self.exported.out_avals)
-        actions_spec = output_spec["actions"]
-        action_horizon, action_dim = actions_spec.shape
+        output_spec = jax.tree.unflatten(self._exported.out_tree, self._exported.out_avals)
+        if "actions" in output_spec:
+            # This is a pi0 model.
+            self._output_key = "actions"
+            self._model_type = _model.ModelType.PI0
+            action_horizon, action_dim = output_spec[self._output_key].shape
+        elif "output_tokens" in output_spec:
+            # This is a pi0-fast model.
+            self._output_key = "output_tokens"
+            self._model_type = _model.ModelType.PI0_FAST
+            # The output is tokenized actions and so we have to infer the action properties
+            # from other properties.
+            action_dim = self.example_spec["state"].shape[-1]
+            # TODO(ury): Figure out how to get this information from the checkpoint.
+            action_horizon = 15
+        else:
+            raise ValueError(f"Unknown output spec: {output_spec}")
+
         max_token_len = self.example_spec["prompt_tokens"].shape[-1]
 
         super().__init__(action_dim=action_dim, action_horizon=action_horizon, max_token_len=max_token_len)
 
         # wrap arrays in nnx.Param to make nnx happy
         self.params = jax.tree.map(lambda x: nnx.Param(x), params)
+
+    @property
+    def model_type(self) -> _model.ModelType:
+        return self._model_type
 
     @override
     def sample_actions(self, rng: at.KeyArrayLike, observation: _model.Observation, **sample_kwargs) -> _model.Actions:
@@ -132,9 +151,9 @@ class PiModel(_model.BaseModel):
             )
 
         rng_data = jax.random.key_data(rng)
-        result = self.exported.call(jax.tree.map(lambda x: x.value, self.params), rng_data, example, sample_kwargs)
+        result = self._exported.call(jax.tree.map(lambda x: x.value, self.params), rng_data, example, sample_kwargs)
 
-        return _make_batch(result)["actions"]
+        return _make_batch(result)[self._output_key]
 
     @override
     def compute_loss(self):
@@ -191,22 +210,19 @@ def _obs_to_example(obs: _model.Observation, example_spec: dict) -> dict:
         "prompt_tokens": obs.tokenized_prompt,
     }
 
-    # NOTE(ury): This is used to support the new version with DCT co-training.
-    if "mask_prompt_input" in example_spec:
-        allow_action_diffusion_attention = example_spec["allow_action_diffusion_attention"]
-        mask_ar = example_spec["mask_ar"]
-
+    if obs.token_ar_mask is not None:
+        # This is a pi0-fast model.
+        assert obs.tokenized_prompt_mask is not None
         result = {
             **result,
-            "mask_prompt_input": obs.tokenized_prompt_mask,
-            # NOTE(ury): These values are likely wrong. Put something for now
-            # to make sure that the model doesn't crash.
-            "allow_action_diffusion_attention": _make_batch(
-                jnp.zeros(allow_action_diffusion_attention.shape, allow_action_diffusion_attention.dtype)
-            ),
-            "mask_ar": _make_batch(jnp.ones(mask_ar.shape, mask_ar.dtype)),
+            "mask_prompt_input": obs.tokenized_prompt_mask.astype(jnp.int32),
+            "mask_ar": obs.token_ar_mask,
+            "tokens": obs.tokenized_prompt,
+            "mask_input": obs.tokenized_prompt_mask.astype(jnp.int32),
         }
     else:
+        # This is a pi0 model.
+        assert obs.tokenized_prompt_mask is not None
         result = {
             **result,
             "mask_input": obs.tokenized_prompt_mask.astype(jnp.int32),
@@ -234,6 +250,8 @@ def _example_to_obs(example: dict) -> _model.Observation:
             "state": example["state"],
             "tokenized_prompt": example["prompt_tokens"],
             "tokenized_prompt_mask": example["mask_input"].astype(bool),
+            "token_ar_mask": example.get("mask_ar"),
+            "token_loss_mask": example["mask_loss"].astype(bool) if "mask_loss" in example else None,
         }
     )
 

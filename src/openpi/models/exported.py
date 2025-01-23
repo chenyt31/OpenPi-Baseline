@@ -111,6 +111,7 @@ class PiModel(_model.BaseModel):
             # The output is tokenized actions and so we have to infer the action properties
             # from other properties.
             action_dim = self.example_spec["state"].shape[-1]
+            # TODO(ury): Figure out how to get this information from the checkpoint.
             action_horizon = 15
         else:
             raise ValueError(f"Unknown output spec: {output_spec}")

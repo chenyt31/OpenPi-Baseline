@@ -37,7 +37,7 @@ class Exported:
     # Processor name to load the norm stats from. If not provided, will automatically load a processor if there is only
     # one available. If there are multiple processors, raise an error and ask the user to provide a processor name.
     processor: str | None = None
-    # Name of the FAST tokenizer to use.
+    # Name of the FAST tokenizer to use (only relevant for FAST model checkpoints).
     fast_tokenizer: str | None = None
 
 

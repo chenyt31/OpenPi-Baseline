@@ -1,6 +1,7 @@
 import abc
 from collections.abc import Sequence
 import dataclasses
+import enum
 import logging
 import pathlib
 from typing import TypeAlias
@@ -18,6 +19,13 @@ from openpi.shared import image_tools
 import openpi.shared.array_typing as at
 
 logger = logging.getLogger("openpi")
+
+
+class ModelType(enum.Enum):
+    """Supported model types."""
+
+    PI0 = "pi0"
+    PI0_FAST = "pi0_fast"
 
 
 # The model always expects these images
@@ -43,10 +51,18 @@ class Observation:
     image_masks: dict[str, at.Bool[at.Array, "*b"]]
     # Low-dimensional robot state.
     state: at.Float[at.Array, "*b s"]
+
     # Tokenized prompt.
     tokenized_prompt: at.Int[at.Array, "*b l"] | None = None
     # Tokenized prompt mask.
     tokenized_prompt_mask: at.Bool[at.Array, "*b l"] | None = None
+
+    # pi0-fast model specific fields.
+
+    # Token auto-regressive mask (for FAST autoregressive model).
+    token_ar_mask: at.Int[at.Array, "*b l"] | None = None
+    # Token loss mask (for FAST autoregressive model).
+    token_loss_mask: at.Bool[at.Array, "*b l"] | None = None
 
     @classmethod
     def from_dict(cls, data: at.PyTree[at.ArrayLike]) -> "Observation":
@@ -64,6 +80,8 @@ class Observation:
             state=data["state"],
             tokenized_prompt=data.get("tokenized_prompt"),
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
+            token_ar_mask=data.get("token_ar_mask"),
+            token_loss_mask=data.get("token_loss_mask"),
         )
 
     def to_dict(self) -> at.PyTree[at.ArrayLike]:
@@ -140,6 +158,8 @@ def preprocess_observation(
         state=observation.state,
         tokenized_prompt=observation.tokenized_prompt,
         tokenized_prompt_mask=observation.tokenized_prompt_mask,
+        token_ar_mask=observation.token_ar_mask,
+        token_loss_mask=observation.token_loss_mask,
     )
 
 

@@ -18,32 +18,72 @@ import openpi.transforms as transforms
 @dataclasses.dataclass
 class PolicyConfig:
     model: _model.BaseModel
-
     norm_stats: dict[str, transforms.NormStats]
 
     input_layers: Sequence[transforms.DataTransformFn]
     output_layers: Sequence[transforms.DataTransformFn]
 
+    model_type: _model.ModelType = _model.ModelType.PI0
     default_prompt: str | None = None
     sample_kwargs: dict[str, Any] | None = None
+    fast_tokenizer: str | None = None
 
 
 def create_policy(config: PolicyConfig) -> _policy.Policy:
-    """Creates a default pi0 policy."""
+    """Create a policy from a policy config."""
+    match config.model_type:
+        case _model.ModelType.PI0:
+            return _create_pi0_policy(config)
+        case _model.ModelType.PI0_FAST:
+            return _create_pi0_fast_policy(config)
+        case _:
+            raise ValueError(f"Unsupported model type: {config.model_type}")
+
+
+def _create_pi0_policy(config: PolicyConfig) -> _policy.Policy:
+    sample_kwargs = config.sample_kwargs or {"num_steps": 10}
     return _policy.Policy(
         config.model,
         transforms=[
             *config.input_layers,
             transforms.Normalize(config.norm_stats),
             transforms.TokenizePrompt(
-                tokenizer.PaligemmaTokenizer(config.model.max_token_len), default_prompt=config.default_prompt
+                tokenizer.PaligemmaTokenizer(config.model.max_token_len),
+                default_prompt=config.default_prompt,
             ),
         ],
         output_transforms=[
             transforms.Unnormalize(config.norm_stats),
             *config.output_layers,
         ],
-        sample_kwargs=config.sample_kwargs,
+        sample_kwargs=sample_kwargs,
+    )
+
+
+def _create_pi0_fast_policy(config: PolicyConfig) -> _policy.Policy:
+    """Creates a pi0 FAST policy."""
+    tokenizer_path = config.fast_tokenizer or "physical-intelligence/fast"
+    sample_kwargs = config.sample_kwargs or {}
+    return _policy.Policy(
+        config.model,
+        transforms=[
+            *config.input_layers,
+            transforms.NormalizeQuantile(config.norm_stats),
+            transforms.TokenizeFASTInputs(
+                tokenizer.FASTTokenizer(config.model.max_token_len, tokenizer_path),
+                default_prompt=config.default_prompt,
+            ),
+        ],
+        output_transforms=[
+            transforms.ExtractFASTActions(
+                tokenizer.FASTTokenizer(config.model.max_token_len, tokenizer_path),
+                action_horizon=config.model.action_horizon,
+                action_dim=config.model.action_dim,
+            ),
+            transforms.UnnormalizeQuantile(config.norm_stats),
+            *config.output_layers,
+        ],
+        sample_kwargs=sample_kwargs,
     )
 
 

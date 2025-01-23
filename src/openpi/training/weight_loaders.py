@@ -102,8 +102,10 @@ def _fix_groupnorm(params: at.Params) -> at.Params:
 
 @dataclasses.dataclass(frozen=True)
 class PaliGemmaWeightLoader(WeightLoader):
-    """Loads weights from the official PaliGemma checkpoint. Compatible with the Pi0 model. Weights from the PaliGemma
-    expert will be overwritten whereas weights from the action expert will remain untouched.
+    """Loads weights from the official PaliGemma checkpoint.
+
+    This will overwrite existing weights with similar names while keeping all extra weights intact.
+    This allows us to support the action expert which is used by the Pi0 model.
     """
 
     def load(self, params: at.Params) -> at.Params:
@@ -116,8 +118,8 @@ class PaliGemmaWeightLoader(WeightLoader):
         paligemma_params = _recover_tree(flat_params)["params"]
 
         # Now we will do our own flattening to merge the PaliGemma weights with the action expert weights.
-        leaves, treedef = jax.tree_util.tree_flatten_with_path(params["PaliGemma"])
-        leaves = dict(leaves)
+        leave_tuples, treedef = jax.tree_util.tree_flatten_with_path(params["PaliGemma"])
+        leaves = dict(leave_tuples)
         for kp, v in jax.tree_util.tree_flatten_with_path(paligemma_params)[0]:
             if kp in leaves:
                 logger.info(f"Overwriting {jax.tree_util.keystr(kp)}")

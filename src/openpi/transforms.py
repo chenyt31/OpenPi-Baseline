@@ -117,59 +117,64 @@ class InjectDefaultPrompt(DataTransformFn):
 @dataclasses.dataclass(frozen=True)
 class Normalize(DataTransformFn):
     norm_stats: at.PyTree[NormStats] | None
+    # If true, will use quantile normalization. Otherwise, normal z-score normalization will be used.
+    use_quantiles: bool = False
+    # If true, will raise an error if any of the keys in the norm stats are not present in the data.
     strict: bool = False
 
-    def __call__(self, data: DataDict) -> DataDict:
-        def normalize(x, stats: NormStats):
-            return (x - stats.mean) / (stats.std + 1e-6)
+    def __post_init__(self):
+        if self.norm_stats is not None and self.use_quantiles:
+            _assert_quantile_stats(self.norm_stats)
 
+    def __call__(self, data: DataDict) -> DataDict:
         if self.norm_stats is None:
             return data
 
-        return apply_tree(data, self.norm_stats, normalize, strict=self.strict)
+        return apply_tree(
+            data,
+            self.norm_stats,
+            self._normalize_quantile if self.use_quantiles else self._normalize,
+            strict=self.strict,
+        )
+
+    def _normalize(self, x, stats: NormStats):
+        return (x - stats.mean) / (stats.std + 1e-6)
+
+    def _normalize_quantile(self, x, stats: NormStats):
+        assert stats.q01 is not None
+        assert stats.q99 is not None
+        return (x - stats.q01) / (stats.q99 - stats.q01 + 1e-6) * 2.0 - 1.0
 
 
 @dataclasses.dataclass(frozen=True)
 class Unnormalize(DataTransformFn):
     norm_stats: at.PyTree[NormStats] | None
+    # If true, will use quantile normalization. Otherwise, normal z-score normalization will be used.
+    use_quantiles: bool = False
+
+    def __post_init__(self):
+        if self.norm_stats is not None and self.use_quantiles:
+            _assert_quantile_stats(self.norm_stats)
 
     def __call__(self, data: DataDict) -> DataDict:
-        def unnormalize(x, stats: NormStats):
-            return x * (stats.std + 1e-6) + stats.mean
-
         if self.norm_stats is None:
             return data
 
         # Make sure that all the keys in the norm stats are present in the data.
-        return apply_tree(data, self.norm_stats, unnormalize, strict=True)
+        return apply_tree(
+            data,
+            self.norm_stats,
+            self._unnormalize_quantile if self.use_quantiles else self._unnormalize,
+            strict=True,
+        )
 
+    def _unnormalize(self, x, stats: NormStats):
+        return x * (stats.std + 1e-6) + stats.mean
 
-@dataclasses.dataclass(frozen=True)
-class NormalizeQuantile(DataTransformFn):
-    norm_stats: at.PyTree[NormStats] | None
-    strict: bool = False
-
-    def __call__(self, data: DataDict) -> DataDict:
-        def normalize(x, stats: NormStats):
-            return (x - stats.q01) / (stats.q99 - stats.q01 + 1e-6) * 2.0 - 1.0
-
-        if self.norm_stats is None:
-            return data
-        return apply_tree(data, self.norm_stats, normalize, strict=self.strict)
-
-
-@dataclasses.dataclass(frozen=True)
-class UnnormalizeQuantile(DataTransformFn):
-    norm_stats: at.PyTree[NormStats] | None
-
-    def __call__(self, data: DataDict) -> DataDict:
-        def unnormalize(x, stats: NormStats):
-            return (x + 1.0) / 2.0 * (stats.q99 - stats.q01 + 1e-6) + stats.q01
-
-        if self.norm_stats is None:
-            return data
-        # Make sure that all the keys in the norm stats are present in the data.
-        return apply_tree(data, self.norm_stats, unnormalize, strict=True)
+    def _unnormalize_quantile(self, x, stats: NormStats):
+        assert stats.q01 is not None
+        assert stats.q99 is not None
+        return (x + 1.0) / 2.0 * (stats.q99 - stats.q01 + 1e-6) + stats.q01
 
 
 @dataclasses.dataclass(frozen=True)
@@ -410,3 +415,11 @@ def make_bool_mask(*dims: int) -> tuple[bool, ...]:
         else:
             result.extend([False] * (-dim))
     return tuple(result)
+
+
+def _assert_quantile_stats(norm_stats: at.PyTree[NormStats]) -> None:
+    for k, v in flatten_dict(norm_stats).items():
+        if v.q01 is None or v.q99 is None:
+            raise ValueError(
+                f"quantile stats must be provided if use_quantile_norm is True. Key {k} is missing q01 or q99."
+            )

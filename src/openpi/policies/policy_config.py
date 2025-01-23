@@ -68,7 +68,7 @@ def _create_pi0_fast_policy(config: PolicyConfig) -> _policy.Policy:
         config.model,
         transforms=[
             *config.input_layers,
-            transforms.NormalizeQuantile(config.norm_stats),
+            transforms.Normalize(config.norm_stats, use_quantiles=True),
             transforms.TokenizeFASTInputs(
                 tokenizer.FASTTokenizer(config.model.max_token_len, tokenizer_path),
                 default_prompt=config.default_prompt,
@@ -80,7 +80,7 @@ def _create_pi0_fast_policy(config: PolicyConfig) -> _policy.Policy:
                 action_horizon=config.model.action_horizon,
                 action_dim=config.model.action_dim,
             ),
-            transforms.UnnormalizeQuantile(config.norm_stats),
+            transforms.Unnormalize(config.norm_stats, use_quantiles=True),
             *config.output_layers,
         ],
         sample_kwargs=sample_kwargs,
@@ -117,7 +117,7 @@ def create_trained_policy(
         _model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16), allow_extra_params=True
     )
 
-    data_config = train_config.data.create(train_config.metadata_dir, model)
+    data_config = train_config.data.create(train_config.metadata_dir, train_config.model)
     if norm_stats is None:
         # We are loading the norm stats from the checkpoint, instead of the metadata dir to make sure
         # that the policy is using the same normalization stats as the original training process.
@@ -129,12 +129,12 @@ def create_trained_policy(
             *repack_transforms.inputs,
             transforms.InjectDefaultPrompt(default_prompt),
             *data_config.data_transforms.inputs,
-            transforms.Normalize(norm_stats),
+            transforms.Normalize(norm_stats, use_quantiles=data_config.use_quantile_norm),
             *data_config.model_transforms.inputs,
         ],
         output_transforms=[
             *data_config.model_transforms.outputs,
-            transforms.Unnormalize(norm_stats),
+            transforms.Unnormalize(norm_stats, use_quantiles=data_config.use_quantile_norm),
             *data_config.data_transforms.outputs,
             *repack_transforms.outputs,
         ],

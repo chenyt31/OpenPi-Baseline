@@ -4,7 +4,7 @@ import dataclasses
 import enum
 import logging
 import pathlib
-from typing import TypeAlias
+from typing import Generic, TypeVar
 
 import augmax
 from flax import nnx
@@ -19,6 +19,8 @@ from openpi.shared import image_tools
 import openpi.shared.array_typing as at
 
 logger = logging.getLogger("openpi")
+
+ArrayT = TypeVar("ArrayT", at.Array, jax.ShapeDtypeStruct)
 
 
 class ModelType(enum.Enum):
@@ -42,30 +44,30 @@ IMAGE_RESOLUTION = (224, 224)
 
 @at.typecheck
 @struct.dataclass
-class Observation:
+class Observation(Generic[ArrayT]):
     """Holds observations, i.e., inputs to the model."""
 
     # Images, in [-1, 1] float32.
-    images: dict[str, at.Float[at.Array, "*b h w c"]]
+    images: dict[str, at.Float[ArrayT, "*b h w c"]]
     # Image masks, with same keys as images.
-    image_masks: dict[str, at.Bool[at.Array, "*b"]]
+    image_masks: dict[str, at.Bool[ArrayT, "*b"]]
     # Low-dimensional robot state.
-    state: at.Float[at.Array, "*b s"]
+    state: at.Float[ArrayT, "*b s"]
 
     # Tokenized prompt.
-    tokenized_prompt: at.Int[at.Array, "*b l"] | None = None
+    tokenized_prompt: at.Int[ArrayT, "*b l"] | None = None
     # Tokenized prompt mask.
-    tokenized_prompt_mask: at.Bool[at.Array, "*b l"] | None = None
+    tokenized_prompt_mask: at.Bool[ArrayT, "*b l"] | None = None
 
     # pi0-fast model specific fields.
 
     # Token auto-regressive mask (for FAST autoregressive model).
-    token_ar_mask: at.Int[at.Array, "*b l"] | None = None
+    token_ar_mask: at.Int[ArrayT, "*b l"] | None = None
     # Token loss mask (for FAST autoregressive model).
-    token_loss_mask: at.Bool[at.Array, "*b l"] | None = None
+    token_loss_mask: at.Bool[ArrayT, "*b l"] | None = None
 
     @classmethod
-    def from_dict(cls, data: at.PyTree[at.ArrayLike]) -> "Observation":
+    def from_dict(cls, data: at.PyTree[ArrayT]) -> "Observation[ArrayT]":
         """This method defines the mapping between unstructured data (i.e., nested dict) to the structured Observation format."""
         # Ensure that tokenized_prompt and tokenized_prompt_mask are provided together.
         if ("tokenized_prompt" in data) != ("tokenized_prompt_mask" in data):
@@ -84,7 +86,7 @@ class Observation:
             token_loss_mask=data.get("token_loss_mask"),
         )
 
-    def to_dict(self) -> at.PyTree[at.ArrayLike]:
+    def to_dict(self) -> at.PyTree[ArrayT]:
         """Convert the Observation to a nested dict."""
         result = dataclasses.asdict(self)
         # TODO(ury): This is awkward. Adjust the names to be the same.
@@ -93,7 +95,7 @@ class Observation:
         return result
 
 
-Actions: TypeAlias = at.Float[at.ArrayLike, "*b ah ad"]
+Actions = at.Float[ArrayT, "*b ah ad"]
 
 
 def preprocess_observation(
@@ -170,49 +172,34 @@ class BaseModelConfig(abc.ABC):
     """
 
     # Action space dimension.
-    action_dim: int = 24
+    action_dim: int
     # Action sequence length.
-    action_horizon: int = 50
+    action_horizon: int
     # Tokenized prompt maximum length.
-    max_token_len: int = 48
+    max_token_len: int
+
+    @property
+    @abc.abstractmethod
+    def model_type(self) -> ModelType:
+        """The model type."""
 
     @abc.abstractmethod
     def create(self, rng: at.KeyArrayLike) -> "BaseModel":
         """Create a new model, initializing parameters."""
 
-    def load(self, params: at.Params, *, allow_extra_params: bool = False) -> "BaseModel":
+    def load(self, params: at.Params, *, remove_extra_params: bool = True) -> "BaseModel":
         """Create a model with the given parameters."""
         model = nnx.eval_shape(self.create, jax.random.key(0))
         graphdef, state = nnx.split(model)
-        if allow_extra_params:
+        if remove_extra_params:
             params = ocp.transform_utils.intersect_trees(state.to_pure_dict(), params)
         at.check_pytree_equality(expected=state.to_pure_dict(), got=params, check_shapes=True, check_dtypes=False)
         state.replace_by_pure_dict(params)
         return nnx.merge(graphdef, state)
 
+    @abc.abstractmethod
     def inputs_spec(self, *, batch_size: int = 1) -> tuple[Observation, Actions]:
-        image_spec = jax.ShapeDtypeStruct([batch_size, *IMAGE_RESOLUTION, 3], jnp.float32)
-        image_mask_spec = jax.ShapeDtypeStruct([batch_size], jnp.bool_)
-
-        with at.disable_typechecking():
-            observation_spec = Observation(
-                images={
-                    "base_0_rgb": image_spec,
-                    "left_wrist_0_rgb": image_spec,
-                    "right_wrist_0_rgb": image_spec,
-                },
-                image_masks={
-                    "base_0_rgb": image_mask_spec,
-                    "left_wrist_0_rgb": image_mask_spec,
-                    "right_wrist_0_rgb": image_mask_spec,
-                },
-                state=jax.ShapeDtypeStruct([batch_size, self.action_dim], jnp.float32),
-                tokenized_prompt=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
-                tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
-            )
-        action_spec = jax.ShapeDtypeStruct([batch_size, self.action_horizon, self.action_dim], jnp.float32)
-
-        return observation_spec, action_spec
+        """Returns the input specification for the model. Values are jax.ShapeDtypeStruct."""
 
     def fake_obs(self, batch_size: int = 1) -> Observation:
         observation_spec, _ = self.inputs_spec(batch_size=batch_size)

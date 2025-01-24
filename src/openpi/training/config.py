@@ -9,6 +9,7 @@ import tyro
 
 import openpi.models.model as _model
 import openpi.models.pi0 as pi0
+import openpi.models.pi0_fast as pi0_fast
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.calvin_policy as calvin_policy
@@ -24,6 +25,9 @@ import openpi.transforms as _transforms
 def default_dataset_root() -> str:
     """Default location for the dataset cache."""
     return str(download.get_cache_dir() / "datasets")
+
+
+ModelType = _model.ModelType
 
 
 @dataclasses.dataclass
@@ -102,7 +106,6 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
             inputs=[aloha_policy.AlohaInputs(action_dim=model_config.action_dim, adapt_to_pi=self.adapt_to_pi)],
             outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
         )
-
         if self.use_delta_joint_actions:
             delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
             data_transforms = data_transforms.push(
@@ -110,20 +113,14 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
                 outputs=[_transforms.AbsoluteActions(delta_action_mask)],
             )
 
+        model_transforms = ModelTransformFactory(default_prompt=self.default_prompt)(model_config)
+
         return DataConfig(
             repo_id=self.repo_id,
             norm_stats=norm_stats,
             repack_transforms=repack_transforms,
             data_transforms=data_transforms,
-            model_transforms=_transforms.Group(
-                inputs=[
-                    _transforms.ResizeImages(224, 224),
-                    _transforms.TokenizePrompt(
-                        _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
-                        default_prompt=self.default_prompt,
-                    ),
-                ]
-            ),
+            model_transforms=model_transforms,
             local_files_only=self.local_files_only,
         )
 
@@ -134,13 +131,51 @@ class GroupFactory(Protocol):
 
 
 @dataclasses.dataclass(frozen=True)
+class ModelTransformFactory(GroupFactory):
+    """Creates model transforms for standard pi0 models."""
+
+    # If provided, will determine the default prompt that be used by the model.
+    default_prompt: str | None = None
+
+    def __call__(self, model_config: _model.BaseModelConfig) -> _transforms.Group:
+        match model_config.model_type:
+            case ModelType.PI0:
+                return _transforms.Group(
+                    inputs=[
+                        _transforms.ResizeImages(224, 224),
+                        _transforms.TokenizePrompt(
+                            _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
+                            default_prompt=self.default_prompt,
+                        ),
+                    ],
+                )
+            case ModelType.PI0_FAST:
+                return _transforms.Group(
+                    inputs=[
+                        _transforms.ResizeImages(224, 224),
+                        _transforms.TokenizeFASTInputs(
+                            _tokenizer.FASTTokenizer(model_config.max_token_len),
+                            default_prompt=self.default_prompt,
+                        ),
+                    ],
+                    outputs=[
+                        _transforms.ExtractFASTActions(
+                            _tokenizer.FASTTokenizer(model_config.max_token_len),
+                            action_horizon=model_config.action_horizon,
+                            action_dim=model_config.action_dim,
+                        )
+                    ],
+                )
+
+
+@dataclasses.dataclass(frozen=True)
 class SimpleDataConfig(DataConfigFactory):
     # Factory for the data transforms.
     data_transforms: tyro.conf.Suppress[GroupFactory]
+    # Factory for the model transforms.
+    model_transforms: tyro.conf.Suppress[GroupFactory] = dataclasses.field(default_factory=ModelTransformFactory)
     # The LeRobot repo id.
     repo_id: str = tyro.MISSING
-    # If provided, will determine the default prompt that be used by the model.
-    default_prompt: str | None = None
 
     def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         norm_stats = None
@@ -152,15 +187,8 @@ class SimpleDataConfig(DataConfigFactory):
             repo_id=self.repo_id,
             norm_stats=norm_stats,
             data_transforms=self.data_transforms(model_config),
-            model_transforms=_transforms.Group(
-                inputs=[
-                    _transforms.ResizeImages(224, 224),
-                    _transforms.TokenizePrompt(
-                        _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
-                        default_prompt=self.default_prompt,
-                    ),
-                ]
-            ),
+            model_transforms=self.model_transforms(model_config),
+            use_quantile_norm=model_config.model_type == ModelType.PI0_FAST,
         )
 
 
@@ -247,17 +275,18 @@ class TrainConfig:
 # Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
     #
-    # pi0 configs.
+    # Aloha configs.
     #
     TrainConfig(
         name="pi0_aloha",
+        model=pi0.Pi0Config(action_dim=24),
         data=LeRobotAlohaDataConfig(use_delta_joint_actions=True),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     TrainConfig(
         name="pi0_aloha_towel_diverse",
-        model=pi0.Pi0Config(action_dim=32),
+        model=pi0.Pi0Config(action_dim=24),
         data=LeRobotAlohaDataConfig(use_delta_joint_actions=True),
         num_train_steps=30_000,
         policy_metadata={
@@ -265,8 +294,37 @@ _CONFIGS = [
             "reset_pose": [0, -1.5, 1.5, 0, 0, 0]
         },
     ),
+    #
+    # DROID configs.
+    #
+    TrainConfig(
+        name="pi0_droid",
+        model=pi0.Pi0Config(action_dim=8, action_horizon=10),
+        data=SimpleDataConfig(
+            data_transforms=lambda model: _transforms.Group(
+                inputs=[droid_policy.DroidInputs(action_dim=model.action_dim)],
+                outputs=[droid_policy.DroidOutputs()],
+            ),
+        ),
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi0_fast_droid",
+        model=pi0_fast.Pi0FASTConfig(action_dim=8, action_horizon=15, max_token_len=180),
+        data=SimpleDataConfig(
+            data_transforms=lambda model: _transforms.Group(
+                inputs=[droid_policy.DroidInputs(action_dim=model.action_dim, model_type=ModelType.PI0_FAST)],
+                outputs=[droid_policy.DroidOutputs()],
+            ),
+        ),
+        num_train_steps=30_000,
+    ),
+    #
+    # Simulation configs.
+    #
     TrainConfig(
         name="pi0_aloha_sim",
+        model=pi0.Pi0Config(action_dim=24),
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             default_prompt="Transfer cube",
@@ -277,14 +335,13 @@ _CONFIGS = [
         num_train_steps=30_000,
     ),
     TrainConfig(
-        name="pi0_droid",
-        model=pi0.Pi0Config(action_dim=8, action_horizon=10),
-        data=SimpleDataConfig(
-            data_transforms=lambda model: _transforms.Group(
-                inputs=[droid_policy.DroidInputs(action_dim=model.action_dim)],
-                outputs=[droid_policy.DroidOutputs()],
-            )
+        name="pi0_fast_aloha_sim",
+        model=pi0_fast.Pi0FASTConfig(action_horizon=50, action_dim=14, max_token_len=256),
+        data=LeRobotAlohaDataConfig(
+            repo_id="lerobot/aloha_sim_transfer_cube_human",
+            default_prompt="Transfer cube",
         ),
+        weight_loader=weight_loaders.PaliGemmaWeightLoader(),
         num_train_steps=30_000,
     ),
     TrainConfig(
@@ -294,7 +351,7 @@ _CONFIGS = [
             data_transforms=lambda model: _transforms.Group(
                 inputs=[calvin_policy.CalvinInputs(action_dim=model.action_dim)],
                 outputs=[calvin_policy.CalvinOutputs()],
-            )
+            ),
         ),
         num_train_steps=30_000,
     ),
@@ -305,7 +362,7 @@ _CONFIGS = [
             data_transforms=lambda model: _transforms.Group(
                 inputs=[libero_policy.LiberoInputs(action_dim=model.action_dim)],
                 outputs=[libero_policy.LiberoOutputs()],
-            )
+            ),
         ),
         num_train_steps=30_000,
     ),
@@ -349,6 +406,7 @@ _CONFIGS = [
             warmup_steps=1_000, peak_lr=2.5e-5, decay_steps=30_000, decay_lr=2.5e-6
         ),
     ),
+    #
     # Debugging configs.
     #
     TrainConfig(

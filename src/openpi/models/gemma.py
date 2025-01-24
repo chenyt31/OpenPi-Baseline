@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""gemma adaptation for Pi, taken from big_vision.
+"""Gemma adaptation for Pi, taken from big_vision.
 
 We follow this einsum axis naming convention:
   B: batch
@@ -130,134 +130,6 @@ class Einsum(nn.Module):
         dtype = x.dtype  # original dtype, could be half-precision
         w = self.param("w", self.init_fn, self.shape).astype(dtype)
         return jnp.einsum(eqn, x, w)
-
-
-_LORA_A_KEY = "lora_a"
-_LORA_B_KEY = "lora_b"
-
-
-@at.typecheck
-class LoRAEinsum(nn.Module):
-    base: Einsum
-    lora_config: LoRAConfig
-    merge_eqn: str
-    lora_a_init_fn: nn.initializers.Initializer
-    lora_b_init_fn: nn.initializers.Initializer
-
-    def setup(self):
-        nn.share_scope(self, self.base)
-
-    @nn.compact
-    def __call__(self, eqn, x, *, deterministic=True):
-        orig_x = x
-        eqn_lora_a, eqn_lora_b = self._get_lora_eqn(eqn, self.merge_eqn)
-        if self.lora_config.dropout > 0.0:
-            x = nn.Dropout(rate=self.lora_config.dropout, deterministic=deterministic)(x)
-        lora_a_shape, lora_b_shape = self._parse_shape(self.merge_eqn)
-        lora_a = self.param(_LORA_A_KEY, self.lora_a_init_fn, lora_a_shape).astype(x.dtype)
-        lora_b = self.param(_LORA_B_KEY, self.lora_b_init_fn, lora_b_shape).astype(x.dtype)
-        lora_a = jnp.einsum(eqn_lora_a, x, lora_a)
-        lora_b = jnp.einsum(eqn_lora_b, lora_a, lora_b)
-
-        # TODO: scaling_value should ideally be a self.variable however currently base model doesn't allow any
-        # auxilary variables.
-        scaling_value = (
-            self.lora_config.alpha / self.lora_config.rank
-            if not self.lora_config.rslora
-            else self.lora_config.alpha / math.sqrt(self.lora_config.rank)
-        )
-
-        return self.base(eqn, orig_x) + lora_b * scaling_value
-
-    def _get_lora_eqn(self, eqn: str, lora_merge_eqn: str) -> tuple[str, str]:
-        """Figure out lora_a and lora_b eqn from eqn and lora_merge_eqn.
-        input:
-        eqn: x,w->y
-        lora_merge_eqn: lora_a,lora_b->w
-
-        output:
-        lora_a_eqn: x,lora_a->?
-        lora_b_eqn: ?,lora_b->y
-        """
-        (x_repr, w_repr), y_repr = _parse_einops_eqn(eqn)
-        (lora_a_repr, lora_b_repr), w_repr_p = _parse_einops_eqn(lora_merge_eqn)
-        assert len(w_repr) == len(self.base.shape), f"w_repr={w_repr}, shape={self.base.shape}"
-        assert w_repr == w_repr_p, f"w_repr={w_repr}, w_repr_p={w_repr_p} should be the same."
-
-        # figure out x,lora_a's output annotation by using y and lora_b
-        # the way to do this is to:
-        # 1. remove the common prefix and suffix from lora_b and y
-        # 2. then the ? will be (common prefix) (stripped y) (stripped lora_b)
-        # the equation will look like:
-        # [(prefix) (stripped y) (lora b)], [(prefix) (lora b) (suffix)] -> [(prefix) (y) (suffix)]
-        prefix, _, y_repr_stripped, lora_b_repr_stripped = self._remove_common_prefix_suffix(y_repr, lora_b_repr)
-        lora_intermediate_repr = prefix + y_repr_stripped + lora_b_repr_stripped
-
-        eqn_lora_a_lhs = ", ".join([x_repr, lora_a_repr])
-        eqn_lora_b_lhs = ", ".join([lora_intermediate_repr, lora_b_repr])
-        return eqn_lora_a_lhs + " -> " + lora_intermediate_repr, eqn_lora_b_lhs + " -> " + y_repr
-
-    def _remove_common_prefix_suffix(self, str1, str2):
-        # Get the common prefix
-        prefix = ""
-        for i in range(min(len(str1), len(str2))):
-            if str1[i] == str2[i]:
-                prefix += str1[i]
-            else:
-                break
-
-        # Get the common suffix
-        suffix = ""
-        for i in range(1, min(len(str1), len(str2)) + 1):
-            if str1[-i] == str2[-i]:
-                suffix = str1[-i] + suffix
-            else:
-                break
-
-        return prefix, suffix, str1[len(prefix) : -len(suffix)], str2[len(prefix) : -len(suffix)]
-
-    def _parse_shape(self, lora_merge_eqn: str) -> tuple[tuple[int, ...], tuple[int, ...]]:
-        (lora_lhs_part_0, lora_lhs_part_1), lora_rhs = _parse_einops_eqn(lora_merge_eqn)
-        ann_to_dim = dict(zip(lora_rhs, self.base.shape, strict=True))
-        ann_to_dim[self.lora_config.rank_annotation] = self.lora_config.rank
-        return tuple(ann_to_dim[ann] for ann in lora_lhs_part_0), tuple(ann_to_dim[ann] for ann in lora_lhs_part_1)
-
-
-def merge_lora_params(lora_params: at.PyTree, get_lora_transform_eqn: Callable[[str], str]) -> at.PyTree:
-    params = lora_params["params"]
-    flattened_params = traverse_util.flatten_dict(params, sep="/")
-    merged_params = {}
-    for k in flattened_params:
-        if _LORA_A_KEY not in k:
-            continue
-        lora_b_key = k.replace(_LORA_A_KEY, _LORA_B_KEY)
-        orig_w_key = k.replace(_LORA_A_KEY, "w")
-        assert lora_b_key in flattened_params
-        assert orig_w_key in flattened_params
-        lora_merge = jnp.einsum(get_lora_transform_eqn(k), flattened_params[k], flattened_params[lora_b_key])
-        # TODO: Currently we don't handling lora scaling value here due to the base model doesn't support auxilary
-        # variables.
-        merged_params[orig_w_key] = flattened_params[orig_w_key] + lora_merge
-    for k in flattened_params:
-        if _LORA_A_KEY in k or _LORA_B_KEY in k:
-            continue
-        if k not in merged_params:
-            merged_params[k] = flattened_params[k]
-    return {"params": traverse_util.unflatten_dict(merged_params, sep="/")}
-
-
-def _parse_einops_eqn(eqn: str) -> tuple[tuple[str, str], str]:
-    lhs, rhs = eqn.split("->")
-    lhs_parts = lhs.split(",")
-    assert len(lhs_parts) == 2
-
-    def strip_space(s):
-        return s.replace(" ", "")
-
-    lhs_parts[0] = strip_space(lhs_parts[0])
-    lhs_parts[1] = strip_space(lhs_parts[1])
-    rhs = strip_space(rhs)
-    return ((lhs_parts[0], lhs_parts[1]), rhs)
 
 
 @at.typecheck
@@ -602,3 +474,131 @@ def _name(name, i):
     if i == 0:
         return name
     return f"{name}_{i}"
+
+
+_LORA_A_KEY = "lora_a"
+_LORA_B_KEY = "lora_b"
+
+
+@at.typecheck
+class LoRAEinsum(nn.Module):
+    base: Einsum
+    lora_config: LoRAConfig
+    merge_eqn: str
+    lora_a_init_fn: nn.initializers.Initializer
+    lora_b_init_fn: nn.initializers.Initializer
+
+    def setup(self):
+        nn.share_scope(self, self.base)
+
+    @nn.compact
+    def __call__(self, eqn, x, *, deterministic=True):
+        orig_x = x
+        eqn_lora_a, eqn_lora_b = self._get_lora_eqn(eqn, self.merge_eqn)
+        if self.lora_config.dropout > 0.0:
+            x = nn.Dropout(rate=self.lora_config.dropout, deterministic=deterministic)(x)
+        lora_a_shape, lora_b_shape = self._parse_shape(self.merge_eqn)
+        lora_a = self.param(_LORA_A_KEY, self.lora_a_init_fn, lora_a_shape).astype(x.dtype)
+        lora_b = self.param(_LORA_B_KEY, self.lora_b_init_fn, lora_b_shape).astype(x.dtype)
+        lora_a = jnp.einsum(eqn_lora_a, x, lora_a)
+        lora_b = jnp.einsum(eqn_lora_b, lora_a, lora_b)
+
+        # TODO: scaling_value should ideally be a self.variable however currently base model doesn't allow any
+        # auxilary variables.
+        scaling_value = (
+            self.lora_config.alpha / self.lora_config.rank
+            if not self.lora_config.rslora
+            else self.lora_config.alpha / math.sqrt(self.lora_config.rank)
+        )
+
+        return self.base(eqn, orig_x) + lora_b * scaling_value
+
+    def _get_lora_eqn(self, eqn: str, lora_merge_eqn: str) -> tuple[str, str]:
+        """Figure out lora_a and lora_b eqn from eqn and lora_merge_eqn.
+        input:
+        eqn: x,w->y
+        lora_merge_eqn: lora_a,lora_b->w
+
+        output:
+        lora_a_eqn: x,lora_a->?
+        lora_b_eqn: ?,lora_b->y
+        """
+        (x_repr, w_repr), y_repr = _parse_einops_eqn(eqn)
+        (lora_a_repr, lora_b_repr), w_repr_p = _parse_einops_eqn(lora_merge_eqn)
+        assert len(w_repr) == len(self.base.shape), f"w_repr={w_repr}, shape={self.base.shape}"
+        assert w_repr == w_repr_p, f"w_repr={w_repr}, w_repr_p={w_repr_p} should be the same."
+
+        # figure out x,lora_a's output annotation by using y and lora_b
+        # the way to do this is to:
+        # 1. remove the common prefix and suffix from lora_b and y
+        # 2. then the ? will be (common prefix) (stripped y) (stripped lora_b)
+        # the equation will look like:
+        # [(prefix) (stripped y) (lora b)], [(prefix) (lora b) (suffix)] -> [(prefix) (y) (suffix)]
+        prefix, _, y_repr_stripped, lora_b_repr_stripped = self._remove_common_prefix_suffix(y_repr, lora_b_repr)
+        lora_intermediate_repr = prefix + y_repr_stripped + lora_b_repr_stripped
+
+        eqn_lora_a_lhs = ", ".join([x_repr, lora_a_repr])
+        eqn_lora_b_lhs = ", ".join([lora_intermediate_repr, lora_b_repr])
+        return eqn_lora_a_lhs + " -> " + lora_intermediate_repr, eqn_lora_b_lhs + " -> " + y_repr
+
+    def _remove_common_prefix_suffix(self, str1, str2):
+        # Get the common prefix
+        prefix = ""
+        for i in range(min(len(str1), len(str2))):
+            if str1[i] == str2[i]:
+                prefix += str1[i]
+            else:
+                break
+
+        # Get the common suffix
+        suffix = ""
+        for i in range(1, min(len(str1), len(str2)) + 1):
+            if str1[-i] == str2[-i]:
+                suffix = str1[-i] + suffix
+            else:
+                break
+
+        return prefix, suffix, str1[len(prefix) : -len(suffix)], str2[len(prefix) : -len(suffix)]
+
+    def _parse_shape(self, lora_merge_eqn: str) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        (lora_lhs_part_0, lora_lhs_part_1), lora_rhs = _parse_einops_eqn(lora_merge_eqn)
+        ann_to_dim = dict(zip(lora_rhs, self.base.shape, strict=True))
+        ann_to_dim[self.lora_config.rank_annotation] = self.lora_config.rank
+        return tuple(ann_to_dim[ann] for ann in lora_lhs_part_0), tuple(ann_to_dim[ann] for ann in lora_lhs_part_1)
+
+
+def merge_lora_params(lora_params: at.PyTree, get_lora_transform_eqn: Callable[[str], str]) -> at.PyTree:
+    params = lora_params["params"]
+    flattened_params = traverse_util.flatten_dict(params, sep="/")
+    merged_params = {}
+    for k in flattened_params:
+        if _LORA_A_KEY not in k:
+            continue
+        lora_b_key = k.replace(_LORA_A_KEY, _LORA_B_KEY)
+        orig_w_key = k.replace(_LORA_A_KEY, "w")
+        assert lora_b_key in flattened_params
+        assert orig_w_key in flattened_params
+        lora_merge = jnp.einsum(get_lora_transform_eqn(k), flattened_params[k], flattened_params[lora_b_key])
+        # TODO: Currently we don't handling lora scaling value here due to the base model doesn't support auxilary
+        # variables.
+        merged_params[orig_w_key] = flattened_params[orig_w_key] + lora_merge
+    for k in flattened_params:
+        if _LORA_A_KEY in k or _LORA_B_KEY in k:
+            continue
+        if k not in merged_params:
+            merged_params[k] = flattened_params[k]
+    return {"params": traverse_util.unflatten_dict(merged_params, sep="/")}
+
+
+def _parse_einops_eqn(eqn: str) -> tuple[tuple[str, str], str]:
+    lhs, rhs = eqn.split("->")
+    lhs_parts = lhs.split(",")
+    assert len(lhs_parts) == 2
+
+    def strip_space(s):
+        return s.replace(" ", "")
+
+    lhs_parts[0] = strip_space(lhs_parts[0])
+    lhs_parts[1] = strip_space(lhs_parts[1])
+    rhs = strip_space(rhs)
+    return ((lhs_parts[0], lhs_parts[1]), rhs)

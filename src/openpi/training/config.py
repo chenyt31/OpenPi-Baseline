@@ -41,6 +41,8 @@ class DataConfig:
     data_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
     # Model specific transforms. Will be applied after the data is normalized.
     model_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
+    # If true, will use quantile normalization. Otherwise, normal z-score normalization will be used.
+    use_quantile_norm: bool = False
 
     # Indicates where the cached dataset should be stored.
     dataset_root: str | None = dataclasses.field(default_factory=default_dataset_root)

@@ -41,7 +41,7 @@ def activation_sharding_constraint(pytree):
     if _MeshState.active_mesh is None:
         return pytree
     return jax.lax.with_sharding_constraint(
-        pytree, jax.sharding.NamedSharding(_MeshState.active_mesh, jax.sharding.PartitionSpec(BATCH_AXIS))
+        pytree, jax.sharding.NamedSharding(_MeshState.active_mesh, jax.sharding.PartitionSpec(DATA_AXIS))
     )
 
 

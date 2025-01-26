@@ -32,8 +32,9 @@ class AlohaInputs(transforms.DataTransformFn):
     # The action dimension of the model. Will be used to pad state and actions.
     action_dim: int
 
-    # If true, will adapt the joint and gripper values to match the pi runtime.
-    adapt_to_pi: bool = False
+    # If true, this will convert the joint and gripper values from the standard Aloha space to
+    # the space used by the pi internal runtime which was used to train the base model.
+    adapt_to_pi: bool = True
 
     # The expected cameras names. All input cameras must be in this set. Missing cameras will be
     # replaced with black images and the corresponding `image_mask` will be set to False.
@@ -94,8 +95,9 @@ class AlohaInputs(transforms.DataTransformFn):
 class AlohaOutputs(transforms.DataTransformFn):
     """Outputs for the Aloha policy."""
 
-    # If true, will adapt the joint and gripper values to match the pi runtime.
-    adapt_to_pi: bool = False
+    # If true, this will convert the joint and gripper values from the standard Aloha space to
+    # the space used by the pi internal runtime which was used to train the base model.
+    adapt_to_pi: bool = True
 
     def __call__(self, data: dict) -> dict:
         # Only return the first 14 dims.

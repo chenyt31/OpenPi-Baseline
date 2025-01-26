@@ -71,9 +71,10 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     use_delta_joint_actions: bool = False
     # If provided, will determine the default prompt that be used by the model.
     default_prompt: str | None = None
-    # If true, will adapt the joint and gripper values to match the pi runtime. This useful when
-    # fine-tuning a pretrained model.
-    adapt_to_pi: bool = False
+    # If true, this will convert the joint and gripper values from the standard Aloha space to
+    # the space used by the pi internal runtime which was used to train the base model. People who
+    # use standard Aloha data should set this to true.
+    adapt_to_pi: bool = True
     # If true, will disable syncing the dataset from the huggingface hub.
     local_files_only: bool = False
     # Repack transforms. Default is used if not provided.
@@ -248,14 +249,14 @@ _CONFIGS = [
     #
     TrainConfig(
         name="pi0_aloha",
-        data=LeRobotAlohaDataConfig(use_delta_joint_actions=True, adapt_to_pi=True),
+        data=LeRobotAlohaDataConfig(use_delta_joint_actions=True),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     TrainConfig(
         name="pi0_aloha_towel_diverse",
         model=pi0.Pi0Config(action_dim=32),
-        data=LeRobotAlohaDataConfig(use_delta_joint_actions=True, adapt_to_pi=True),
+        data=LeRobotAlohaDataConfig(use_delta_joint_actions=True),
         num_train_steps=30_000,
         policy_metadata={
             # Adjust the reset pose to align better with the internal training data.
@@ -267,6 +268,8 @@ _CONFIGS = [
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_sim_transfer_cube_human",
             default_prompt="Transfer cube",
+            # TODO(ury): Retrain the aloha sim model and remove the adapt_to_pi flag.
+            adapt_to_pi=False,
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
@@ -319,7 +322,6 @@ _CONFIGS = [
         data=LeRobotAlohaDataConfig(
             repo_id="lerobot/aloha_static_cups_open",
             use_delta_joint_actions=True,
-            adapt_to_pi=True,
             repack_transforms=_transforms.Group(
                 inputs=[
                     _transforms.RepackTransform(

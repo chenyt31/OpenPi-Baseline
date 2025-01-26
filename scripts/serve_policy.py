@@ -157,18 +157,19 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
             delta_action_mask = transforms.make_bool_mask(6, -1, 6, -1)
             config = make_policy_config(
                 input_layers=[
-                    aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=True),
+                    aloha_policy.AlohaInputs(action_dim=model.action_dim),
                     transforms.DeltaActions(mask=delta_action_mask),
                 ],
                 output_layers=[
                     transforms.AbsoluteActions(mask=delta_action_mask),
-                    aloha_policy.AlohaOutputs(adapt_to_pi=True),
+                    aloha_policy.AlohaOutputs(),
                 ],
             )
         case EnvMode.ALOHA_SIM:
+            # TODO(ury): Retrain the aloha sim model and remove the adapt_to_pi flag.
             config = make_policy_config(
-                input_layers=[aloha_policy.AlohaInputs(action_dim=model.action_dim)],
-                output_layers=[aloha_policy.AlohaOutputs()],
+                input_layers=[aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=False)],
+                output_layers=[aloha_policy.AlohaOutputs(adapt_to_pi=False)],
             )
         case EnvMode.DROID:
             config = make_policy_config(

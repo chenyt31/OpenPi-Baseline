@@ -175,6 +175,7 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
             config = make_policy_config(
                 input_layers=[droid_policy.DroidInputs(action_dim=model.action_dim, model_type=model.model_type)],
                 output_layers=[droid_policy.DroidOutputs()],
+                sample_kwargs={},
             )
         case EnvMode.CALVIN:
             config = make_policy_config(
@@ -200,6 +201,7 @@ def create_policy(args: Args) -> _policy.Policy:
                 _config.get_config(args.policy.config),
                 args.policy.dir,
                 default_prompt=args.default_prompt,
+                sample_kwargs={},
             )
         case Exported():
             return create_exported_policy(args.env, args.policy, default_prompt=args.default_prompt)

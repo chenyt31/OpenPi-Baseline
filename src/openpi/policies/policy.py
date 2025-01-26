@@ -45,6 +45,14 @@ class Policy(BasePolicy):
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         inputs = self._input_transform(inputs)
+
+        # inputs["image"] = {
+        #     "observation/" + k: v for k, v in inputs["image"]["observation"].items()
+        # }
+        # inputs["image_mask"] = {
+        #     "observation/" + k: v for k, v in inputs["image_mask"]["observation"].items()
+        # }
+
         # Make a batch and convert to jax.Array.
         inputs = jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
 

@@ -309,7 +309,7 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_fast_droid",
-        model=pi0_fast.Pi0FASTConfig(action_dim=8, action_horizon=15, max_token_len=180),
+        model=pi0_fast.Pi0FASTConfig(action_dim=8, action_horizon=10, max_token_len=250),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[droid_policy.DroidInputs(action_dim=model.action_dim, model_type=ModelType.PI0_FAST)],

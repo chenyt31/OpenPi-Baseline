@@ -19,7 +19,6 @@ from openpi.shared import image_tools
 from openpi.shared import normalize as _normalize
 import openpi.shared.array_typing as at
 import openpi.shared.download as download
-import openpi.transforms as _transforms
 
 
 def convert_to_openpi(
@@ -65,13 +64,15 @@ def convert_to_openpi(
 
     norm_stats = _import_norm_stats(ckpt_dir, processor)
 
-    for part in param_path.split("/"):
-        if part not in params:
-            raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
-        params = params[part]
+    params["PaliGemma"] = params.pop("paligemma_model")
 
-    if transform is not None:
-        params = _transforms.transform_dict(transform, params)
+    # for part in param_path.split("/"):
+    #     if part not in params:
+    #         raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
+    #     params = params[part]
+
+    # if transform is not None:
+    #     params = _transforms.transform_dict(transform, params)
 
     # Save params.
     ckpt = ocp.StandardCheckpointer()
@@ -112,7 +113,7 @@ class PiModel(_model.BaseModel):
             # from other properties.
             action_dim = self.example_spec["state"].shape[-1]
             # TODO(ury): Figure out how to get this information from the checkpoint.
-            action_horizon = 15
+            action_horizon = 10
         else:
             raise ValueError(f"Unknown output spec: {output_spec}")
 

@@ -5,6 +5,16 @@ import numpy as np
 from openpi import transforms
 
 
+def make_libero_example() -> dict:
+    """Creates a random input example for the Libero policy."""
+    return {
+        "observation/state": np.random.rand(8),
+        "observation/image": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "observation/wrist_image": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "prompt": "do something",
+    }
+
+
 @dataclasses.dataclass(frozen=True)
 class LiberoInputs(transforms.DataTransformFn):
     # The action dimension of the model. Will be used to pad state and actions.

@@ -5,6 +5,16 @@ import numpy as np
 from openpi import transforms
 
 
+def make_calvin_example() -> dict:
+    """Creates a random input example for the Calvin policy."""
+    return {
+        "observation/state": np.random.rand(15),
+        "observation/rgb_static": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "observation/rgb_gripper": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "prompt": "do something",
+    }
+
+
 @dataclasses.dataclass(frozen=True)
 class CalvinInputs(transforms.DataTransformFn):
     # The action dimension of the model. Will be used to pad state and actions.

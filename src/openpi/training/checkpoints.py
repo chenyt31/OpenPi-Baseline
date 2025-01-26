@@ -14,7 +14,7 @@ import openpi.training.utils as training_utils
 
 
 def initialize_checkpoint_dir(
-    checkpoint_dir: epath.Path | str, keep_interval: int, *, overwrite: bool, resume: bool
+    checkpoint_dir: epath.Path | str, *, keep_period: int | None, overwrite: bool, resume: bool
 ) -> tuple[ocp.CheckpointManager, bool]:
     checkpoint_dir = epath.Path(checkpoint_dir).resolve()
     resuming = False
@@ -42,7 +42,7 @@ def initialize_checkpoint_dir(
         },
         options=ocp.CheckpointManagerOptions(
             max_to_keep=1,
-            keep_period=keep_interval,
+            keep_period=keep_period,
             create=False,
             async_options=ocp.AsyncOptions(timeout_secs=7200),
         ),

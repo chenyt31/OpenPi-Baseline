@@ -30,7 +30,7 @@ def default_dataset_root() -> str:
 class DataConfig:
     # LeRobot repo id. If None, fake data will be created.
     repo_id: str | None = None
-    # Contains precomputed normalization stats.
+    # Contains precomputed normalization stats. If None, normalization will not be performed.
     norm_stats: dict[str, _transforms.NormStats] | None = None
 
     # Used to adopt the inputs from a dataset specific format to a common format
@@ -44,7 +44,7 @@ class DataConfig:
     # If true, will use quantile normalization. Otherwise, normal z-score normalization will be used.
     use_quantile_norm: bool = False
 
-    # Indicates where the cached dataset should be stored.
+    # Indicates where the cached dataset should be stored. If None, the default directory will be used.
     dataset_root: str | None = dataclasses.field(default_factory=default_dataset_root)
 
     # If true, will disable syncing the dataset from the huggingface hub. Allows training on local-only datasets.
@@ -197,17 +197,18 @@ class TrainConfig:
     seed: int = 42
     # Global batch size.
     batch_size: int = 32
-    # Number of workers to use for the data loader.
+    # Number of workers to use for the data loader. Increasing this number will speed up data loading but
+    # will increase memory and CPU usage.
     num_workers: int = 2
     # Number of train steps (batches) to run.
     num_train_steps: int = 30_000
 
-    # How often to log training metrics.
+    # How often (in steps) to log training metrics.
     log_interval: int = 100
-    # How often to save checkpoints.
+    # How often (in steps) to save checkpoints.
     save_interval: int = 1000
-    # How often to keep checkpoints.
-    keep_interval: int = 5000
+    # If set, any existing checkpoints matching step % keep_period == 0 will not be deleted.
+    keep_period: int | None = 5000
 
     # If true, will overwrite the checkpoint directory if it already exists.
     overwrite: bool = False
@@ -243,6 +244,7 @@ class TrainConfig:
             raise ValueError("Cannot resume and overwrite at the same time.")
 
 
+# Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
     #
     # pi0 configs.

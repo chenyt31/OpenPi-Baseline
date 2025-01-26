@@ -315,9 +315,9 @@ _CONFIGS = [
     # Example configs.
     #
     TrainConfig(
-        name="aloha_static_cups_open",
+        name="aloha_pen_uncap_diverse",
         data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_static_cups_open",
+            repo_id="physical-intelligence/aloha_pen_uncap_diverse",
             use_delta_joint_actions=True,
             adapt_to_pi=True,
             repack_transforms=_transforms.Group(

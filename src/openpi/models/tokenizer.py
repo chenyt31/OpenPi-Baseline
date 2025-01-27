@@ -1,4 +1,5 @@
 import abc
+import logging
 
 import numpy as np
 import sentencepiece
@@ -40,6 +41,11 @@ class PaligemmaTokenizer(Tokenizer):
             mask = [True] * tokens_len + padding
             tokens = tokens + padding
         else:
+            if len(tokens) > self._max_len:
+                logging.warning(
+                    f"Token length ({len(tokens)}) exceeds max length ({self._max_len}), truncating. "
+                    "Consider increasing the `max_token_len` in your model config if this happens frequently."
+                )
             tokens = tokens[: self._max_len]
             mask = [True] * self._max_len
 
@@ -104,6 +110,11 @@ class FASTTokenizer(Tokenizer):
             ar_mask = ar_mask + padding
             loss_mask = loss_mask + padding
         else:
+            if len(tokens) > self._max_len:
+                logging.warning(
+                    f"Token length ({len(tokens)}) exceeds max length ({self._max_len}), truncating. "
+                    "Consider increasing the `max_token_len` in your model config if this happens frequently."
+                )
             tokens = tokens[: self._max_len]
             token_mask = token_mask[: self._max_len]
             ar_mask = ar_mask[: self._max_len]

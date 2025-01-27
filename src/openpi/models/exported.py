@@ -145,6 +145,13 @@ class PiModel(_model.BaseModel):
 
         example["image"] = {key: resize_if_needed(key, value) for key, value in example["image"].items()}
 
+        # Default sample kwargs values for exported models. Will be used if not provided by the user.
+        default_kwargs = {"num_steps": 10}
+
+        for key in self.sample_spec:
+            if key not in sample_kwargs:
+                sample_kwargs[key] = default_kwargs[key]
+
         if set(sample_kwargs) != set(self.sample_spec):
             raise ValueError(
                 f"Sample args {list(sample_kwargs)} do not match the expected args {list(self.sample_spec)}"

@@ -30,14 +30,11 @@ class Policy(BasePolicy):
         sample_kwargs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ):
-        if sample_kwargs is None:
-            sample_kwargs = {"num_steps": 10}
-
         self._sample_actions = nnx_utils.module_jit(model.sample_actions)
         self._input_transform = _transforms.compose(transforms)
         self._output_transform = _transforms.compose(output_transforms)
         self._rng = rng or jax.random.key(0)
-        self._sample_kwargs = sample_kwargs
+        self._sample_kwargs = sample_kwargs or {}
         self._metadata = metadata or {}
 
     @override

@@ -41,7 +41,6 @@ def create_policy(config: PolicyConfig) -> _policy.Policy:
 
 
 def _create_pi0_policy(config: PolicyConfig) -> _policy.Policy:
-    sample_kwargs = config.sample_kwargs or {"num_steps": 10}
     return _policy.Policy(
         config.model,
         transforms=[
@@ -56,14 +55,13 @@ def _create_pi0_policy(config: PolicyConfig) -> _policy.Policy:
             transforms.Unnormalize(config.norm_stats),
             *config.output_layers,
         ],
-        sample_kwargs=sample_kwargs,
+        sample_kwargs=config.sample_kwargs,
     )
 
 
 def _create_pi0_fast_policy(config: PolicyConfig) -> _policy.Policy:
     """Creates a pi0 FAST policy."""
     tokenizer_path = config.fast_tokenizer or "physical-intelligence/fast"
-    sample_kwargs = config.sample_kwargs or {}
     return _policy.Policy(
         config.model,
         transforms=[
@@ -83,7 +81,7 @@ def _create_pi0_fast_policy(config: PolicyConfig) -> _policy.Policy:
             transforms.Unnormalize(config.norm_stats, use_quantiles=True),
             *config.output_layers,
         ],
-        sample_kwargs=sample_kwargs,
+        sample_kwargs=config.sample_kwargs,
     )
 
 

@@ -89,16 +89,13 @@ def create_dataset(data_config: _config.DataConfig, model_config: _model.BaseMod
     if repo_id == "fake":
         return FakeDataset(model_config, num_samples=1024)
 
-    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(
-        repo_id, root=data_config.dataset_root, local_files_only=data_config.local_files_only
-    )
+    dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(repo_id, local_files_only=data_config.local_files_only)
     return lerobot_dataset.LeRobotDataset(
         data_config.repo_id,
         delta_timestamps={
             key: [t / dataset_meta.fps for t in range(model_config.action_horizon)]
             for key in data_config.action_sequence_keys
         },
-        root=data_config.dataset_root,
         local_files_only=data_config.local_files_only,
     )
 

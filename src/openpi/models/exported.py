@@ -1,9 +1,12 @@
 """Functionality to handle internal pi checkpoints.
 
 Used to test internal pi checkpoints and provides utilities to convert them to openpi checkpoints.
+
+TODO(ury): Remove before the public release.
 """
 
 from collections.abc import Mapping
+import dataclasses
 import pathlib
 
 import flax.nnx as nnx
@@ -13,6 +16,7 @@ import jax.export
 import jax.numpy as jnp
 import orbax.checkpoint as ocp
 from typing_extensions import override
+import yaml
 
 from openpi.models import model as _model
 from openpi.shared import image_tools
@@ -22,13 +26,22 @@ import openpi.shared.download as download
 import openpi.transforms as _transforms
 
 
+@dataclasses.dataclass
+class ConvertConfig:
+    # The path to the parameters within the overall param structure. Can include "/" to support nesting.
+    param_path: str = ""
+
+    # Transform patterns to use when converting the checkpoint params. Each key maps from the
+    # original param name to the openpi param name. If the value is None, the param is removed.
+    transform: Mapping[str, str | None] | None = None
+
+
 def convert_to_openpi(
     ckpt_dir: pathlib.Path | str,
     out_dir: pathlib.Path | str,
     *,
     processor: str | None = None,
-    param_path: str = "decoder",
-    transform: Mapping[str, None] | None = None,
+    config: ConvertConfig | None = None,
 ) -> None:
     """Convert an internal checkpoint to an openpi checkpoint.
 
@@ -37,9 +50,8 @@ def convert_to_openpi(
         out_dir: The directory to save the openpi checkpoint.
         processor: The processor name to use to extract the norm stats. If None, the first processor
             in the checkpoint is used if there's only one available.
-        param_path: The path to the parameters within the overall param structure. Can include "/" to support nesting.
-        transform: Optional transform patterns to use when converting the checkpoint params. Each key maps from the
-            original param name to the openpi param name. See `determine_transform_patterns` for more details.
+        config: The configuration to use when converting the checkpoint params. If not provided, the right
+            configuration will be inferred from the checkpoint.
     """
     out_dir = pathlib.Path(out_dir)
     if out_dir.exists():
@@ -52,6 +64,9 @@ def convert_to_openpi(
     sharding = jax.sharding.SingleDeviceSharding(jax.devices("cpu")[0])
     params = _load_params(ckpt_dir, sharding=sharding)
 
+    if not config:
+        config = _detect_convert_config(params)
+
     model = PiModel(ckpt_dir, params=params)
     print("Processors:    ", model.processor_names())
     print("Action dim:    ", model.action_dim)
@@ -59,19 +74,23 @@ def convert_to_openpi(
     print("Max token len: ", model.max_token_len)
 
     if processor is None:
-        if len(model.processor_names()) != 1:
-            raise ValueError("Multiple processors found in the checkpoint. Please specify the processor name.")
-        processor = model.processor_names()[0]
+        processor_names = model.processor_names()
+        if len(processor_names) != 1:
+            raise ValueError(
+                f"Multiple processors found in the checkpoint. Please specify a processor name: {processor_names}"
+            )
+        processor = processor_names[0]
 
     norm_stats = _import_norm_stats(ckpt_dir, processor)
 
-    for part in param_path.split("/"):
-        if part not in params:
-            raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
-        params = params[part]
+    if config.param_path:
+        for part in config.param_path.split("/"):
+            if part not in params:
+                raise ValueError(f"{part} not found in the checkpoint. Available keys: {list(params)}")
+            params = params[part]
 
-    if transform is not None:
-        params = _transforms.transform_dict(transform, params)
+    if config.transform is not None:
+        params = _transforms.transform_dict(config.transform, params)
 
     # Save params.
     ckpt = ocp.StandardCheckpointer()
@@ -108,11 +127,15 @@ class PiModel(_model.BaseModel):
             # This is a pi0-fast model.
             self._output_key = "output_tokens"
             self._model_type = _model.ModelType.PI0_FAST
-            # The output is tokenized actions and so we have to infer the action properties
-            # from other properties.
-            action_dim = self.example_spec["state"].shape[-1]
-            # TODO(ury): Figure out how to get this information from the checkpoint.
-            action_horizon = 15
+            # We can't determine the action shape from the output since the model is returning
+            # a tokenized action. Look for this information inside one of the processor specs instead.
+            # It doesn't matter which processor is used since all of them should use the same value.
+            processor_name = self.processor_names()[0]
+            unprocess_spec = _load_processor_msgpack(
+                self.ckpt_dir / "processors" / processor_name / "unprocess_spec.msgpack"
+            )
+            action_shape = unprocess_spec["outputs"]["actions"][0]
+            action_horizon, action_dim = action_shape
         else:
             raise ValueError(f"Unknown output spec: {output_spec}")
 
@@ -317,3 +340,37 @@ def _make_batch(data: at.PyTree) -> at.PyTree:
 
 def _unbatch(data: at.PyTree) -> at.PyTree:
     return jax.tree.map(lambda x: x[0, ...], data)
+
+
+def _detect_convert_config(params: at.PyTree) -> ConvertConfig:
+    if "decoder" in params:
+        return ConvertConfig(param_path="decoder")
+
+    if "paligemma_model" in params:
+        return ConvertConfig(transform={"paligemma_model": "PaliGemma"})
+
+    return ConvertConfig()
+
+
+class IgnoreCustomTagsLoader(yaml.Loader):
+    """A custom loader that ignores custom tags."""
+
+
+def ignore_custom_tags(loader: yaml.Loader, _tag_suffix, node):
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return loader.construct_scalar(node)
+
+
+# Register the multi-constructor to handle unknown tags
+IgnoreCustomTagsLoader.add_multi_constructor("!", ignore_custom_tags)
+
+
+def _load_processor_msgpack(path: pathlib.Path | str) -> dict:
+    """Load a processor spec from a msgpack file."""
+    path = pathlib.Path(path)
+    with path.open() as f:
+        data = f.read()
+        return yaml.load(data, Loader=IgnoreCustomTagsLoader)

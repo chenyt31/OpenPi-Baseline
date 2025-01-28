@@ -14,7 +14,6 @@ class EnvMode(enum.Enum):
     ALOHA = "aloha"
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
-    CALVIN = "calvin"
     LIBERO = "libero"
 
 
@@ -32,7 +31,6 @@ def main(args: Args) -> None:
         EnvMode.ALOHA: _random_observation_aloha,
         EnvMode.ALOHA_SIM: _random_observation_aloha,
         EnvMode.DROID: _random_observation_droid,
-        EnvMode.CALVIN: _random_observation_calvin,
         EnvMode.LIBERO: _random_observation_libero,
     }[args.env]
 
@@ -73,15 +71,6 @@ def _random_observation_droid() -> dict:
         "observation/wrist_image_left": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
         "observation/joint_position": np.random.rand(7),
         "observation/gripper_position": np.random.rand(1),
-        "prompt": "do something",
-    }
-
-
-def _random_observation_calvin() -> dict:
-    return {
-        "observation/state": np.random.rand(15),
-        "observation/rgb_static": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
-        "observation/rgb_gripper": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
         "prompt": "do something",
     }
 

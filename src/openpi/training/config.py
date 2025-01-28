@@ -12,7 +12,6 @@ import openpi.models.pi0 as pi0
 import openpi.models.pi0_fast as pi0_fast
 import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
-import openpi.policies.calvin_policy as calvin_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
 import openpi.shared.download as download
@@ -342,17 +341,6 @@ _CONFIGS = [
             default_prompt="Transfer cube",
         ),
         weight_loader=weight_loaders.PaliGemmaWeightLoader(),
-        num_train_steps=30_000,
-    ),
-    TrainConfig(
-        name="pi0_calvin",
-        model=pi0.Pi0Config(action_dim=7, action_horizon=10),
-        data=SimpleDataConfig(
-            data_transforms=lambda model: _transforms.Group(
-                inputs=[calvin_policy.CalvinInputs(action_dim=model.action_dim)],
-                outputs=[calvin_policy.CalvinOutputs()],
-            ),
-        ),
         num_train_steps=30_000,
     ),
     TrainConfig(

@@ -105,6 +105,19 @@ class RepackTransform(DataTransformFn):
 
 
 @dataclasses.dataclass(frozen=True)
+class ExtractPrompt(DataTransformFn):
+    tasks: dict[int, str]
+
+    def __call__(self, data: DataDict) -> DataDict:
+        assert "task_index" in data, "Cannot extract prompt without task index"
+        assert (
+            int(data["task_index"]) in self.tasks
+        ), f"Task index {data['task_index']} not found in task mapping: {self.tasks}"
+        prompt = self.tasks[int(data["task_index"])]
+        return {**data, "prompt": prompt}
+
+
+@dataclasses.dataclass(frozen=True)
 class InjectDefaultPrompt(DataTransformFn):
     prompt: str | None
 

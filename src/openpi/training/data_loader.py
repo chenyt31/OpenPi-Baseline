@@ -111,9 +111,13 @@ def transform_dataset(dataset: Dataset, data_config: _config.DataConfig, *, skip
             )
         norm_stats = data_config.norm_stats
 
+    prompt_transforms = (
+        [_transforms.ExtractPrompt(dataset.meta.tasks)] if isinstance(dataset, lerobot_dataset.LeRobotDataset) else []
+    )
     return TransformedDataset(
         dataset,
         [
+            *prompt_transforms,
             *data_config.repack_transforms.inputs,
             *data_config.data_transforms.inputs,
             _transforms.Normalize(norm_stats, use_quantiles=data_config.use_quantile_norm),

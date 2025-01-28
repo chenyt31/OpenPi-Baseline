@@ -142,3 +142,29 @@ def test_lora_einsum_same_output():
 
     # Results are the same since the LoRA parameters are initialized to zeros.
     assert jnp.allclose(output, output_lora)
+
+
+def test_lora_einsum_param_merge_same_output():
+    shape = (3, 8, 32, 4)  # (3KDH)
+    lora_config = lora.LoRAConfig(rank=2, init_fn=nn.initializers.normal(stddev=0.01))
+    einsum_lora = lora.Einsum(shape, lora_config=lora_config)
+
+    key = jax.random.key(0)
+    x = jax.random.normal(key, (8, 64, 32))  # (BSD)
+    eqn = "BSD,3KDH->3BSKH"
+    merge_eqn = "3KDL,3KLH->3KDH"
+
+    params_lora = einsum_lora.init(key, eqn, x)
+    output_lora = einsum_lora.apply(params_lora, eqn, x)
+
+    params = {
+        "params": {
+            "w": params_lora["params"]["w"]
+            + jnp.einsum(merge_eqn, params_lora["params"]["lora_a"], params_lora["params"]["lora_b"])
+            * lora_config.scaling_value
+        }
+    }
+    output = jnp.einsum(eqn, x, params["params"]["w"])
+
+    # Results are the same since the LoRA parameters are initialized to zeros.
+    assert jnp.allclose(output, output_lora)

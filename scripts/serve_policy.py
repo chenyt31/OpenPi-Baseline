@@ -9,7 +9,6 @@ import tyro
 from openpi import transforms
 from openpi.models import exported as _exported
 from openpi.policies import aloha_policy
-from openpi.policies import calvin_policy
 from openpi.policies import droid_policy
 from openpi.policies import libero_policy
 from openpi.policies import policy as _policy
@@ -24,7 +23,6 @@ class EnvMode(enum.Enum):
     ALOHA = "aloha"
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
-    CALVIN = "calvin"
     LIBERO = "libero"
 
 
@@ -88,10 +86,6 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     EnvMode.DROID: Checkpoint(
         config="pi0_droid",
         dir="s3://openpi-assets/checkpoints/pi0_droid",
-    ),
-    EnvMode.CALVIN: Checkpoint(
-        config="pi0_calvin",
-        dir="s3://openpi-assets/checkpoints/pi0_calvin",
     ),
     EnvMode.LIBERO: Checkpoint(
         config="pi0_libero",
@@ -175,11 +169,6 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
             config = make_policy_config(
                 input_layers=[droid_policy.DroidInputs(action_dim=model.action_dim, model_type=model.model_type)],
                 output_layers=[droid_policy.DroidOutputs()],
-            )
-        case EnvMode.CALVIN:
-            config = make_policy_config(
-                input_layers=[calvin_policy.CalvinInputs(action_dim=model.action_dim)],
-                output_layers=[calvin_policy.CalvinOutputs()],
             )
         case EnvMode.LIBERO:
             config = make_policy_config(

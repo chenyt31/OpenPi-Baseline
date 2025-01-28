@@ -230,7 +230,7 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
         # Prepare data for policy training
         # Convert images to uint8 numpy arrays, add masks
         data_transforms = _transforms.Group(
-            inputs=[libero_policy.LiberoInputs(model_type=model_config.model_type)],
+            inputs=[libero_policy.LiberoInputs(action_dim=model_config.action_dim, model_type=model_config.model_type)],
             outputs=[libero_policy.LiberoOutputs()],
         )
         # Use delta actions (not for gripper)

@@ -28,10 +28,11 @@ def module_jit(meth: Callable[P, R], *jit_args, **jit_kwargs) -> Callable[P, R]:
 
     graphdef, state = nnx.split(meth.__self__)
 
-    @functools.partial(jax.jit, *jit_args, **jit_kwargs)
-    def jitted_fn(state: nnx.State, *args: P.args, **kwargs: P.kwargs) -> R:
+    def fun(state: nnx.State, *args: P.args, **kwargs: P.kwargs) -> R:
         module = nnx.merge(graphdef, state)
         return meth.__func__(module, *args, **kwargs)
+
+    jitted_fn = jax.jit(fun, *jit_args, **jit_kwargs)
 
     @functools.wraps(meth)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:

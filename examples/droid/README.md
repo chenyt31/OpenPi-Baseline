@@ -1,13 +1,37 @@
 # Run DROID
 
-This example shows how to run the [DROID platform](https://github.com/droid-dataset/droid) with OpenPI.
+This example shows how to run the fine-tuned $\pi_0$-FAST-DROID model on the [DROID robot platform](https://github.com/droid-dataset/droid).
 
-# Usage
+## Step 1: Start a policy server
 
-1. With the DROID conda environment activated, run `cd $OPENPI_ROOT/packages/openpi-client && pip install -e .` to install the OpenPI client.
-1. Copy the `main.py` file from this directory to the `$DROID_ROOT/scripts` directory.
-1. Start the OpenPI server via the following command:
+Since the DROID control laptop does not have a powerful GPU, we will start a remote policy server on a different machine with a more powerful GPU and then query it from the DROID control laptop during inference.
+
+1. On a machine with a powerful GPU, clone and install the `openpi` repository following the instructions in the [README](https://github.com/Physical-Intelligence/openpi).
+2. Start the OpenPI server via the following command:
 
 ```bash
-uv run scripts/serve_policy.py --env DROID
+uv run scripts/serve_policy.py policy:checkpoint --policy.config=pi0_fast_droid --policy.dir=s3://openpi-assets/checkpoints/pi0_fast_droid
 ```
+
+## Step 2: Run the DROID robot
+
+1. Make sure you have the most recent version of the DROID package installed on both the DROID control laptop and the NUC.
+2. On the control laptop, clone the OpenPI repo and install the OpenPI client, which we will use to connect to the policy server: with the DROID conda environment activated, run `cd $OPENPI_ROOT/packages/openpi-client && pip install -e .`.
+3. Copy the `main.py` file from this directory to the `$DROID_ROOT/scripts` directory.
+4. Replace the camera IDs in the `main.py` file with the IDs of your cameras.
+5. Run the `main.py` file. Make sure to point the IP and host address to the policy server. (to make sure the server machine is reachable from the DROID laptop, you can run `ping <server_ip>` from the DROID laptop)
+
+```bash
+python3 scripts/main.py --remote_host=<server_ip> --remote_port=<server_port>
+```
+
+The script will ask you to enter a free-form language instruction for the robot to follow. Make sure to point the cameras at the scene you want the robot to interact with. You _do not_ need to carefully control camera angle, object positions, etc. The policy is fairly robust in our experience. Happy prompting!
+
+# Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Cannot reach policy server | Make sure the server is running and the IP and port are correct. You can check that the server machine is reachable by running `ping <server_ip>` from the DROID laptop. |
+| Cannot find cameras | Make sure the camera IDs are correct and that the cameras are connected to the DROID laptop. Sometimes replugging the cameras can help. |
+| Policy inference is slow / inconsistent | Try using a wired internet connection for the DROID laptop to reduce latency (0.5 - 1 sec latency per chunk is normal). |
+| Policy does not perform the task well | In our experiments, the policy could perform simple table top manipulation tasks (pick-and-place) across a wide range of environments, camera positions, and lighting conditions. If the policy does not perform the task well, you can try modifying the scene or object placement to make the task easier. Also make sure that the camera view you are passing to the policy can see all relevant objects in the scene (the policy is only conditioned on a single external camera + wrist camera, make sure you are feeding the desired camera to the policy). |

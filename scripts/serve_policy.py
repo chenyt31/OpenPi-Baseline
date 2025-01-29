@@ -36,8 +36,6 @@ class Exported:
     # Processor name to load the norm stats from. If not provided, will automatically load a processor if there is only
     # one available. If there are multiple processors, raise an error and ask the user to provide a processor name.
     processor: str | None = None
-    # Name of the FAST tokenizer to use (only relevant for FAST model checkpoints).
-    fast_tokenizer: str | None = None
 
 
 @dataclasses.dataclass
@@ -71,26 +69,29 @@ class Args:
     record: bool = False
 
     # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
+    # TODO(ury): Remove support for exported models before releasing.
     policy: Checkpoint | Exported | Default = dataclasses.field(default_factory=Default)
 
 
 # Default checkpoints that should be used for each environment.
 DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
+    # TODO(ury): Update to use the base checkpoint.
     EnvMode.ALOHA: Checkpoint(
-        config="pi0_aloha",
-        dir="s3://openpi-assets/checkpoints/pi0_aloha",
+        config="pi0_aloha_towel",
+        dir="s3://openpi-assets/checkpoints/pi0_aloha_towel",
     ),
     EnvMode.ALOHA_SIM: Checkpoint(
         config="pi0_aloha_sim",
         dir="s3://openpi-assets/checkpoints/pi0_aloha_sim",
     ),
     EnvMode.DROID: Checkpoint(
-        config="pi0_droid",
-        dir="s3://openpi-assets/checkpoints/pi0_droid",
+        config="pi0_fast_droid",
+        dir="s3://openpi-assets/checkpoints/pi0_fast_droid",
     ),
+    # TODO(ury): Make sure that this works once the checkpoint is ready.
     EnvMode.LIBERO: Checkpoint(
-        config="pi0_libero",
-        dir="s3://openpi-assets/checkpoints/pi0_libero",
+        config="pi0_fast_libero",
+        dir="s3://openpi-assets/checkpoints/pi0_fast_libero",
     ),
 }
 
@@ -142,7 +143,6 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
             input_layers=input_layers,
             output_layers=output_layers,
             model_type=model.model_type,
-            fast_tokenizer=exported.fast_tokenizer,
             sample_kwargs=sample_kwargs,
         )
 
@@ -161,10 +161,9 @@ def create_exported_policy(env: EnvMode, exported: Exported, *, default_prompt: 
                 ],
             )
         case EnvMode.ALOHA_SIM:
-            # TODO(ury): Retrain the aloha sim model and remove the adapt_to_pi flag.
             config = make_policy_config(
-                input_layers=[aloha_policy.AlohaInputs(action_dim=model.action_dim, adapt_to_pi=False)],
-                output_layers=[aloha_policy.AlohaOutputs(adapt_to_pi=False)],
+                input_layers=[aloha_policy.AlohaInputs(action_dim=model.action_dim)],
+                output_layers=[aloha_policy.AlohaOutputs()],
             )
         case EnvMode.DROID:
             config = make_policy_config(

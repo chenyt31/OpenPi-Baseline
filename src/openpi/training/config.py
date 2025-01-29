@@ -152,7 +152,7 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     repo_id: str = tyro.MISSING
     # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
     # Gripper dimensions will remain in absolute values.
-    use_delta_joint_actions: bool = False
+    use_delta_joint_actions: bool = True
     # If provided, will determine the default prompt that be used by the model.
     default_prompt: str | None = None
     # If true, this will convert the joint and gripper values from the standard Aloha space to
@@ -293,125 +293,81 @@ class TrainConfig:
 # Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
     #
+    # Base models.
+    #
+    # TODO: Add pi0_base and pi0_fast_base
+    #
     # Aloha configs.
     #
     TrainConfig(
-        name="pi0_aloha",
-        model=pi0.Pi0Config(action_dim=24),
-        data=LeRobotAlohaDataConfig(use_delta_joint_actions=True),
+        name="pi0_aloha_towel",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            default_prompt="fold the towel",
+        ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
-        num_train_steps=30_000,
     ),
     TrainConfig(
-        name="pi0_aloha_towel_diverse",
-        model=pi0.Pi0Config(action_dim=24),
-        data=LeRobotAlohaDataConfig(use_delta_joint_actions=True),
-        num_train_steps=30_000,
-        policy_metadata={
-            # Adjust the reset pose to align better with the internal training data.
-            "reset_pose": [0, -1.5, 1.5, 0, 0, 0]
-        },
+        name="pi0_aloha_tupperware",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            default_prompt="open the tupperware and put the food on the plate",
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
     ),
     #
     # DROID configs.
     #
     TrainConfig(
-        name="pi0_droid",
-        model=pi0.Pi0Config(action_dim=8, action_horizon=10),
-        data=SimpleDataConfig(
-            data_transforms=lambda model: _transforms.Group(
-                inputs=[droid_policy.DroidInputs(action_dim=model.action_dim)],
-                outputs=[droid_policy.DroidOutputs()],
-            ),
-        ),
-        num_train_steps=30_000,
-    ),
-    TrainConfig(
         name="pi0_fast_droid",
-        model=pi0_fast.Pi0FASTConfig(action_dim=8, action_horizon=15, max_token_len=180),
+        # TODO(karlp): Merge with the default settings.
+        model=pi0_fast.Pi0FASTConfig(action_dim=8, action_horizon=10),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[droid_policy.DroidInputs(action_dim=model.action_dim, model_type=ModelType.PI0_FAST)],
                 outputs=[droid_policy.DroidOutputs()],
             ),
         ),
-        num_train_steps=30_000,
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
     ),
     #
     # Simulation configs.
     #
     TrainConfig(
-        name="pi0_aloha_sim",
-        model=pi0.Pi0Config(action_dim=24),
-        data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_sim_transfer_cube_human",
-            default_prompt="Transfer cube",
-            # TODO(ury): Retrain the aloha sim model and remove the adapt_to_pi flag.
-            adapt_to_pi=False,
-        ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
-        num_train_steps=30_000,
-    ),
-    TrainConfig(
-        name="pi0_fast_aloha_sim",
-        model=pi0_fast.Pi0FASTConfig(action_horizon=50, action_dim=14, max_token_len=256),
-        data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_sim_transfer_cube_human",
-            default_prompt="Transfer cube",
-        ),
-        weight_loader=weight_loaders.PaliGemmaWeightLoader(),
-        num_train_steps=30_000,
-    ),
-    TrainConfig(
-        name="pi0_libero",
-        model=pi0.Pi0Config(action_dim=7, action_horizon=10),
+        name="pi0_fast_libero",
+        model=pi0_fast.Pi0FASTConfig(),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(
                 inputs=[libero_policy.LiberoInputs(action_dim=model.action_dim)],
                 outputs=[libero_policy.LiberoOutputs()],
             ),
         ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
         num_train_steps=30_000,
     ),
     #
-    # Additional configs.
+    # Examples:
     #
+    # This is a test config that is used to illustate how train on a custom LeRobot dataset.
+    # TODO(michael): Add pi0_aloha_pen_uncap and a link to the tutorial.
     TrainConfig(
-        name="pi0_paligemma",
-        weight_loader=weight_loaders.PaliGemmaWeightLoader(),
+        name="pi0_aloha_pen_uncap",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
     ),
-    #
-    # Example configs.
-    #
+    # This config is used to demonstrate how to train on a simple simulated environment.
     TrainConfig(
-        name="aloha_static_cups_open",
+        name="pi0_aloha_sim",
+        model=pi0.Pi0Config(),
         data=LeRobotAlohaDataConfig(
-            repo_id="lerobot/aloha_static_cups_open",
-            use_delta_joint_actions=True,
-            repack_transforms=_transforms.Group(
-                inputs=[
-                    _transforms.RepackTransform(
-                        {
-                            "images": {
-                                "cam_high": "observation.images.cam_high",
-                                "cam_left_wrist": "observation.images.cam_left_wrist",
-                                "cam_right_wrist": "observation.images.cam_right_wrist",
-                            },
-                            "state": "observation.state",
-                            "actions": "action",
-                        }
-                    )
-                ]
-            ),
-            # Set this to true if you are using a dataset that is not on the huggingface hub.
-            base_config=DataConfig(local_files_only=False),
+            repo_id="lerobot/aloha_sim_transfer_cube_human",
+            default_prompt="Transfer cube",
+            use_delta_joint_actions=False,
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
-        batch_size=64,
-        lr_schedule=_optimizer.CosineDecaySchedule(
-            warmup_steps=1_000, peak_lr=2.5e-5, decay_steps=30_000, decay_lr=2.5e-6
-        ),
     ),
     #
     # Debugging configs.

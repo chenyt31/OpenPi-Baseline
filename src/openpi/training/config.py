@@ -15,17 +15,10 @@ import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
-import openpi.shared.download as download
 import openpi.shared.normalize as _normalize
 import openpi.training.optimizer as _optimizer
 import openpi.training.weight_loaders as weight_loaders
 import openpi.transforms as _transforms
-
-
-def default_dataset_root() -> str:
-    """Default location for the dataset cache."""
-    return str(download.get_cache_dir() / "datasets")
-
 
 ModelType = _model.ModelType
 
@@ -53,9 +46,6 @@ class DataConfig:
     # sequence is defined by the `action_horizon` field in the model config. This should be adjusted if your
     # LeRobot dataset is using different keys to represent the action.
     action_sequence_keys: Sequence[str] = ("actions",)
-
-    # Indicates where the cached dataset should be stored. If None, the default directory will be used.
-    dataset_root: str | None = dataclasses.field(default_factory=default_dataset_root)
 
     # If true, will disable syncing the dataset from the huggingface hub. Allows training on local-only datasets.
     local_files_only: bool = False

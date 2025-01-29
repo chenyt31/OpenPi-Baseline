@@ -1,8 +1,10 @@
 import concurrent.futures
+import datetime
 import getpass
 import logging
 import os
 import pathlib
+import re
 import shutil
 import stat
 import time
@@ -60,11 +62,13 @@ def maybe_download(url: str, **kwargs) -> pathlib.Path:
             raise FileNotFoundError(f"File not found at {url}")
         return path.resolve()
 
-    local_path = get_cache_dir() / parsed.netloc / parsed.path.strip("/")
+    cache_dir = get_cache_dir()
+
+    local_path = cache_dir / parsed.netloc / parsed.path.strip("/")
     local_path = local_path.resolve()
 
     # Check if file already exists in cache.
-    if local_path.exists():
+    if local_path.exists() and not _invalidate_expired_cache(cache_dir, local_path):
         return local_path
 
     # Download file from remote file system.
@@ -262,3 +266,39 @@ def _ensure_permissions(path: pathlib.Path) -> None:
 def _is_openpi_url(url: str) -> bool:
     """Check if the url is an OpenPI S3 bucket url."""
     return url.startswith("s3://openpi-assets/")
+
+
+def _get_mtime(year: int, month: int, day: int) -> float:
+    """Get the mtime of a given date at midnight UTC."""
+    date = datetime.datetime(year, month, day, tzinfo=datetime.UTC)
+    return time.mktime(date.timetuple())
+
+
+# Map of relative paths, defined as regular expressions, to expiration timestamps (mtime format).
+# Partial matching will be used from top to bottom and the first match will be chosen.
+# Cached entries will be retained only if they are newer than the expiration timestamp.
+_INVALIDATE_CACHE_DIRS: dict[re.Pattern, float] = {
+    re.compile("openpi-assets/checkpoints/"): _get_mtime(2025, 1, 28),
+    re.compile("openpi-assets/exported/"): _get_mtime(2025, 1, 28),
+}
+
+
+def _invalidate_expired_cache(cache_dir: pathlib.Path, local_path: pathlib.Path) -> bool:
+    """Invalidate the cache if it is expired. Return True if the cache was invalidated."""
+
+    assert local_path.exists(), f"File not found at {local_path}"
+
+    relative_path = str(local_path.relative_to(cache_dir))
+    for pattern, expire_time in _INVALIDATE_CACHE_DIRS.items():
+        if pattern.match(relative_path):
+            # Remove if not newer than the expiration timestamp.
+            if local_path.stat().st_mtime <= expire_time:
+                logger.info(f"Removing expired cached entry: {local_path}")
+                if local_path.is_dir():
+                    shutil.rmtree(local_path)
+                else:
+                    local_path.unlink()
+                return True
+            return False
+
+    return False

@@ -77,7 +77,7 @@ class Pi0FASTConfig(_model.BaseModelConfig):
     paligemma_variant: _gemma.Variant = "gemma_2b"
 
     # Set the model specific defaults.
-    action_dim: int = 14
+    action_dim: int = 32
     action_horizon: int = 32
     max_token_len: int = 250
 

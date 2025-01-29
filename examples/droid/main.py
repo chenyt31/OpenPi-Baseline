@@ -1,9 +1,11 @@
 # ruff: noqa
 
+import contextlib
 import dataclasses
 import datetime
 import faulthandler
 import os
+import signal
 
 from moviepy.editor import ImageSequenceClip
 import numpy as np
@@ -21,25 +23,61 @@ faulthandler.enable()
 @dataclasses.dataclass
 class Args:
     # Hardware parameters
-    left_camera_id: str = "24259877"
-    right_camera_id: str = "24514023"
-    wrist_camera_id: str = "13062452"
+    left_camera_id: str = "<your_camera_id>"  # e.g., "24259877"
+    right_camera_id: str = "<your_camera_id>"  # e.g., "24514023"
+    wrist_camera_id: str = "<your_camera_id>"  # e.g., "13062452"
+
+    # Policy parameters
+    external_camera: str | None = (
+        None  # which external camera should be fed to the policy, choose from ["left", "right"]
+    )
 
     # Rollout parameters
-    max_timesteps: int = 400
+    max_timesteps: int = 600
     # How many actions to execute from a predicted action chunk before querying policy server again
+    # 8 is usually a good default (equals 0.5 seconds of action execution).
     open_loop_horizon: int = 8
 
     # Remote server parameters
-    remote_host: str = "localhost"
-    remote_port: int = 8000
+    remote_host: str = "0.0.0.0"  # point this to the IP address of the policy server, e.g., "192.168.1.100"
+    remote_port: int = (
+        8000  # point this to the port of the policy server, default server port for openpi servers is 8000
+    )
+
+
+# We are using Ctrl+C to optionally terminate rollouts early -- however, if we press Ctrl+C while the policy server is
+# waiting for a new action chunk, it will raise an exception and the server connection dies.
+# This context manager temporarily prevents Ctrl+C and delays it after the server call is complete.
+@contextlib.contextmanager
+def prevent_keyboard_interrupt():
+    """Temporarily prevent keyboard interrupts by delaying them until after the protected code."""
+    interrupted = False
+    original_handler = signal.getsignal(signal.SIGINT)
+
+    def handler(signum, frame):
+        nonlocal interrupted
+        interrupted = True
+
+    signal.signal(signal.SIGINT, handler)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGINT, original_handler)
+        if interrupted:
+            raise KeyboardInterrupt
 
 
 def main(args: Args):
-    # Initialize the Panda environment.
-    env = RobotEnv(action_space="joint_velocity", gripper_action_space="position")
-    print("created the droid env!")
+    # Make sure external camera is specified by user -- we only use one external camera for the policy
+    assert (
+        args.external_camera is not None and args.external_camera in ["left", "right"]
+    ), f"Please specify an external camera to use for the policy, choose from ['left', 'right'], but got {args.external_camera}"
 
+    # Initialize the Panda environment. Using joint velocity action space and gripper position action space is very important.
+    env = RobotEnv(action_space="joint_velocity", gripper_action_space="position")
+    print("Created the droid env!")
+
+    # Connect to the policy server
     policy_client = websocket_client_policy.WebsocketClientPolicy(args.remote_host, args.remote_port)
 
     df = pd.DataFrame(columns=["success", "duration", "video_filename"])
@@ -55,6 +93,7 @@ def main(args: Args):
         timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H:%M:%S")
         video = []
         bar = tqdm.tqdm(range(args.max_timesteps))
+        print("Running rollout... press Ctrl+C to stop early.")
         for t_step in bar:
             try:
                 # Get the current observation
@@ -65,15 +104,17 @@ def main(args: Args):
                     save_to_disk=t_step == 0,
                 )
 
-                video.append(curr_obs["right_image"])
+                video.append(curr_obs[f"{args.external_camera}_image"])
 
                 # Send websocket request to policy server if it's time to predict a new chunk
                 if actions_from_chunk_completed == 0 or actions_from_chunk_completed >= args.open_loop_horizon:
                     actions_from_chunk_completed = 0
 
+                    # We resize images on the robot laptop to minimize the amount of data sent to the policy server
+                    # and improve latency.
                     request_data = {
                         "observation/exterior_image_1_left": image_tools.resize_with_pad(
-                            curr_obs["left_image"], 224, 224
+                            curr_obs[f"{args.external_camera}_image"], 224, 224
                         ),
                         "observation/wrist_image_left": image_tools.resize_with_pad(curr_obs["wrist_image"], 224, 224),
                         "observation/joint_position": curr_obs["joint_position"],
@@ -81,16 +122,18 @@ def main(args: Args):
                         "prompt": instruction,
                     }
 
-                    # this returns action chunk [16, 8] of 16 joint velocity actions (7) + gripper position (1)
-                    pred_action_chunk = policy_client.infer(request_data)["actions"]
-                    print(pred_action_chunk.shape)
+                    # Wrap the server call in a context manager to prevent Ctrl+C from interrupting it
+                    # Ctrl+C will be handled after the server call is complete
+                    with prevent_keyboard_interrupt():
+                        # this returns action chunk [10, 8] of 10 joint velocity actions (7) + gripper position (1)
+                        pred_action_chunk = policy_client.infer(request_data)["actions"]
                     assert pred_action_chunk.shape == (10, 8)
 
                 # Select current action to execute from chunk
                 action = pred_action_chunk[actions_from_chunk_completed]
                 actions_from_chunk_completed += 1
 
-                # binarize gripper action
+                # Binarize gripper action
                 if action[-1].item() > 0.5:
                     # action[-1] = 1.0
                     action = np.concatenate([action[:-1], np.ones((1,))])
@@ -107,7 +150,6 @@ def main(args: Args):
 
         video = np.stack(video)
         save_filename = "video_" + timestamp
-        # np.save(os.path.join("videos", save_filename), video)
         ImageSequenceClip(list(video), fps=10).write_videofile(save_filename + ".mp4", codec="libx264")
 
         success: str | float | None = None
@@ -122,7 +164,7 @@ def main(args: Args):
 
             success = float(success) / 100
             if not (0 <= success <= 1):
-                print(f"Success must be a number in [0, 100] but got: {success}")
+                print(f"Success must be a number in [0, 100] but got: {success * 100}")
 
         df = df.append(
             {
@@ -148,6 +190,8 @@ def _extract_observation(args: Args, obs_dict, *, save_to_disk=False):
     image_observations = obs_dict["image"]
     left_image, right_image, wrist_image = None, None, None
     for key in image_observations:
+        # Note the "left" below refers to the left camera in the stereo pair.
+        # The model is only trained on left stereo cams, so we only feed those.
         if args.left_camera_id in key and "left" in key:
             left_image = image_observations[key]
         elif args.right_camera_id in key and "left" in key:

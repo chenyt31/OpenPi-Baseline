@@ -1,5 +1,6 @@
 """See _CONFIGS for the list of available configs."""
 
+from collections.abc import Sequence
 import dataclasses
 import difflib
 import pathlib
@@ -40,88 +41,24 @@ class DataConfig:
     # which is expected by the data transforms.
     repack_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
     # Data transforms, typically include robot specific transformations. Will be applied
-    # before the data is normalized.
+    # before the data is normalized. See `model.Observation` and `model.Actions` to learn about the
+    # normalized data.
     data_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
     # Model specific transforms. Will be applied after the data is normalized.
     model_transforms: _transforms.Group = dataclasses.field(default_factory=_transforms.Group)
     # If true, will use quantile normalization. Otherwise, normal z-score normalization will be used.
     use_quantile_norm: bool = False
 
+    # Names of keys that will be used by the data loader to generate the action sequence. The length of the
+    # sequence is defined by the `action_horizon` field in the model config. This should be adjusted if your
+    # LeRobot dataset is using different keys to represent the action.
+    action_sequence_keys: Sequence[str] = ("actions",)
+
     # Indicates where the cached dataset should be stored. If None, the default directory will be used.
     dataset_root: str | None = dataclasses.field(default_factory=default_dataset_root)
 
     # If true, will disable syncing the dataset from the huggingface hub. Allows training on local-only datasets.
     local_files_only: bool = False
-
-
-@runtime_checkable
-class DataConfigFactory(Protocol):
-    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        """Create a data config."""
-
-
-class FakeDataConfig(DataConfigFactory):
-    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        return DataConfig(repo_id="fake")
-
-
-@dataclasses.dataclass(frozen=True)
-class LeRobotAlohaDataConfig(DataConfigFactory):
-    # The LeRobot repo id.
-    repo_id: str = tyro.MISSING
-    # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
-    # Gripper dimensions will remain in absolute values.
-    use_delta_joint_actions: bool = False
-    # If provided, will determine the default prompt that be used by the model.
-    default_prompt: str | None = None
-    # If true, this will convert the joint and gripper values from the standard Aloha space to
-    # the space used by the pi internal runtime which was used to train the base model. People who
-    # use standard Aloha data should set this to true.
-    adapt_to_pi: bool = True
-    # If true, will disable syncing the dataset from the huggingface hub.
-    local_files_only: bool = False
-    # Repack transforms. Default is used if not provided.
-    repack_transforms: tyro.conf.Suppress[_transforms.Group | None] = None
-
-    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        norm_stats = None
-        if self.repo_id is not tyro.MISSING:
-            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
-            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
-
-        repack_transforms = self.repack_transforms or _transforms.Group(
-            inputs=[
-                _transforms.RepackTransform(
-                    {
-                        "images": {"cam_high": "observation.images.top"},
-                        "state": "observation.state",
-                        "actions": "action",
-                    }
-                )
-            ]
-        )
-
-        data_transforms = _transforms.Group(
-            inputs=[aloha_policy.AlohaInputs(action_dim=model_config.action_dim, adapt_to_pi=self.adapt_to_pi)],
-            outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
-        )
-        if self.use_delta_joint_actions:
-            delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
-            data_transforms = data_transforms.push(
-                inputs=[_transforms.DeltaActions(delta_action_mask)],
-                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
-            )
-
-        model_transforms = ModelTransformFactory(default_prompt=self.default_prompt)(model_config)
-
-        return DataConfig(
-            repo_id=self.repo_id,
-            norm_stats=norm_stats,
-            repack_transforms=repack_transforms,
-            data_transforms=data_transforms,
-            model_transforms=model_transforms,
-            local_files_only=self.local_files_only,
-        )
 
 
 class GroupFactory(Protocol):
@@ -167,6 +104,21 @@ class ModelTransformFactory(GroupFactory):
                 )
 
 
+@runtime_checkable
+class DataConfigFactory(Protocol):
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        """Create a data config."""
+
+    def load_norm_stats(self, metadata_dir: pathlib.Path, repo_id: str) -> dict[str, _transforms.NormStats] | None:
+        norm_stats_path = metadata_dir / repo_id / "norm_stats.json"
+        return _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
+
+
+class FakeDataConfig(DataConfigFactory):
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        return DataConfig(repo_id="fake")
+
+
 @dataclasses.dataclass(frozen=True)
 class SimpleDataConfig(DataConfigFactory):
     # Factory for the data transforms.
@@ -175,19 +127,86 @@ class SimpleDataConfig(DataConfigFactory):
     model_transforms: tyro.conf.Suppress[GroupFactory] = dataclasses.field(default_factory=ModelTransformFactory)
     # The LeRobot repo id.
     repo_id: str = tyro.MISSING
+    # Base config that will be updated by the factory.
+    base_config: tyro.conf.Suppress[DataConfig | None] = None
 
     def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        norm_stats = None
-        if self.repo_id is not tyro.MISSING:
-            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
-            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
+        if (repo_id := self.repo_id) is not tyro.MISSING:
+            norm_stats = self.load_norm_stats(metadata_dir, repo_id)
+        else:
+            repo_id, norm_stats = None, None
 
-        return DataConfig(
-            repo_id=self.repo_id,
+        return dataclasses.replace(
+            self.base_config or DataConfig(),
+            repo_id=repo_id,
             norm_stats=norm_stats,
             data_transforms=self.data_transforms(model_config),
             model_transforms=self.model_transforms(model_config),
             use_quantile_norm=model_config.model_type == ModelType.PI0_FAST,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
+class LeRobotAlohaDataConfig(DataConfigFactory):
+    # The LeRobot repo id.
+    repo_id: str = tyro.MISSING
+    # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
+    # Gripper dimensions will remain in absolute values.
+    use_delta_joint_actions: bool = False
+    # If provided, will determine the default prompt that be used by the model.
+    default_prompt: str | None = None
+    # If true, this will convert the joint and gripper values from the standard Aloha space to
+    # the space used by the pi internal runtime which was used to train the base model. People who
+    # use standard Aloha data should set this to true.
+    adapt_to_pi: bool = True
+
+    # Repack transforms.
+    repack_transforms: tyro.conf.Suppress[_transforms.Group] = dataclasses.field(
+        default=_transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "images": {"cam_high": "observation.images.top"},
+                        "state": "observation.state",
+                        "actions": "action",
+                    }
+                )
+            ]
+        )
+    )
+    # Action keys that will be used to read the action sequence from the dataset.
+    action_sequence_keys: Sequence[str] = ("action",)
+
+    # Base config that will be updated by the factory.
+    base_config: tyro.conf.Suppress[DataConfig | None] = None
+
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        if (repo_id := self.repo_id) is not tyro.MISSING:
+            norm_stats = self.load_norm_stats(metadata_dir, repo_id)
+        else:
+            repo_id, norm_stats = None, None
+
+        data_transforms = _transforms.Group(
+            inputs=[aloha_policy.AlohaInputs(action_dim=model_config.action_dim, adapt_to_pi=self.adapt_to_pi)],
+            outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
+        )
+        if self.use_delta_joint_actions:
+            delta_action_mask = _transforms.make_bool_mask(6, -1, 6, -1)
+            data_transforms = data_transforms.push(
+                inputs=[_transforms.DeltaActions(delta_action_mask)],
+                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+            )
+
+        model_transforms = ModelTransformFactory(default_prompt=self.default_prompt)(model_config)
+
+        return dataclasses.replace(
+            self.base_config or DataConfig(),
+            repo_id=repo_id,
+            norm_stats=norm_stats,
+            repack_transforms=self.repack_transforms,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            action_sequence_keys=self.action_sequence_keys,
         )
 
 
@@ -385,7 +404,7 @@ _CONFIGS = [
                 ]
             ),
             # Set this to true if you are using a dataset that is not on the huggingface hub.
-            local_files_only=False,
+            base_config=DataConfig(local_files_only=False),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
@@ -432,9 +451,7 @@ def get_config(config_name: str) -> TrainConfig:
     """Get a config by name."""
     if config_name not in _CONFIGS_DICT:
         closest = difflib.get_close_matches(config_name, _CONFIGS_DICT.keys(), n=1, cutoff=0.0)
-        closest_str = f"Did you mean '{closest[0]}'? " if closest else ""
-        if closest:
-            raise ValueError(f"Config '{config_name}' not found. Did you mean '{closest_str}'?")
-        raise ValueError(f"Config '{config_name}' not found.")
+        closest_str = f" Did you mean '{closest[0]}'? " if closest else ""
+        raise ValueError(f"Config '{config_name}' not found.{closest_str}")
 
     return _CONFIGS_DICT[config_name]

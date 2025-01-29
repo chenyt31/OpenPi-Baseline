@@ -2,6 +2,7 @@ from collections.abc import Sequence
 import dataclasses
 import enum
 import logging
+import socket
 from typing import Any
 
 import tyro
@@ -204,15 +205,16 @@ def main(args: Args) -> None:
     if args.record:
         policy = _policy.PolicyRecorder(policy, "policy_records")
 
-    logging.info("Creating server...")
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
+    logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
+
     server = websocket_policy_server.WebsocketPolicyServer(
         policy=policy,
         host="0.0.0.0",
         port=args.port,
         metadata=policy_metadata,
     )
-
-    logging.info("Serving...")
     server.serve_forever()
 
 

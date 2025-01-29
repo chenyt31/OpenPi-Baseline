@@ -42,10 +42,45 @@ IMAGE_KEYS = (
 IMAGE_RESOLUTION = (224, 224)
 
 
+# Data format
+#
+# Data transforms produce the model input as a nested dictionary which is later converted
+# into `Obesrvation` and `Actions` objects. See below.
+#
+# In the dictory form, this data should look like:
+# {
+#     # Observation data.
+#     "image": {
+#         "base_0_rgb": (float32|uint8)[*b, h, w, 3],  # RGB image in [-1, 1] or [0, 255]
+#         ...  # Additional camera views
+#     },
+#     "image_mask": {
+#         "base_0_rgb": bool[*b],  # True if image is valid
+#         ...  # Masks for additional views
+#     },
+#     "state": float32[*b, s],  # Low-dimensional robot state
+#     "tokenized_prompt": int32[*b, l],  # Optional, tokenized language prompt
+#     "tokenized_prompt_mask": bool[*b, l],  # Optional, mask for tokenized prompt
+#     "token_ar_mask": int32[*b, l],  # Optional, autoregressive mask for FAST model
+#     "token_loss_mask": bool[*b, l],  # Optional, loss mask for FAST model
+#
+#      # Actions data.
+#      "actions": float32[*b ah ad]
+# }
+# where:
+#   *b = batch dimensions
+#   h,w = image height/width
+#   s = state dimension
+#   l = sequence length
+#
 @at.typecheck
 @struct.dataclass
 class Observation(Generic[ArrayT]):
-    """Holds observations, i.e., inputs to the model."""
+    """Holds observations, i.e., inputs to the model.
+
+    See `Observation.from_dict` to see the expected dictionary form. This is the format
+    that should be produced by the data transforms.
+    """
 
     # Images, in [-1, 1] float32.
     images: dict[str, at.Float[ArrayT, "*b h w c"]]
@@ -89,12 +124,13 @@ class Observation(Generic[ArrayT]):
     def to_dict(self) -> at.PyTree[ArrayT]:
         """Convert the Observation to a nested dict."""
         result = dataclasses.asdict(self)
-        # TODO(ury): This is awkward. Adjust the names to be the same.
         result["image"] = result.pop("images")
         result["image_mask"] = result.pop("image_masks")
         return result
 
 
+# Defines the format of the actions. This field is included as "actions" inside the dictionary
+# produced by the data transforms.
 Actions = at.Float[ArrayT, "*b ah ad"]
 
 

@@ -26,7 +26,6 @@ class PolicyConfig:
     model_type: _model.ModelType = _model.ModelType.PI0
     default_prompt: str | None = None
     sample_kwargs: dict[str, Any] | None = None
-    fast_tokenizer: str | None = None
 
 
 def create_policy(config: PolicyConfig) -> _policy.Policy:
@@ -61,20 +60,19 @@ def _create_pi0_policy(config: PolicyConfig) -> _policy.Policy:
 
 def _create_pi0_fast_policy(config: PolicyConfig) -> _policy.Policy:
     """Creates a pi0 FAST policy."""
-    tokenizer_path = config.fast_tokenizer or "physical-intelligence/fast"
     return _policy.Policy(
         config.model,
         transforms=[
             *config.input_layers,
             transforms.Normalize(config.norm_stats, use_quantiles=True),
             transforms.TokenizeFASTInputs(
-                tokenizer.FASTTokenizer(config.model.max_token_len, tokenizer_path),
+                tokenizer.FASTTokenizer(config.model.max_token_len),
                 default_prompt=config.default_prompt,
             ),
         ],
         output_transforms=[
             transforms.ExtractFASTActions(
-                tokenizer.FASTTokenizer(config.model.max_token_len, tokenizer_path),
+                tokenizer.FASTTokenizer(config.model.max_token_len),
                 action_horizon=config.model.action_horizon,
                 action_dim=config.model.action_dim,
             ),

@@ -18,11 +18,13 @@ import orbax.checkpoint as ocp
 from typing_extensions import override
 import yaml
 
-from openpi.models import model as _model
-from openpi.shared import image_tools
-from openpi.shared import normalize as _normalize
+import openpi.models.model as _model
+import openpi.models.pi0 as pi0
+import openpi.models.pi0_fast as pi0_fast
 import openpi.shared.array_typing as at
 import openpi.shared.download as download
+import openpi.shared.image_tools as image_tools
+import openpi.shared.normalize as _normalize
 import openpi.transforms as _transforms
 
 
@@ -92,6 +94,15 @@ def convert_to_openpi(
     if config.transform is not None:
         params = _transforms.transform_dict(config.transform, params)
 
+    # Make sure that the loaded params are compatible with the openpi model.
+    openpi_model = nnx.eval_shape(model.openpi_model_config().create, jax.random.key(0))
+    openpi_params = nnx.state(openpi_model).to_pure_dict()
+
+    # Remove any extra params that are not part of the openpi model.
+    params = ocp.transform_utils.intersect_trees(openpi_params, params)
+    # Make sure that all expected params are present.
+    at.check_pytree_equality(expected=openpi_params, got=params, check_shapes=True, check_dtypes=False)
+
     # Save params.
     ckpt = ocp.StandardCheckpointer()
     ckpt.save(out_dir / "params", {"params": params})
@@ -149,6 +160,19 @@ class PiModel(_model.BaseModel):
     @property
     def model_type(self) -> _model.ModelType:
         return self._model_type
+
+    def openpi_model_config(self) -> _model.BaseModelConfig:
+        match self.model_type:
+            case _model.ModelType.PI0:
+                return pi0.Pi0Config(
+                    action_dim=self.action_dim, action_horizon=self.action_horizon, max_token_len=self.max_token_len
+                )
+            case _model.ModelType.PI0_FAST:
+                return pi0_fast.Pi0FASTConfig(
+                    action_dim=self.action_dim, action_horizon=self.action_horizon, max_token_len=self.max_token_len
+                )
+            case _:
+                raise ValueError(f"Unknown model type: {self.model_type}")
 
     @override
     def sample_actions(self, rng: at.KeyArrayLike, observation: _model.Observation, **sample_kwargs) -> _model.Actions:
@@ -354,7 +378,12 @@ def _detect_convert_config(params: at.PyTree) -> ConvertConfig:
         return ConvertConfig(param_path="decoder")
 
     if "paligemma_model" in params:
-        return ConvertConfig(transform={"paligemma_model": "PaliGemma"})
+        return ConvertConfig(
+            transform={
+                # Replace the paligemma_model prefix with PaliGemma.
+                "paligemma_model/(.+)": r"PaliGemma/\1",
+            }
+        )
 
     return ConvertConfig()
 

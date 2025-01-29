@@ -1,9 +1,11 @@
 import chex
 import flax.linen as nn
 import jax
+import jax.numpy as jnp
 import pytest
 
 import openpi.models.gemma as gemma
+import openpi.models.lora as lora
 
 
 def get_annotation_to_dim_size() -> dict[str, int]:
@@ -95,3 +97,48 @@ def test_lora_einsum_param_merge_works(eqn: str, lora_annotation: str):
     y = einsum.apply(einsum_variables, x, rngs={}, method=module_call)
     y_lora = lora_einsum.apply(lora_einsum_variables, x, rngs={}, method=module_call)
     chex.assert_trees_all_close(y, y_lora, atol=0.001)
+
+
+def test_lora_einsum_params_shape():
+    shape = (3, 8, 32, 4)  # (3KDH)
+    einsum = lora.Einsum(shape)
+    lora0 = lora.Einsum(shape, lora_config=lora.LoRAConfig(rank=2))
+    lora1 = lora.Einsum(shape, lora_config=lora.LoRAConfig(rank=2, axes=(1, 2)))
+
+    key = jax.random.key(0)
+    x = jax.random.normal(key, (8, 64, 32))  # (BSD)
+    eqn = "BSD,3KDH->3BSKH"
+
+    # Ensure that lora parameters are not initialized when LoRA is not used.
+    params = einsum.init(key, eqn, x)
+    assert "lora_a" not in params["params"]
+    assert "lora_b" not in params["params"]
+
+    # Check that default axes work.
+    params_lora0 = lora0.init(key, eqn, x)
+    assert params_lora0["params"]["lora_a"].shape == (3, 8, 32, 2)
+    assert params_lora0["params"]["lora_b"].shape == (3, 8, 2, 4)
+
+    # Check that user provided axes work.
+    params_lora1 = lora1.init(key, eqn, x)
+    assert params_lora1["params"]["lora_a"].shape == (3, 8, 2, 4)
+    assert params_lora1["params"]["lora_b"].shape == (3, 2, 32, 4)
+
+
+def test_lora_einsum_same_output():
+    shape = (3, 8, 32, 4)  # (3KDH)
+    einsum = lora.Einsum(shape)
+    einsum_lora = lora.Einsum(shape, lora_config=lora.LoRAConfig(rank=2, init_fn=nn.initializers.zeros))
+
+    key = jax.random.key(0)
+    x = jax.random.normal(key, (8, 64, 32))  # (BSD)
+    eqn = "BSD,3KDH->3BSKH"
+
+    params = einsum.init(key, eqn, x)
+    output = einsum.apply(params, eqn, x)
+
+    params_lora = einsum_lora.init(key, eqn, x)
+    output_lora = einsum_lora.apply(params_lora, eqn, x)
+
+    # Results are the same since the LoRA parameters are initialized to zeros.
+    assert jnp.allclose(output, output_lora)

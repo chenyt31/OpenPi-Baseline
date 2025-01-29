@@ -13,7 +13,7 @@ import tyro
 
 @dataclasses.dataclass
 class Args:
-    out_path: pathlib.Path = pathlib.Path("data/aloha_sim/videos/out.mp4")
+    out_dir: pathlib.Path = pathlib.Path("data/aloha_sim/videos")
 
     task: str = "gym_aloha/AlohaTransferCube-v0"
     seed: int = 0
@@ -42,7 +42,7 @@ def main(args: Args) -> None:
             )
         ),
         subscribers=[
-            _saver.VideoSaver(args.out_path),
+            _saver.VideoSaver(args.out_dir),
         ],
         max_hz=50,
     )

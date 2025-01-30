@@ -310,7 +310,6 @@ _CONFIGS = [
     #
     TrainConfig(
         name="pi0_fast_droid",
-        # TODO(karlp): Merge with the default settings.
         model=pi0_fast.Pi0FASTConfig(action_dim=8, action_horizon=10),
         data=SimpleDataConfig(
             data_transforms=lambda model: _transforms.Group(

@@ -44,7 +44,7 @@ services:
     image: openpi_server
     build:
       context: ../..
-      dockerfile: scripts/serve_policy.Dockerfile
+      dockerfile: scripts/docker/serve_policy.Dockerfile
     init: true
     tty: true
     network_mode: host

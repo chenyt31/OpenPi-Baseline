@@ -2,7 +2,7 @@
 # Based on UV's instructions: https://docs.astral.sh/uv/guides/integration/docker/#developing-in-a-container
 
 # Build the container:
-# docker build . -t openpi_server -f scripts/serve_policy.Dockerfile
+# docker build . -t openpi_server -f scripts/docker/serve_policy.Dockerfile
 
 # Run the container:
 # docker run --rm -it --network=host -v .:/app --gpus=all openpi_server /bin/bash

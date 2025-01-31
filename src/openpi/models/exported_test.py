@@ -47,9 +47,9 @@ def test_exported_as_pi0():
 @pytest.mark.manual
 def test_processor_loading():
     pi_model = exported.PiModel("s3://openpi-assets/exported/pi0_base/model")
-    assert "trossen_biarm_single_base_cam_24dim" in pi_model.processor_names()
+    assert "trossen_biarm_single_base_cam_32dim" in pi_model.processor_names()
 
-    norm_stats = pi_model.norm_stats("trossen_biarm_single_base_cam_24dim")
+    norm_stats = pi_model.norm_stats("trossen_biarm_single_base_cam_32dim")
     assert sorted(norm_stats) == ["actions", "state"]
 
 

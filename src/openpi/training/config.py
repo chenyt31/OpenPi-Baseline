@@ -1,11 +1,15 @@
 """See _CONFIGS for the list of available configs."""
 
+import abc
 from collections.abc import Sequence
 import dataclasses
 import difflib
+import logging
 import pathlib
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol
 
+import etils.epath as epath
+from typing_extensions import override
 import tyro
 
 import openpi.models.model as _model
@@ -15,6 +19,7 @@ import openpi.models.tokenizer as _tokenizer
 import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
+import openpi.shared.download as _download
 import openpi.shared.normalize as _normalize
 import openpi.training.optimizer as _optimizer
 import openpi.training.weight_loaders as weight_loaders
@@ -23,10 +28,39 @@ import openpi.transforms as _transforms
 ModelType = _model.ModelType
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
+class AssetsConfig:
+    """Determines the location of assets (e.g., norm stats) that will be used to set up the data pipeline.
+
+    These assets will be replicated inside the checkpoint under the `assets/asset_id` directory.
+
+    This can be used to load assets from a different checkpoint (e.g., base model checkpoint) or some other
+    centralized location. For example, to load the norm stats for the Trossen robot from the base model checkpoint
+    during fine-tuning, use:
+
+    ```
+    AssetsConfig(
+        assets_dir="s3://openpi-assets/checkpoints/pi0_base/assets",
+        asset_id="trossen",
+    )
+    ```
+    """
+
+    # Assets directory. If not provided, the config assets_dirs will be used. This is useful to load assets from
+    # a different checkpoint (e.g., base model checkpoint) or some other centralized location.
+    assets_dir: str | None = None
+
+    # Asset id. If not provided, the repo id will be used. This allows users to reference assets that describe
+    # different robot platforms.
+    asset_id: str | None = None
+
+
+@dataclasses.dataclass(frozen=True)
 class DataConfig:
     # LeRobot repo id. If None, fake data will be created.
     repo_id: str | None = None
+    # Directory within the assets directory containing the data assets.
+    asset_id: str | None = None
     # Contains precomputed normalization stats. If None, normalization will not be performed.
     norm_stats: dict[str, _transforms.NormStats] | None = None
 
@@ -50,7 +84,7 @@ class DataConfig:
     # If true, will use the LeRobot dataset task to define the prompt.
     prompt_from_task: bool = False
 
-    # If true, will disable syncing the dataset from the huggingface hub. Allows training on local-only datasets.
+    # If true, will disable syncing the dataset from the Hugging Face Hub. Allows training on local-only datasets.
     local_files_only: bool = False
 
 
@@ -97,42 +131,61 @@ class ModelTransformFactory(GroupFactory):
                 )
 
 
-@runtime_checkable
-class DataConfigFactory(Protocol):
-    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+@dataclasses.dataclass(frozen=True)
+class DataConfigFactory(abc.ABC):
+    # The LeRobot repo id.
+    repo_id: str = tyro.MISSING
+    # Determines how the assets will be loaded.
+    assets: AssetsConfig = dataclasses.field(default_factory=AssetsConfig)
+    # Base config that will be updated by the factory.
+    base_config: tyro.conf.Suppress[DataConfig | None] = None
+
+    @abc.abstractmethod
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         """Create a data config."""
 
-    def load_norm_stats(self, metadata_dir: pathlib.Path, repo_id: str) -> dict[str, _transforms.NormStats] | None:
-        norm_stats_path = metadata_dir / repo_id / "norm_stats.json"
-        return _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
+    def create_base_config(self, assets_dirs: pathlib.Path) -> DataConfig:
+        repo_id = self.repo_id if self.repo_id is not tyro.MISSING else None
+        asset_id = self.assets.asset_id or repo_id
+        return dataclasses.replace(
+            self.base_config or DataConfig(),
+            repo_id=repo_id,
+            asset_id=asset_id,
+            norm_stats=self._load_norm_stats(epath.Path(self.assets.assets_dir or assets_dirs), asset_id),
+        )
+
+    def _load_norm_stats(self, assets_dir: epath.Path, asset_id: str | None) -> dict[str, _transforms.NormStats] | None:
+        if asset_id is None:
+            return None
+        try:
+            data_assets_dir = str(assets_dir / asset_id)
+            logging.info(f"Loading norm stats from: {data_assets_dir}")
+            return _normalize.load(_download.maybe_download(data_assets_dir))
+        except FileNotFoundError:
+            logging.warning(f"Norm stats not found in: {data_assets_dir}, skipping.")
+        return None
 
 
+@dataclasses.dataclass(frozen=True)
 class FakeDataConfig(DataConfigFactory):
-    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        return DataConfig(repo_id="fake")
+    repo_id: str = "fake"
+
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        return DataConfig(repo_id=self.repo_id)
 
 
 @dataclasses.dataclass(frozen=True)
 class SimpleDataConfig(DataConfigFactory):
     # Factory for the data transforms.
-    data_transforms: tyro.conf.Suppress[GroupFactory]
+    data_transforms: tyro.conf.Suppress[GroupFactory] = dataclasses.field(default_factory=GroupFactory)
     # Factory for the model transforms.
     model_transforms: tyro.conf.Suppress[GroupFactory] = dataclasses.field(default_factory=ModelTransformFactory)
-    # The LeRobot repo id.
-    repo_id: str = tyro.MISSING
-    # Base config that will be updated by the factory.
-    base_config: tyro.conf.Suppress[DataConfig | None] = None
 
-    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        if (repo_id := self.repo_id) is not tyro.MISSING:
-            norm_stats = self.load_norm_stats(metadata_dir, repo_id)
-        else:
-            repo_id, norm_stats = None, None
-
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         return dataclasses.replace(
-            self.base_config or DataConfig(),
-            repo_id=repo_id,
-            norm_stats=norm_stats,
+            self.create_base_config(assets_dirs),
             data_transforms=self.data_transforms(model_config),
             model_transforms=self.model_transforms(model_config),
             use_quantile_norm=model_config.model_type == ModelType.PI0_FAST,
@@ -141,8 +194,6 @@ class SimpleDataConfig(DataConfigFactory):
 
 @dataclasses.dataclass(frozen=True)
 class LeRobotAlohaDataConfig(DataConfigFactory):
-    # The LeRobot repo id.
-    repo_id: str = tyro.MISSING
     # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
     # Gripper dimensions will remain in absolute values.
     use_delta_joint_actions: bool = True
@@ -170,15 +221,8 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     # Action keys that will be used to read the action sequence from the dataset.
     action_sequence_keys: Sequence[str] = ("action",)
 
-    # Base config that will be updated by the factory.
-    base_config: tyro.conf.Suppress[DataConfig | None] = None
-
-    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        if (repo_id := self.repo_id) is not tyro.MISSING:
-            norm_stats = self.load_norm_stats(metadata_dir, repo_id)
-        else:
-            repo_id, norm_stats = None, None
-
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         data_transforms = _transforms.Group(
             inputs=[aloha_policy.AlohaInputs(action_dim=model_config.action_dim, adapt_to_pi=self.adapt_to_pi)],
             outputs=[aloha_policy.AlohaOutputs(adapt_to_pi=self.adapt_to_pi)],
@@ -193,9 +237,7 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
         model_transforms = ModelTransformFactory(default_prompt=self.default_prompt)(model_config)
 
         return dataclasses.replace(
-            self.base_config or DataConfig(),
-            repo_id=repo_id,
-            norm_stats=norm_stats,
+            self.create_base_config(assets_dirs),
             repack_transforms=self.repack_transforms,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
@@ -205,17 +247,8 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 
 @dataclasses.dataclass(frozen=True)
 class LeRobotLiberoDataConfig(DataConfigFactory):
-    # The LeRobot repo id.
-    repo_id: str = tyro.MISSING
-    # Base config that will be updated by the factory.
-    base_config: tyro.conf.Suppress[DataConfig | None] = None
-
-    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        if (repo_id := self.repo_id) is not tyro.MISSING:
-            norm_stats = self.load_norm_stats(metadata_dir, repo_id)
-        else:
-            repo_id, norm_stats = None, None
-
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         # Make inputs look like they come from the Libero environment
         repack_transform = _transforms.Group(
             inputs=[
@@ -248,9 +281,7 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
         model_transforms = ModelTransformFactory()(model_config)
 
         return dataclasses.replace(
-            self.base_config or DataConfig(),
-            repo_id=self.repo_id,
-            norm_stats=norm_stats,
+            self.create_base_config(assets_dirs),
             repack_transforms=repack_transform,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
@@ -281,8 +312,8 @@ class TrainConfig:
     # Determines the data to be trained on.
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)
 
-    # Base directory for metadata (e.g., norm stats).
-    metadata_base_dir: str = "./assets"
+    # Base directory for config assets (e.g., norm stats).
+    assets_base_dir: str = "./assets"
     # Base directory for checkpoints.
     checkpoint_base_dir: str = "./checkpoints"
 
@@ -321,9 +352,9 @@ class TrainConfig:
     fsdp_devices: int = 1
 
     @property
-    def metadata_dir(self) -> pathlib.Path:
-        """Get the metadata directory for this config."""
-        return (pathlib.Path(self.metadata_base_dir) / self.name).resolve()
+    def assets_dirs(self) -> pathlib.Path:
+        """Get the assets directory for this config."""
+        return (pathlib.Path(self.assets_base_dir) / self.name).resolve()
 
     @property
     def checkpoint_dir(self) -> pathlib.Path:
@@ -350,17 +381,17 @@ _CONFIGS = [
         name="pi0_aloha_towel",
         model=pi0.Pi0Config(),
         data=LeRobotAlohaDataConfig(
+            assets=AssetsConfig(asset_id="trossen"),
             default_prompt="fold the towel",
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
     ),
     TrainConfig(
         name="pi0_aloha_tupperware",
         model=pi0.Pi0Config(),
         data=LeRobotAlohaDataConfig(
+            assets=AssetsConfig(asset_id="trossen"),
             default_prompt="open the tupperware and put the food on the plate",
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
     ),
     #
     # DROID configs.
@@ -369,6 +400,7 @@ _CONFIGS = [
         name="pi0_fast_droid",
         model=pi0_fast.Pi0FASTConfig(action_dim=8, action_horizon=10),
         data=SimpleDataConfig(
+            assets=AssetsConfig(asset_id="droid"),
             data_transforms=lambda model: _transforms.Group(
                 inputs=[droid_policy.DroidInputs(action_dim=model.action_dim, model_type=ModelType.PI0_FAST)],
                 outputs=[droid_policy.DroidOutputs()],
@@ -377,7 +409,6 @@ _CONFIGS = [
                 prompt_from_task=True,
             ),
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
     ),
     #
     # Simulation configs.
@@ -386,9 +417,9 @@ _CONFIGS = [
         name="pi0_libero",
         model=pi0.Pi0Config(),
         data=LeRobotLiberoDataConfig(
-            repo_id="your_hf_username/libero",
+            repo_id="physical-intelligence/libero",
             base_config=DataConfig(
-                local_files_only=True,
+                local_files_only=False,  # Set to True for local-only datasets.
                 prompt_from_task=True,
             ),
         ),
@@ -399,9 +430,9 @@ _CONFIGS = [
         name="pi0_fast_libero",
         model=pi0_fast.Pi0FASTConfig(action_dim=7, action_horizon=10, max_token_len=180),
         data=LeRobotLiberoDataConfig(
-            repo_id="your_hf_username/libero",
+            repo_id="physical-intelligence/libero",
             base_config=DataConfig(
-                local_files_only=True,
+                local_files_only=False,  # Set to True for local-only datasets.
                 prompt_from_task=True,
             ),
         ),
@@ -412,12 +443,17 @@ _CONFIGS = [
     # Examples:
     #
     # This is a test config that is used to illustate how train on a custom LeRobot dataset.
-    # TODO(michael): Add pi0_aloha_pen_uncap and a link to the tutorial.
+    # TODO(michael): Add pi0_aloha_pen_uncap and a link to the tutorial. Upload the dataset and make sure
+    # that we have instructions for creating a local one in the tutorial.
     TrainConfig(
         name="pi0_aloha_pen_uncap",
         model=pi0.Pi0Config(),
         data=LeRobotAlohaDataConfig(
-            repo_id="physical-intelligence/aloha_pen_uncap_diverse_v2",
+            repo_id="physical-intelligence/aloha_pen_uncap_diverse",
+            assets=AssetsConfig(
+                assets_dir="s3://openpi-assets/checkpoints/pi0_base/assets",
+                asset_id="trossen",
+            ),
             default_prompt="uncap the pen",
             repack_transforms=_transforms.Group(
                 inputs=[
@@ -435,11 +471,11 @@ _CONFIGS = [
                 ]
             ),
             base_config=DataConfig(
-                local_files_only=True,
+                local_files_only=False,  # Set to True for local-only datasets.
             ),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
-        num_train_steps=30_000,
+        num_train_steps=20_000,
     ),
     # This config is used to demonstrate how to train on a simple simulated environment.
     TrainConfig(
@@ -451,13 +487,14 @@ _CONFIGS = [
             use_delta_joint_actions=False,
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
-        num_train_steps=30_000,
+        num_train_steps=20_000,
     ),
     #
     # Debugging configs.
     #
     TrainConfig(
         name="debug",
+        data=FakeDataConfig(),
         batch_size=2,
         model=pi0.Pi0Config(paligemma_variant="dummy", action_expert_variant="dummy"),
         save_interval=100,
@@ -468,6 +505,7 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="debug_restore",
+        data=FakeDataConfig(),
         batch_size=2,
         model=pi0.Pi0Config(paligemma_variant="dummy", action_expert_variant="dummy"),
         weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/debug/debug/9/params"),

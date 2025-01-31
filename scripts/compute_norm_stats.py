@@ -2,7 +2,7 @@
 
 This script is used to compute the normalization statistics for a given config. It
 will compute the mean and standard deviation of the data in the dataset and save it
-to the config metadata directory.
+to the config assets directory.
 """
 
 import numpy as np
@@ -14,8 +14,8 @@ import openpi.training.config as _config
 import openpi.training.data_loader as _data_loader
 
 
-def create_dataset(config: _config.TrainConfig) -> tuple[str, _data_loader.Dataset]:
-    data_config = config.data.create(config.metadata_dir, config.model)
+def create_dataset(config: _config.TrainConfig) -> tuple[_config.DataConfig, _data_loader.Dataset]:
+    data_config = config.data.create(config.assets_dirs, config.model)
     if data_config.repo_id is None:
         raise ValueError("Data config must have a repo_id")
     dataset = _data_loader.create_dataset(data_config, config.model)
@@ -23,12 +23,12 @@ def create_dataset(config: _config.TrainConfig) -> tuple[str, _data_loader.Datas
         dataset,
         [*data_config.repack_transforms.inputs, *data_config.data_transforms.inputs],
     )
-    return data_config.repo_id, dataset
+    return data_config, dataset
 
 
 def main(config_name: str, max_frames: int | None = None):
     config = _config.get_config(config_name)
-    repo_id, dataset = create_dataset(config)
+    data_config, dataset = create_dataset(config)
 
     num_frames = len(dataset)
     shuffle = False
@@ -55,7 +55,7 @@ def main(config_name: str, max_frames: int | None = None):
 
     norm_stats = {key: stats.get_statistics() for key, stats in stats.items()}
 
-    output_path = config.metadata_dir / repo_id
+    output_path = config.assets_dirs / data_config.asset_id
     print(f"Writing stats to: {output_path}")
     normalize.save(output_path, norm_stats)
 

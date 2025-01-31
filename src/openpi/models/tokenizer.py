@@ -1,28 +1,13 @@
-import abc
 import logging
 
 import numpy as np
 import sentencepiece
 from transformers import AutoProcessor
-from typing_extensions import override
 
 import openpi.shared.download as download
 
 
-class Tokenizer(abc.ABC):
-    @abc.abstractmethod
-    def tokenize(self, prompt: str) -> tuple[np.ndarray, np.ndarray]:
-        """Tokenize a batch of prompts.
-
-        Args:
-            prompt: A text prompt to tokenize.
-
-        Returns:
-            A tuple containing the tokenized prompt and the corresponding mask.
-        """
-
-
-class PaligemmaTokenizer(Tokenizer):
+class PaligemmaTokenizer:
     def __init__(self, max_len: int = 48):
         self._max_len = max_len
 
@@ -30,7 +15,6 @@ class PaligemmaTokenizer(Tokenizer):
         with path.open("rb") as f:
             self._tokenizer = sentencepiece.SentencePieceProcessor(model_proto=f.read())
 
-    @override
     def tokenize(self, prompt: str) -> tuple[np.ndarray, np.ndarray]:
         cleaned_text = prompt.strip().replace("_", " ").replace("\n", " ")
         # tokenize "\n" separately as the "start of answer" token
@@ -52,7 +36,7 @@ class PaligemmaTokenizer(Tokenizer):
         return np.asarray(tokens), np.asarray(mask)
 
 
-class FASTTokenizer(Tokenizer):
+class FASTTokenizer:
     def __init__(self, max_len: int = 256, fast_tokenizer_path: str = "physical-intelligence/fast"):
         self._max_len = max_len
 
@@ -65,11 +49,9 @@ class FASTTokenizer(Tokenizer):
         self._fast_tokenizer = AutoProcessor.from_pretrained(fast_tokenizer_path, trust_remote_code=True)
         self._fast_skip_tokens = 128  # Skip last 128 tokens in PaliGemma vocab since they are special tokens
 
-    @override
     def tokenize(
         self, prompt: str, state: np.ndarray, actions: np.ndarray | None
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        # TODO(ury): make interface of tokenizers more consistent
         cleaned_text = prompt.lower().strip().replace("_", " ")
 
         # Convention: state gets discretized into 256 discrete bins (assumed range after normalization: [-1, 1])

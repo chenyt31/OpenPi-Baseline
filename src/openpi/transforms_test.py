@@ -78,15 +78,11 @@ def test_tokenize_prompt():
     assert np.allclose(tok_mask, data["tokenized_prompt_mask"])
 
 
-def test_tokenize_prompt_default():
-    tokenizer = _tokenizer.PaligemmaTokenizer(max_len=12)
-    transform = _transforms.TokenizePrompt(tokenizer, default_prompt="This is a default prompt")
+def test_tokenize_no_prompt():
+    transform = _transforms.TokenizePrompt(_tokenizer.PaligemmaTokenizer())
 
-    data = transform({})
-
-    tok_prompt, tok_mask = tokenizer.tokenize("This is a default prompt")
-    assert np.allclose(tok_prompt, data["tokenized_prompt"])
-    assert np.allclose(tok_mask, data["tokenized_prompt_mask"])
+    with pytest.raises(ValueError, match="Prompt is required"):
+        transform({})
 
 
 def test_transform_dict():
@@ -113,3 +109,13 @@ def test_transform_dict():
     input = {"a": {"b": 1, "c": 1}, "b": {"c": 2}}
     output = _transforms.transform_dict({"(.+)/c": r"\1/d"}, input)
     assert output == {"a": {"b": 1, "d": 1}, "b": {"d": 2}}
+
+
+def test_extract_prompt_from_task():
+    transform = _transforms.PromptFromLeRobotTask({1: "Hello, world!"})
+
+    data = transform({"task_index": 1})
+    assert data["prompt"] == "Hello, world!"
+
+    with pytest.raises(ValueError, match="task_index=2 not found in task mapping"):
+        transform({"task_index": 2})

@@ -47,6 +47,9 @@ class DataConfig:
     # LeRobot dataset is using different keys to represent the action.
     action_sequence_keys: Sequence[str] = ("actions",)
 
+    # If true, will use the LeRobot dataset task to define the prompt.
+    prompt_from_task: bool = False
+
     # If true, will disable syncing the dataset from the huggingface hub. Allows training on local-only datasets.
     local_files_only: bool = False
 
@@ -68,20 +71,20 @@ class ModelTransformFactory(GroupFactory):
             case ModelType.PI0:
                 return _transforms.Group(
                     inputs=[
+                        _transforms.InjectDefaultPrompt(self.default_prompt),
                         _transforms.ResizeImages(224, 224),
                         _transforms.TokenizePrompt(
                             _tokenizer.PaligemmaTokenizer(model_config.max_token_len),
-                            default_prompt=self.default_prompt,
                         ),
                     ],
                 )
             case ModelType.PI0_FAST:
                 return _transforms.Group(
                     inputs=[
+                        _transforms.InjectDefaultPrompt(self.default_prompt),
                         _transforms.ResizeImages(224, 224),
                         _transforms.TokenizeFASTInputs(
                             _tokenizer.FASTTokenizer(model_config.max_token_len),
-                            default_prompt=self.default_prompt,
                         ),
                     ],
                     outputs=[
@@ -143,7 +146,7 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
     # If true, will convert joint dimensions to deltas with respect to the current state before passing to the model.
     # Gripper dimensions will remain in absolute values.
     use_delta_joint_actions: bool = True
-    # If provided, will determine the default prompt that be used by the model.
+    # If provided, will be injected into the input data if the "prompt" key is not present.
     default_prompt: str | None = None
     # If true, this will convert the joint and gripper values from the standard Aloha space to
     # the space used by the pi internal runtime which was used to train the base model. People who
@@ -204,14 +207,14 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 class LeRobotLiberoDataConfig(DataConfigFactory):
     # The LeRobot repo id.
     repo_id: str = tyro.MISSING
-    # If true, will disable syncing the dataset from the huggingface hub.
-    local_files_only: bool = False
+    # Base config that will be updated by the factory.
+    base_config: tyro.conf.Suppress[DataConfig | None] = None
 
     def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        norm_stats = None
-        if self.repo_id is not tyro.MISSING:
-            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
-            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
+        if (repo_id := self.repo_id) is not tyro.MISSING:
+            norm_stats = self.load_norm_stats(metadata_dir, repo_id)
+        else:
+            repo_id, norm_stats = None, None
 
         # Make inputs look like they come from the Libero environment
         repack_transform = _transforms.Group(
@@ -243,13 +246,13 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
         # Model transforms include things like tokenizing the prompt and action targets
         model_transforms = ModelTransformFactory()(model_config)
 
-        return DataConfig(
+        return dataclasses.replace(
+            self.base_config or DataConfig(),
             repo_id=self.repo_id,
             norm_stats=norm_stats,
             repack_transforms=repack_transform,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
-            local_files_only=self.local_files_only,
         )
 
 
@@ -369,6 +372,9 @@ _CONFIGS = [
                 inputs=[droid_policy.DroidInputs(action_dim=model.action_dim, model_type=ModelType.PI0_FAST)],
                 outputs=[droid_policy.DroidOutputs()],
             ),
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
     ),
@@ -378,14 +384,26 @@ _CONFIGS = [
     TrainConfig(
         name="pi0_libero",
         model=pi0.Pi0Config(),
-        data=LeRobotLiberoDataConfig(repo_id="your_hf_username/libero", local_files_only=True),
+        data=LeRobotLiberoDataConfig(
+            repo_id="your_hf_username/libero",
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
     TrainConfig(
         name="pi0_fast_libero",
         model=pi0_fast.Pi0FASTConfig(action_dim=7, action_horizon=10, max_token_len=180),
-        data=LeRobotLiberoDataConfig(repo_id="your_hf_username/libero", local_files_only=True),
+        data=LeRobotLiberoDataConfig(
+            repo_id="your_hf_username/libero",
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
         num_train_steps=30_000,
     ),

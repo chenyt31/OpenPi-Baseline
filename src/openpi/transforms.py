@@ -19,9 +19,6 @@ NormStats: TypeAlias = _normalize.NormStats
 T = TypeVar("T")
 S = TypeVar("S")
 
-# Prompt that should be used if "prompt" is not present in the data or an alternative default is not provided.
-DEFAULT_PROMPT = "be a good robot"
-
 
 @runtime_checkable
 class DataTransformFn(Protocol):
@@ -242,15 +239,11 @@ class AbsoluteActions(DataTransformFn):
 
 @dataclasses.dataclass(frozen=True)
 class TokenizePrompt(DataTransformFn):
-    tokenizer: _tokenizer.Tokenizer
-
-    # Default prompt that should be used if "prompt" is not present in the data.
-    # If None, `DEFAULT_PROMPT` is used.
-    default_prompt: str | None = None
+    tokenizer: _tokenizer.PaligemmaTokenizer
 
     def __call__(self, data: DataDict) -> DataDict:
         if (prompt := data.pop("prompt", None)) is None:
-            prompt = self.default_prompt or DEFAULT_PROMPT
+            raise ValueError("Prompt is required")
 
         if not isinstance(prompt, str):
             prompt = prompt.item()
@@ -263,17 +256,14 @@ class TokenizePrompt(DataTransformFn):
 class TokenizeFASTInputs(DataTransformFn):
     tokenizer: _tokenizer.FASTTokenizer
 
-    # Default prompt that should be used if "prompt" is not present in the data.
-    # If None, `DEFAULT_PROMPT` is used.
-    default_prompt: str | None = None
-
     def __call__(self, data: DataDict) -> DataDict:
         if (prompt := data.pop("prompt", None)) is None:
-            prompt = self.default_prompt or DEFAULT_PROMPT
+            raise ValueError("Prompt is required")
+
         if not isinstance(prompt, str):
             prompt = prompt.item()
-        state = data["state"]
-        actions = data.get("actions", None)
+
+        state, actions = data["state"], data.get("actions")
         tokens, token_mask, ar_mask, loss_mask = self.tokenizer.tokenize(prompt, state, actions)
         return {
             **data,
@@ -300,6 +290,24 @@ class ExtractFASTActions(DataTransformFn):
             **data,
             "actions": actions,
         }
+
+
+@dataclasses.dataclass(frozen=True)
+class PromptFromLeRobotTask(DataTransformFn):
+    """Extracts a prompt from the current LeRobot dataset task."""
+
+    # Contains the LeRobot dataset tasks (dataset.meta.tasks).
+    tasks: dict[int, str]
+
+    def __call__(self, data: DataDict) -> DataDict:
+        if "task_index" not in data:
+            raise ValueError('Cannot extract prompt without "task_index"')
+
+        task_index = int(data["task_index"])
+        if (prompt := self.tasks.get(task_index)) is None:
+            raise ValueError(f"{task_index=} not found in task mapping: {self.tasks}")
+
+        return {**data, "prompt": prompt}
 
 
 def flatten_dict(tree: at.PyTree) -> dict:

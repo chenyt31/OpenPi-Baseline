@@ -1,5 +1,6 @@
 import dataclasses
 
+import einops
 import numpy as np
 
 from openpi import transforms
@@ -17,6 +18,15 @@ def make_droid_example() -> dict:
     }
 
 
+def _parse_image(image) -> np.ndarray:
+    image = np.asarray(image)
+    if np.issubdtype(image.dtype, np.floating):
+        image = (255 * image).astype(np.uint8)
+    if image.shape[0] == 3:
+        image = einops.rearrange(image, "c h w -> h w c")
+    return image
+
+
 @dataclasses.dataclass(frozen=True)
 class DroidInputs(transforms.DataTransformFn):
     # The action dimension of the model. Will be used to pad state and actions.
@@ -29,8 +39,10 @@ class DroidInputs(transforms.DataTransformFn):
         state = np.concatenate([data["observation/joint_position"], data["observation/gripper_position"]])
         state = transforms.pad_to_dim(state, self.action_dim)
 
-        base_image = data["observation/exterior_image_1_left"]
-        wrist_image = data["observation/wrist_image_left"]
+        # Possibly need to parse images to uint8 (H,W,C) since LeRobot automatically
+        # stores as float32 (C,H,W), gets skipped for policy inference
+        base_image = _parse_image(data["observation/exterior_image_1_left"])
+        wrist_image = _parse_image(data["observation/wrist_image_left"])
 
         match self.model_type:
             case _model.ModelType.PI0:
@@ -50,6 +62,9 @@ class DroidInputs(transforms.DataTransformFn):
             "image": dict(zip(names, images, strict=True)),
             "image_mask": dict(zip(names, image_masks, strict=True)),
         }
+
+        if "actions" in data:
+            inputs["actions"] = data["actions"]
 
         if "prompt" in data:
             inputs["prompt"] = data["prompt"]

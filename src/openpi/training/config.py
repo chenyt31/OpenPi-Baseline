@@ -201,6 +201,58 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
 
 
 @dataclasses.dataclass(frozen=True)
+class LeRobotLiberoDataConfig(DataConfigFactory):
+    # The LeRobot repo id.
+    repo_id: str = tyro.MISSING
+    # If true, will disable syncing the dataset from the huggingface hub.
+    local_files_only: bool = False
+
+    def create(self, metadata_dir: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        norm_stats = None
+        if self.repo_id is not tyro.MISSING:
+            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
+            norm_stats = _normalize.deserialize_json(norm_stats_path.read_text()) if norm_stats_path.exists() else None
+
+        # Make inputs look like they come from the Libero environment
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "observation/image": "image",
+                        "observation/wrist_image": "wrist_image",
+                        "observation/state": "state",
+                        "actions": "actions",
+                    }
+                )
+            ]
+        )
+
+        # Prepare data for policy training
+        # Convert images to uint8 numpy arrays, add masks
+        data_transforms = _transforms.Group(
+            inputs=[libero_policy.LiberoInputs(model_type=model_config.model_type)],
+            outputs=[libero_policy.LiberoOutputs()],
+        )
+        # Use delta actions (not for gripper)
+        delta_action_mask = _transforms.make_bool_mask(6, -1)
+        data_transforms = data_transforms.push(
+            inputs=[_transforms.DeltaActions(delta_action_mask)],
+            outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+        )
+
+        model_transforms = ModelTransformFactory()(model_config)
+
+        return DataConfig(
+            repo_id=self.repo_id,
+            norm_stats=norm_stats,
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            local_files_only=self.local_files_only,
+        )
+
+
+@dataclasses.dataclass(frozen=True)
 class TrainConfig:
     # Name of the config. Must be unique. Will be used to reference this config.
     name: tyro.conf.Suppress[str]
@@ -323,14 +375,16 @@ _CONFIGS = [
     # Simulation configs.
     #
     TrainConfig(
+        name="pi0_libero",
+        model=pi0.Pi0Config(),
+        data=LeRobotLiberoDataConfig(repo_id="your_hf_username/libero", local_files_only=True),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
         name="pi0_fast_libero",
-        model=pi0_fast.Pi0FASTConfig(),
-        data=SimpleDataConfig(
-            data_transforms=lambda model: _transforms.Group(
-                inputs=[libero_policy.LiberoInputs(action_dim=model.action_dim)],
-                outputs=[libero_policy.LiberoOutputs()],
-            ),
-        ),
+        model=pi0_fast.Pi0FASTConfig(action_dim=7, action_horizon=10, max_token_len=180),
+        data=LeRobotLiberoDataConfig(repo_id="your_hf_username/libero", local_files_only=True),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
         num_train_steps=30_000,
     ),

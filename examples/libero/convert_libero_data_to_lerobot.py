@@ -63,10 +63,10 @@ def main(data_dir: str, *, push_to_hub: bool = False):
                 "shape": (8,),
                 "names": ["state"],
             },
-            "action": {
+            "actions": {
                 "dtype": "float32",
                 "shape": (7,),
-                "names": ["action"],
+                "names": ["actions"],
             },
         },
         image_writer_threads=10,

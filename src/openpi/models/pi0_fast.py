@@ -189,17 +189,34 @@ class Pi0FAST(_model.BaseModel):
             rng, observation, train=train, image_keys=list(observation.images.keys())
         )
 
-        # one big forward pass of prefix + suffix at once
+        # Compute inputs: one big forward pass of prefix + suffix at once
         input_token_embeddings, input_mask, ar_mask = self.embed_inputs(observation)
         attn_mask = make_attn_mask(input_mask, ar_mask)
-        # Each input predicts *next* token, so we need to shift the input tokens by one.
-        logits, _, _ = self.PaliGemma.llm(embedded_prefix=input_token_embeddings[:, :-1], mask=attn_mask[:, :-1, :-1])
+
+        # Compute one-hot targets: we predict *next* token, so shift the input tokens by one.
+        targets = jax.nn.one_hot(
+            observation.tokenized_prompt[:, 1:],
+            self.PaliGemma.llm.module.vocab_size,
+        )
+
+        # Each input predicts *next* token, so we don't input the last token.
+        pre_logits, _, _ = self.PaliGemma.llm(
+            embedded_prefix=input_token_embeddings[:, :-1],
+            mask=attn_mask[:, :-1, :-1],
+            return_prelogits=True,
+        )
+
+        # Only decode logits for the target tokens to save memory
+        # (decoding matmul is large because it is a seq_len x vocab_size dense layer).
+        logits, _ = self.PaliGemma.llm(
+            pre_logits=pre_logits[:, -targets.shape[1] :],
+        )
         logp = jax.nn.log_softmax(logits, axis=-1)
+
         # Compute CE loss on token targets
         assert observation.token_loss_mask is not None, "Token loss mask is required"
-        targets = jax.nn.one_hot(observation.tokenized_prompt[:, 1:], logp.shape[-1])
         loss_mask = observation.token_loss_mask[:, 1:]
-        token_pplx = jnp.sum(targets * logp[:, -(targets.shape[1]) :], axis=-1)
+        token_pplx = jnp.sum(targets * logp, axis=-1)
         return -jnp.sum(token_pplx * loss_mask, axis=-1) / jnp.clip(jnp.sum(loss_mask, -1), 1)
 
     @override
@@ -273,5 +290,6 @@ class Pi0FAST(_model.BaseModel):
             _, _, _, all_eos, step = carry
             return (~all_eos) & (step < max_decoding_steps)
 
+        # Use lax.while_loop so we can jit the full decoding loop.
         _, output_tokens, _, _, _ = jax.lax.while_loop(cond, step, (last_logit, output_tokens, kv_cache, False, 0))
         return output_tokens

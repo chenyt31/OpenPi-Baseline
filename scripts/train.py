@@ -1,5 +1,4 @@
 import dataclasses
-from functools import partial
 import logging
 import platform
 from typing import Any
@@ -22,7 +21,6 @@ import openpi.training.data_loader as _data_loader
 import openpi.training.optimizer as _optimizer
 import openpi.training.sharding as sharding
 import openpi.training.utils as training_utils
-import openpi.training.weight_loaders as _weight_loaders
 
 
 def init_logging():
@@ -67,14 +65,6 @@ def init_wandb(config: _config.TrainConfig, *, resuming: bool, log_code: bool = 
         wandb.run.log_code(epath.Path(__file__).parent.parent)
 
 
-def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader, params: at.Params) -> at.Params:
-    """Runs the weight loader and validates that the params structure, shapes, and dtypes are unchanged."""
-    new_params = weight_loader.load(jax.tree.map(lambda x: x, params))
-
-    at.check_pytree_equality(expected=params, got=new_params, check_shapes=True, check_dtypes=True)
-    return new_params
-
-
 @at.typecheck
 def init_train_state(
     config: _config.TrainConfig, init_rng: at.KeyArrayLike, mesh: jax.sharding.Mesh, *, resume: bool
@@ -85,19 +75,16 @@ def init_train_state(
 
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
-    def init(rng: at.KeyArrayLike) -> training_utils.TrainState:
+    def init(rng: at.KeyArrayLike, partial_params: at.Params | None = None) -> training_utils.TrainState:
         rng, model_rng = jax.random.split(rng)
         # initialize the model (and its parameters)
         model = config.model.create(model_rng)
         # extract a pure PyTree of params
         graphdef, state = nnx.split(model)
-        params = state.to_pure_dict()
-        # run the weight loader on this pure PyTree
-        params = jax.lax.with_sharding_constraint(params, replicated_sharding)
-        params = jax.pure_callback(partial(_load_weights_and_validate, config.weight_loader), params, params)
-        params = jax.lax.with_sharding_constraint(params, replicated_sharding)
-        # update the model with loaded params
-        state.replace_by_pure_dict(params)
+        if partial_params is not None:
+            # nnx replace_by_pure_dict can take partial params but will error out if partial params
+            # contains additional params that are not present in state.
+            state.replace_by_pure_dict(partial_params)
         model = nnx.merge(graphdef, state)
 
         params = nnx.state(model)
@@ -117,7 +104,14 @@ def init_train_state(
     if resume:
         return train_state_shape, state_sharding
 
-    train_state = jax.jit(init, in_shardings=replicated_sharding, out_shardings=state_sharding)(init_rng)
+    partial_params = config.weight_loader.load(train_state_shape.params.to_pure_dict())
+
+    train_state = jax.jit(
+        init,
+        donate_argnums=(1,),  # donate the partial params buffer.
+        in_shardings=replicated_sharding,
+        out_shardings=state_sharding,
+    )(init_rng, partial_params)
     return train_state, state_sharding
 
 

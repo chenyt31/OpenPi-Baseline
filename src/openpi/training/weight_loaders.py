@@ -19,13 +19,13 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class WeightLoader(Protocol):
-    def load(self, params: at.Params) -> at.Params: ...
+    def load(self, params: at.Params) -> at.Params | None: ...
 
 
 @dataclasses.dataclass(frozen=True)
 class NoOpWeightLoader(WeightLoader):
-    def load(self, params: at.Params) -> at.Params:
-        return params
+    def load(self, params: at.Params) -> at.Params | None:
+        return None
 
 
 @dataclasses.dataclass(frozen=True)

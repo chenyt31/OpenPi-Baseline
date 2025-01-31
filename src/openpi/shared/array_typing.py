@@ -4,6 +4,7 @@ import inspect
 from typing import TypeVar, cast
 
 import beartype
+import flax
 import jax
 import jax._src.tree_util as private_tree_util
 import jax.core
@@ -62,12 +63,25 @@ def disable_typechecking():
     config.update("jaxtyping_disable", initial)
 
 
-def check_pytree_equality(*, expected: PyTree, got: PyTree, check_shapes: bool = False, check_dtypes: bool = False):
+def check_pytree_equality(
+    *,
+    expected: PyTree,
+    got: PyTree,
+    check_shapes: bool = False,
+    check_dtypes: bool = False,
+    expect_partial: bool = False,
+):
     """Checks that two PyTrees have the same structure and optionally checks shapes and dtypes. Creates a much nicer
     error message than if `jax.tree.map` is naively used on PyTrees with different structures.
     """
+    expected_flat = flax.traverse_util.flatten_dict(expected, sep="/")
+    got_flat = flax.traverse_util.flatten_dict(got, sep="/")
+    # Ensure all keys in got are present in expected.
+    for k in got_flat:
+        if k not in expected_flat:
+            raise ValueError(f"Got Tree is not a strict subset of expected Tree: Key {k} not found in expected.")
 
-    if errors := list(private_tree_util.equality_errors(expected, got)):
+    if not expect_partial and (errors := list(private_tree_util.equality_errors(expected, got))):
         raise ValueError(
             "PyTrees have different structure:\n"
             + (
@@ -87,4 +101,5 @@ def check_pytree_equality(*, expected: PyTree, got: PyTree, check_shapes: bool =
             if check_dtypes and x.dtype != y.dtype:
                 raise ValueError(f"Dtype mismatch at {jax.tree_util.keystr(kp)}: expected {x.dtype}, got {y.dtype}")
 
-        jax.tree_util.tree_map_with_path(check, expected, got)
+        for k in got_flat:
+            check(k, expected_flat[k], got_flat[k])

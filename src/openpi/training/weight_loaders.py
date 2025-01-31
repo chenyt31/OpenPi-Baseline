@@ -25,7 +25,7 @@ class WeightLoader(Protocol):
 @dataclasses.dataclass(frozen=True)
 class NoOpWeightLoader(WeightLoader):
     def load(self, params: at.Params) -> at.Params:
-        return params
+        return {}
 
 
 @dataclasses.dataclass(frozen=True)

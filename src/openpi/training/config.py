@@ -396,7 +396,28 @@ _CONFIGS = [
     TrainConfig(
         name="pi0_aloha_pen_uncap",
         model=pi0.Pi0Config(),
-        data=LeRobotAlohaDataConfig(),
+        data=LeRobotAlohaDataConfig(
+            repo_id="physical-intelligence/aloha_pen_uncap_diverse_v2",
+            default_prompt="uncap the pen",
+            repack_transforms=_transforms.Group(
+                inputs=[
+                    _transforms.RepackTransform(
+                        {
+                            "images": {
+                                "cam_high": "observation.images.cam_high",
+                                "cam_left_wrist": "observation.images.cam_left_wrist",
+                                "cam_right_wrist": "observation.images.cam_right_wrist",
+                            },
+                            "state": "observation.state",
+                            "actions": "action",
+                        }
+                    )
+                ]
+            ),
+            base_config=DataConfig(
+                local_files_only=True,
+            ),
+        ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),

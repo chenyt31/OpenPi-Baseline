@@ -44,10 +44,10 @@ def _create_pi0_policy(config: PolicyConfig) -> _policy.Policy:
         config.model,
         transforms=[
             *config.input_layers,
+            transforms.InjectDefaultPrompt(config.default_prompt),
             transforms.Normalize(config.norm_stats),
             transforms.TokenizePrompt(
                 tokenizer.PaligemmaTokenizer(config.model.max_token_len),
-                default_prompt=config.default_prompt,
             ),
         ],
         output_transforms=[
@@ -64,11 +64,9 @@ def _create_pi0_fast_policy(config: PolicyConfig) -> _policy.Policy:
         config.model,
         transforms=[
             *config.input_layers,
+            transforms.InjectDefaultPrompt(config.default_prompt),
             transforms.Normalize(config.norm_stats, use_quantiles=True),
-            transforms.TokenizeFASTInputs(
-                tokenizer.FASTTokenizer(config.model.max_token_len),
-                default_prompt=config.default_prompt,
-            ),
+            transforms.TokenizeFASTInputs(tokenizer.FASTTokenizer(config.model.max_token_len)),
         ],
         output_transforms=[
             transforms.ExtractFASTActions(

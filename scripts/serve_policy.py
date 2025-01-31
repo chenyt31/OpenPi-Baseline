@@ -60,7 +60,8 @@ class Args:
     # Environment to serve the policy for. This is only used when serving default policies, or loading exported models.
     env: EnvMode = EnvMode.ALOHA_SIM
 
-    # If provided, overrides the default prompt for the policy.
+    # If provided, will be used in case the "prompt" key is not present in the data, or if the model doesn't have a default
+    # prompt.
     default_prompt: str | None = None
 
     # Port to serve the policy on.

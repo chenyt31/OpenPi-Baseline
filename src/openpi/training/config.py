@@ -246,6 +246,21 @@ class LeRobotAlohaDataConfig(DataConfigFactory):
         )
 
 
+def get_common_freeze_regex(
+    *, freeze_gemma: bool = False, freeze_img: bool = False, freeze_action_expert: bool = False
+) -> str:
+    """Returns a regex pattern that can be used to freeze weights with some common patterns."""
+    patterns = []
+    if not freeze_gemma:
+        patterns.append(r".*llm.*")
+    if not freeze_img:
+        patterns.append(r".*img.*")
+    if not freeze_action_expert:
+        patterns.append(r".*llm.*_1.*")
+    additional_patterns = "|" + "|".join(patterns) if patterns else ""
+    return rf"(?!(.*lora.*|.*action_.*|.*state_proj.*{additional_patterns})).*"
+
+
 @dataclasses.dataclass(frozen=True)
 class LeRobotLiberoDataConfig(DataConfigFactory):
     @override
@@ -309,6 +324,9 @@ class TrainConfig:
     lr_schedule: _optimizer.LRScheduleConfig = dataclasses.field(default_factory=_optimizer.CosineDecaySchedule)
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
     ema_decay: float | None = 0.99
+
+    # Regex to freeze weights.
+    weight_freeze_regex: str | None = None
 
     # Determines the data to be trained on.
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)

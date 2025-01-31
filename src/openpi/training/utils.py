@@ -15,10 +15,11 @@ from openpi.shared import array_typing as at
 @struct.dataclass
 class TrainState:
     step: at.Int[at.ArrayLike, ""]
-    params: nnx.State
-    model_def: nnx.GraphDef[_model.BaseModel]
+    params: nnx.State | at.Params
+    model_def: nnx.GraphDef[_model.BaseModel] | None
     opt_state: optax.OptState
-    tx: optax.GradientTransformation = struct.field(pytree_node=False)
+    tx: optax.GradientTransformation | None = struct.field(pytree_node=False)
+    freeze_mask: at.PyTree | None = struct.field(pytree_node=False)
 
     ema_decay: float | None = struct.field(pytree_node=False)
     ema_params: nnx.State | None = None

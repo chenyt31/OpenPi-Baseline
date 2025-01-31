@@ -70,30 +70,49 @@ def init_train_state(
     config: _config.TrainConfig, init_rng: at.KeyArrayLike, mesh: jax.sharding.Mesh, *, resume: bool
 ) -> tuple[training_utils.TrainState, Any]:
     weight_decay_mask = None
-    freeze_mask = None
-    tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask, freeze_mask)
-
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
+    logging.info(f"Weight freeze regex: {config.weight_freeze_regex}")
 
-    def init(rng: at.KeyArrayLike, partial_params: at.Params | None = None) -> training_utils.TrainState:
+    def init(
+        rng: at.KeyArrayLike,
+        partial_params: at.Params | None = None,
+        # jax jit also checks and expects output metadata to be the same for out_sharding,
+        # since new model_def/tx/freeze_mask are created every time function is called,
+        # adding an optional flag to only return the state so jit won't complain mismatch metadata
+        # between train_state and out_sharding.
+        return_state_only: bool = False,  # noqa: FBT001,FBT002
+    ) -> training_utils.TrainState:
         rng, model_rng = jax.random.split(rng)
         # initialize the model (and its parameters)
         model = config.model.create(model_rng)
         # extract a pure PyTree of params
         graphdef, state = nnx.split(model)
+        freeze_mask = jax.tree.map(lambda x: False, state)
+        if config.weight_freeze_regex:
+            freeze_mask = training_utils.mask_from_regex(config.weight_freeze_regex, state)
+            logging.info(training_utils.tree_to_info(freeze_mask, lambda x: "frozen" if x else "not frozen"))
+        tx = _optimizer.create_optimizer(
+            config.optimizer,
+            config.lr_schedule,
+            weight_decay_mask,
+            freeze_mask,
+        )
         if partial_params is not None:
             # nnx replace_by_pure_dict can take partial params but will error out if partial params
             # contains additional params that are not present in state.
             state.replace_by_pure_dict(partial_params)
+        # Casting to bfloat16 for freezed weights.
+        state = jax.tree.map(lambda x, m: x.astype(jnp.bfloat16) if m else x, state, freeze_mask)
         model = nnx.merge(graphdef, state)
 
         params = nnx.state(model)
         return training_utils.TrainState(
             step=0,
             params=params,
-            model_def=nnx.graphdef(model),
-            tx=tx,
+            model_def=nnx.graphdef(model) if not return_state_only else None,
+            tx=tx if not return_state_only else None,
             opt_state=tx.init(params),
+            freeze_mask=freeze_mask if not return_state_only else None,
             ema_decay=config.ema_decay,
             ema_params=None if config.ema_decay is None else params,
         )
@@ -104,14 +123,24 @@ def init_train_state(
     if resume:
         return train_state_shape, state_sharding
 
+    # typechecking doesn't work well with sharding.
+    with at.disable_typechecking():
+        state_only_state_sharding = state_sharding.replace(model_def=None, tx=None, freeze_mask=None)
+
     partial_params = config.weight_loader.load(train_state_shape.params.to_pure_dict())
 
     train_state = jax.jit(
         init,
         donate_argnums=(1,),  # donate the partial params buffer.
+        static_argnums=(2,),
         in_shardings=replicated_sharding,
-        out_shardings=state_sharding,
-    )(init_rng, partial_params)
+        out_shardings=state_only_state_sharding,
+    )(init_rng, partial_params, True)  # noqa: FBT003, jax jit doesn't support kwargs with single in_sharding.
+    train_state = train_state.replace(
+        model_def=state_sharding.model_def,
+        tx=state_sharding.tx,
+        freeze_mask=state_sharding.freeze_mask,
+    )
     return train_state, state_sharding
 
 
@@ -151,9 +180,10 @@ def train_step(
         and variable.value.ndim > 1
         and not any(x in path[-1] for x in ("bias", "scale", "pos_embedding", "input_embedding")),
     )
+    used_grads = jax.tree.map(lambda g, m: None if m else g, grads, state.freeze_mask)
     info = {
         "loss": loss,
-        "grad_norm": optax.global_norm(grads),  # TODO: do not compute norm for frozen params
+        "grad_norm": optax.global_norm(used_grads),
         "param_norm": optax.global_norm(kernel_params),
     }
     return new_state, info

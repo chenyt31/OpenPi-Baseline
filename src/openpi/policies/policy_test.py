@@ -12,7 +12,7 @@ def create_exported_config() -> _policy_config.PolicyConfig:
 
     return _policy_config.PolicyConfig(
         model=model,
-        norm_stats=model.norm_stats("trossen_biarm_single_base_cam_24dim"),
+        norm_stats=model.norm_stats("trossen_biarm_single_base_cam_32dim"),
         input_layers=[aloha_policy.AlohaInputs(action_dim=model.action_dim)],
         output_layers=[aloha_policy.AlohaOutputs()],
     )

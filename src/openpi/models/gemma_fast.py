@@ -302,6 +302,7 @@ class Module(nn.Module):
         decode=False,  # noqa: FBT002
         kv_cache=None,
         deterministic=True,  # noqa: FBT002
+        return_prelogits=False,  # noqa: FBT002
     ):
         """Embed only, or complete forward pass.
 
@@ -315,10 +316,12 @@ class Module(nn.Module):
           mask: Optional attention mask `[B, T, S]`.
           decode: Whether to use kv-cache. Caller must pass masks and positions.
           deterministic: Forwarded to all dropout layers.
+          return_prelogits: Whether to return the pre-logits.
 
         Returns:
           If `embed_only=False`, then `(logits, out)` will be returned.
           If `embed_only=True`, then the embeddings will be returned.
+          If `return_prelogits=True`, then the pre-logits will be returned.
         """
         out = {}
 
@@ -396,6 +399,8 @@ class Module(nn.Module):
 
         x = RMSNorm(name="final_norm")(x)
         out["pre_logits"] = x
+        if return_prelogits:
+            return x, kv_cache, out
 
         x = embedder.decode(x)
         out["logits"] = x

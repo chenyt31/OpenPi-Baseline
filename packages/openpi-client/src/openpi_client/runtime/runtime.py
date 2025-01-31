@@ -36,6 +36,7 @@ class Runtime:
 
         # Final reset, this is important for real environments to move the robot to its home position.
         self._environment.reset()
+        self._agent.reset()
 
     def run_in_new_thread(self) -> threading.Thread:
         """Runs the runtime loop in a new thread."""
@@ -51,6 +52,7 @@ class Runtime:
         """Runs a single episode."""
         logging.info("Starting episode...")
         self._environment.reset()
+        self._agent.reset()
         for subscriber in self._subscribers:
             subscriber.on_episode_start()
 

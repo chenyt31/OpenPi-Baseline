@@ -1,6 +1,7 @@
+from typing_extensions import override
+
 from openpi_client import base_policy as _base_policy
 from openpi_client.runtime import agent as _agent
-from typing_extensions import override
 
 
 # TODO: Consider unifying policies and agents.
@@ -13,3 +14,6 @@ class PolicyAgent(_agent.Agent):
     @override
     def get_action(self, observation: dict) -> dict:
         return self._policy.infer(observation)
+
+    def reset(self) -> None:
+        self._policy.reset()

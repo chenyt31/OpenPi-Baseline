@@ -11,3 +11,7 @@ class Agent(abc.ABC):
     @abc.abstractmethod
     def get_action(self, observation: dict) -> dict:
         """Query the agent for the next action."""
+
+    @abc.abstractmethod
+    def reset(self) -> None:
+        """Reset the agent to its initial state."""

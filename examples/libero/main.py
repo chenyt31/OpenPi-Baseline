@@ -112,6 +112,7 @@ def eval_libero(args: Args) -> None:
 
                     # Get preprocessed image
                     # IMPORTANT: rotate 180 degrees to match train preprocessing
+                    # We resize here to minimize data sent over network
                     img = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
                     wrist_img = np.ascontiguousarray(obs["robot0_eye_in_hand_image"][::-1, ::-1])
                     img = image_tools.convert_to_uint8(

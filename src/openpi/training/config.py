@@ -240,6 +240,7 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
             outputs=[_transforms.AbsoluteActions(delta_action_mask)],
         )
 
+        # Model transforms include things like tokenizing the prompt and action targets
         model_transforms = ModelTransformFactory()(model_config)
 
         return DataConfig(

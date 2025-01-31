@@ -2,17 +2,29 @@
 
 openpi holds open-source models and packages for robotics, published by the [Physical Intelligence team](https://www.physicalintelligence.company/).
 
-Currently, it is focused on the `pi0` model described in [this blog post](https://www.physicalintelligence.company/blog/pi0).
+Currently, this repo contains two types of models:
+- the [$\pi_0$ model](https://www.physicalintelligence.company/blog/pi0), a flow-based diffusion vision-language-action model (VLA)
+- the [$\pi_0$-FAST model](https://www.physicalintelligence.company/research/fast), an autoregressive VLA, based on the FAST action tokenizer.
 
-## Prerequisites
+For both models, we provide _base model_ checkpoints, pre-trained on 10k+ hours of robot data, and examples for using them out of the box or fine-tuning them to your own datasets.
 
-openpi utilizes Python virtual environments via `uv` and (optionally) Docker to manage dependencies, which should insulate most users from system conflicts. However, there are still some basic requirements:
 
-- AMD64 architecture
-- Ubuntu 22.04: other Linux distributions will likely work, but are not tested. We can only offer best-effort support for these, and we recommend using Docker if OS conflicts are encountered.
-- NVIDIA GPU: most examples in this repo require a GPU for performant behavior, and the code is tested on NVIDIA GPUs.
 
-## Setup
+## Requirements
+
+To use the VLAs in this repo, you will need an NVIDIA GPU with at least the following specs:
+
+| Mode               | Memory Required | Example GPU |
+|--------------------|-----------------|---------------|
+| Inference          | XXXGB           | RTX 4090      |
+| Fine-Tuning (LoRA) | XXXGB           | RTX 4090      |
+| Fine-Tuning (Full) | XXXGB           | A100 (80GB)   |
+
+The repo has been tested with Ubuntu 22.04, we do not currently support other operating systems.
+
+
+
+## Installation
 
 When cloning this repo, make sure to update submodules:
 
@@ -23,11 +35,7 @@ git clone --recurse-submodules git@github.com:Physical-Intelligence/openpi.git
 git submodule update --init --recursive
 ```
 
-### Using uv
-
-We use [uv](https://docs.astral.sh/uv/) to manage Python dependencies. See the [uv installation instructions](https://docs.astral.sh/uv/getting-started/installation/) to set it up.
-
-Once uv is installed, run the following to set up the environment:
+We use [uv](https://docs.astral.sh/uv/) to manage Python dependencies. See the [uv installation instructions](https://docs.astral.sh/uv/getting-started/installation/) to set it up. Once uv is installed, run the following to set up the environment:
 
 ```bash
 GIT_LFS_SKIP_SMUDGE=1 uv sync
@@ -35,410 +43,142 @@ GIT_LFS_SKIP_SMUDGE=1 uv sync
 
 NOTE: `GIT_LFS_SKIP_SMUDGE=1` is needed to pull LeRobot as a dependency.
 
-### Docker Setup
-
-All of the examples in this repo provide instructions for being run normally, and also using Docker. Although not required, the Docker option is recommended as this will simplify software installation, produce a more stable environment, and also allow you to avoid installing ROS and cluttering your machine, for examples which depend on ROS.
-
-Docker installation instructions are [here](https://docs.docker.com/engine/install/). If using a GPU you must also install the [NVIDIA container toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). If your host machine is Ubuntu 22.04, you can use the convenience scripts `scripts/install_docker_ubuntu22.sh` and `scripts/install_nvidia_container_toolkit.sh`.
-
-During the first run of any example, Docker will build the images. Go grab a coffee while this happens. Subsequent runs will be faster since the images are cached.
-
-### Downloading assets
-
-By default, assets like checkpoints and exported models are downloaded from `s3://openpi-assets` and are cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
-
-## Running Training
-
-Training configs are defined in [src/openpi/training/config.py](src/openpi/training/config.py) and the training script is in [scripts/train.py](scripts/train.py).
-
-Each registered config is available as a command line argument to `scripts/train.py`. To find all available command line arguments for your config, run `uv run scripts/train.py <config-name> --help`, or look at the `TrainConfig` class in [src/openpi/training/config.py](src/openpi/training/config.py).
+**Docker**: As an alternative to uv installation, we provide instructions for installing openpi using Docker. If you encounter issues with your system setup, consider using Docker to simplify installation. See [Docker Setup](docs/docker.md) for more details.
 
 
-For example, to train with the `pi0_aloha_sim` config, run the following;
 
-(one time only) Compute the norm stats for the training data:
 
-```bash
-uv run scripts/compute_norm_stats.py --config-name pi0_aloha_sim
+## Model Checkpoints
+
+### Base Models
+We provide multiple base VLA model checkpoints. These checkpoints have been pre-trained on 10k+ hours of robot data, and can be used for fine-tuning.
+
+| Model | Use Case | Description | Checkpoint Path |
+|-------|----------|----------------|----------------|
+| $\pi_0$ | Fine-Tuning | Base diffusion [$\pi_0$ model](https://www.physicalintelligence.company/blog/pi0) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_base` |
+| $\pi_0$-FAST | Fine-Tuning | Base autoregressive [$\pi_0$-FAST model](https://www.physicalintelligence.company/research/fast) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_fast_base` |
+
+### Fine-Tuned Models
+We also provide "expert" checkpoints for various robot platforms and tasks. These models are fine-tuned from the base models above and can be used out-of-the-box to solve tasks on your robot.
+
+| Model | Use Case | Description | Checkpoint Path |
+|-------|----------|----------------|----------------|
+| $\pi_0$-FAST-DROID | Inference | $\pi_0$-FAST model fine-tuned on the [DROID dataset](https://droid-dataset.github.io/), can perform a wide range of simple table-top manipulation tasks 0-shot in new scenes on the DROID robot platform | `s3://openpi-assets/checkpoints/pi0_fast_droid` |
+| $\pi_0$-ALOHA-towel | Inference | $\pi_0$ model fine-tuned on internal ALOHA data, can fold diverse towels 0-shot on [ALOHA](https://tonyzhaozh.github.io/aloha/) robot platforms | `s3://openpi-assets/checkpoints/pi0_aloha_towel` |
+| $\pi_0$-ALOHA-tupperware | Inference | $\pi_0$ model fine-tuned on internal ALOHA data, can unpack food from a tupperware container | `s3://openpi-assets/checkpoints/pi0_aloha_tupperware` |
+| $\pi_0$-ALOHA-pen-uncap | Inference | $\pi_0$ model fine-tuned on [public ALOHA data](XXX), can uncap a pen | `s3://openpi-assets/checkpoints/pi0_aloha_pen_uncap` |
+
+
+By default, checkpoints are automatically downloaded from `s3://openpi-assets` and are cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
+
+
+
+
+## Running Inference for a Pre-Trained Model
+
+Our pre-trained model checkpoints can be run with a few lines of code (here our $\pi_0$-FAST-DROID model):
+```python
+from openpi.training import config
+from openpi.policies import policy_config
+from openpi.shared import download
+
+config = config.get_config("pi0_fast_droid")
+checkpoint_dir = download.maybe_download("s3://openpi-assets/checkpoints/pi0_fast_droid")
+
+# Create a trained policy.
+policy = policy_config.create_trained_policy(config, checkpoint_dir)
+
+# Run inference on a dummy example.
+example = {
+    "observation/exterior_image_1_left": ...,
+    "observation/wrist_image_left": ...,
+    ...
+    "prompt": "pick up the fork"
+}
+action_chunk = policy.infer(example)["actions"]
 ```
 
-Run training:
+We provide detailed step-by-step examples for running inference of our pre-trained checkpoints on [DROID](examples/droid/README.md) and [ALOHA](examples/aloha_real/README.md) robots.
+
+**Remote Inference**: We provide [examples and code](docs/remote_inference.md) for running inference of our models **remotely**: the model can run on a different server and stream actions to the robot via a websocket connection. This makes it easy to use more powerful GPUs off-robot and keep robot and policy environments separate.
+
+**Test inference without a robot**: We provide a script for testing inference without a robot in [`examples/simple_client/main.py`](examples/simple_client/main.py). This script will generate a random observation and run inference with the model. See [here](examples/simple_client/README.md) for more details.
+
+
+
+
+
+## Fine-Tuning Base Models on Your Own Data
+
+We will fine-tune the $\pi_0$-FAST model on the [Libero dataset](https://libero-project.github.io/datasets) as a running example for how to fine-tune a base model on your own data. We will explain three steps:
+1. Convert your data to a LeRobot dataset (which we use for training)
+2. Defining training configs and running training
+3. Spinning up a policy server and running inference
+
+### 1. Convert your data to a LeRobot dataset
+
+We provide a minimal example script for converting Libero data to a LeRobot dataset in [`examples/libero/convert_libero_data_to_lerobot.py`](examples/libero/convert_libero_data_to_lerobot.py). You can easily modify it to convert your own data! You can download the raw Libero dataset from [here](https://huggingface.co/datasets/openvla/modified_libero_rlds), and run the script with:
 
 ```bash
-uv run scripts/train.py pi0_aloha_sim --exp-name=my_experiment --overwrite
+uv run examples/libero/convert_libero_data_to_lerobot.py --data_dir /path/to/your/libero/data
 ```
 
-The `pi0_aloha_sim` config is optimized for training on a single H100 GPU. By default, JAX pre-allocates 75% of available GPU memory. We set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` to allow JAX to use up to 90% of GPU memory, which enables training with larger batch sizes while maintaining stability.
+### 2. Defining training configs and running training
 
-The training script automatically utilizes all available GPUs on a single node. Currently, distributed training across multiple nodes is not supported.
+To fine-tune a base model on your own data, you need to define configs for data processing and training. We provide example configs with detailed comments for Libero below, which you can modify for your own dataset:
 
-An example for how to train on your own Aloha dataset is provided in the [ALOHA Real README](examples/aloha_real/README.md).
+- [`LiberoInputs` and `LiberoOutputs`](src/openpi/policies/libero_policy.py): Defines the data mapping from the Libero environment to the model and vice versa. Will be used for both, training and inference.
+- [`LeRobotLiberoDataConfig`](src/openpi/training/config.py): Defines how to process raw Libero data from LeRobot dataset for training.
+- [`TrainConfig`](src/openpi/training/config.py): Defines fine-tuning hyperparameters, data config, and weight loader.
 
-### Pre-trained checkpoints
+We provide example fine-tuning configs for both, [$\pi_0$](src/openpi/training/config.py) and [$\pi_0$-FAST](src/openpi/training/config.py) on Libero data.
 
-We currently have the following model weights available for fine-tuning:
+Before we can run training, we need to compute the normalization statistics for the training data. Run the script below with the name of your training config:
 
-| name       | path                                             | description                                                |
-| ---------- | ------------------------------------------------ | ---------------------------------------------------------- |
-| `pi0_base` | `s3://openpi-assets/checkpoints/pi0_base/params` | Standard pre-trained $\pi_0$ model for general fine-tuning |
+```bash
+uv run scripts/compute_norm_stats.py --config-name pi0_fast_libero
+```
 
-The path should be fed as an argument into `CheckpointWeightLoader` in your training config (see [config.py](src/openpi/training/config.py) for examples).
+Now we can kick off training with the following command (the `--overwrite` flag is used to overwrite existing checkpoints if you rerun fine-tuning with the same config):
 
-## Running examples
+```bash
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero --exp-name=my_experiment --overwrite
+```
 
-We provide example integrations with several robotics platforms. See the README in each example for more details:
+The command will log training progress to the console and save checkpoints to the `checkpoints` directory. You can also monitor training progress on the Weights & Biases dashboard. For maximally using the GPU memory, set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` before running training -- this enables JAX to use up to 90% of the GPU memory (vs. the default of 75%).
 
-- [ALOHA Sim](examples/aloha_sim)
+### 3. Spinning up a policy server and running inference
+
+Once training is complete, we can run inference by spinning up a policy server and then querying it from a Libero evaluation script. Launching a model server is easy (we use the checkpoint for iteration 20,000 for this example, modify as needed):
+
+```bash
+uv run scripts/serve_policy.py policy:checkpoint --policy.config=pi0_fast_libero --policy.dir=checkpoints/pi0_fast_libero/my_experiment/20000
+```
+
+This will spin up a server that listens on port 8000 and waits for observations to be sent to it. We can then run the Libero evaluation script to query the server. For instructions how to install Libero and run the evaluation script, see the [Libero README](examples/libero/README.md).
+
+
+### More Examples
+
+We provide more examples for how to fine-tune and run inference with our models on the ALOHA platform in the following READMEs:
+- [ALOHA Simulator](examples/aloha_sim)
 - [ALOHA Real](examples/aloha_real)
-- [LIBERO](examples/libero)
 
-## Running the openpi server
 
-The server can be configured to serve openpi policies in the following ways:
 
-- Serve a default policy for the given environment.
-- Serve a trained policy from a checkpoint.
-- Serve an exported model.
+## Troubleshooting
 
-### Serve the default policy for the LIBERO environment
+We will collect common issues and their solutions here. If you encounter an issue, please check here first. If you can't find a solution, please file an issue on the repo (see [here](CONTRIBUTING.md) for guidelines).
 
-```bash
-uv run scripts/serve_policy.py --env LIBERO --default_prompt "my task"
-```
+| Issue | Resolution |
+|-------|------------|
+| `uv sync` fails with dependency conflicts | Try removing the virtual environment directory (`rm -rf .venv`) and running `uv sync` again. If issues persist, check that you have the latest version of `uv` installed (`uv self update`). |
+| Training runs out of GPU memory | Make sure you set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` before running training to allow JAX to use more GPU memory. You can also try reducing the batch size in your training config. |
+| Policy server connection errors | Check that the server is running and listening on the expected port. Verify network connectivity and firewall settings between client and server. |
+| Missing norm stats error when training | Run `scripts/compute_norm_stats.py` with your config name before starting training. |
+| Dataset download fails | Check your internet connection. If using `local_files_only=True`, verify the dataset exists locally. For HuggingFace datasets, ensure you're logged in (`huggingface-cli login`). |
+| CUDA/GPU errors | Verify NVIDIA drivers and CUDA toolkit are installed correctly. For Docker, ensure nvidia-container-toolkit is installed. Check GPU compatibility. |
+| Import errors when running examples | Make sure you've installed all dependencies with `uv sync` and activated the virtual environment. Some examples may have additional requirements listed in their READMEs. |
+| Action dimensions mismatch | Verify your data processing transforms match the expected input/output dimensions of your robot. Check the action space definitions in your policy classes. |
 
-### Serve a trained policy from an openpi checkpoint
 
-This option allows serving a model that was trained using the openpi training code. Here's an example of how to serve a checkpoint that corresponds to the `pi0_aloha_sim` training config:
-
-```bash
-uv run scripts/serve_policy.py --default_prompt "my task" policy:checkpoint --policy.config=pi0_aloha_sim --policy.dir=checkpoints/pi0_aloha_sim/exp_name/10000
-```
-
-See the [list of available checkpoints](#available-checkpoints) below for more details.
-
-The training config is used to determine which data transformations should be applied to the runtime data before feeding into the model. The norm stats, which are used to normalize the transformed data, are loaded from the checkpoint directory.
-
-### Serve an exported model
-
-There are also a number of checkpoints that are available as exported JAX graphs, which we trained ourselves using our internal training code. Here's an example of how to serve the pre-trained $\pi_0$ model on an ALOHA robot:
-
-```bash
-uv run scripts/serve_policy.py --env ALOHA policy:exported --policy.dir=s3://openpi-assets/exported/pi0_base/model --policy.processor=trossen_biarm_single_base_cam_24dim
-```
-
-See the [list of available exported models](#available-exported-models) below for more details.
-
-For these exported models, norm stats are loaded from processors that are exported along with the model, while data transformations are defined by the --env argument (see `create_exported_policy` in [scripts/serve_policy.py](scripts/serve_policy.py)). The processor name is optional, and if not provided, we will do the following:
-- Load a processor if there is only one available
-- Raise an error if there are multiple processors available and ask to provide a processor name
-
-### Available policies
-
-#### Checkpoints
-
-All available openpi checkpoints are located in `s3://openpi-assets/checkpoints/`. Similar to checkpionts that were trained using the openpi training code, they can be served using the following command:
-
-```bash
-uv run scripts/serve_policy.py --default_prompt=<prompt> policy:checkpoint --policy.config=<config> --policy.dir=<dir>
-```
-
-| dir                                                      | config                    | prompt             | description                                                                |
-| -------------------------------------------------------- | ------------------------- | ------------------ | -------------------------------------------------------------------------- |
-| `s3://openpi-assets/checkpoints/pi0_aloha`               | `pi0_aloha`               | not needed         | $\pi_0$ model fine-tuned on public ALOHA data, supports pen cap/uncap task |
-| `s3://openpi-assets/checkpoints/pi0_aloha_towel_diverse` | `pi0_aloha_towel_diverse` | `"fold the towel"` | $\pi_0$ model fine-tuned to perform a towel folding task on ALOHA          |
-| `s3://openpi-assets/checkpoints/pi0_aloha_sim`           | `pi0_aloha_sim`           | not needed         | $\pi_0$ model fine-tuned on public simulated ALOHA cube transfer task      |
-| `s3://openpi-assets/checkpoints/pi0_droid`               | `pi0_droid`               | any DROID command  | $\pi_0$ model fine-tuned on public DROID dataset                           |
-| `s3://openpi-assets/checkpoints/pi0_libero`              | `pi0_libero`              | any LIBERO command | $\pi_0$ model fine-tuned on public LIBERO simulated dataset                |
-
-
-#### Exported models
-
-NOTE: All models are now available as checkpoints. Exported models are only used for serving the standard pre-trained $\pi_0$ model.
-
-All available openpi exported models are located in `s3://openpi-assets/exported/`.
-
-#### Standard pre-trained $\pi_0$ model
-
-Our standard pre-trained $\pi_0$ model is available both as a checkpoint and an exported model.
-
-The checkpoint is used to initialize the model weights for fine-tuning using:
-
-```python
-weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
-```
-
-Although it may not perform well in zero-shot, it can be used as a baseline for comparing against fine-tuned models. We currently don't support serving pi0_base as a checkpoint and recommend using the exported model instead:
-
-```bash
-uv run scripts/serve_policy.py --env=<env> policy:exported --policy.dir=s3://openpi-assets/exported/pi0_base/model --policy.processor=<processor>
-```
-
-Here's a list of supported environments and corresponding processors:
-
-| env     | processor                             |
-| ------- | ------------------------------------- |
-| `ALOHA` | `trossen_biarm_single_base_cam_24dim` |
-| `DROID` | `openx_droid`                         |
-
-
-### Running with Docker:
-
-```bash
-export SERVER_ARGS="--env ALOHA_SIM --default_prompt 'my task'"
-docker compose -f scripts/compose.yml up --build
-```
-
-## Fine-tuning to your own robot
-
-This section provides a brief general guide to fine-tune $\pi_0$ to your own robot data. As a running example, we will describe adapting the policy to control a 6 DoF UR5e robot arm with a 1 DoF gripper. While $\pi_0$ may be adapted to a variety of different robot morphologies, we have tested single- and dual-arm setups with 6 DoF arms and single-arm setups with 7 DoF arms, typically with one base camera (over the shoulder) and a wrist camera on each wrist.
-
-### Define the policy inputs and outputs
-
-We will first define `UR5Inputs` and `UR5Outputs` classes derived from `DataTransformFn` to describe how the observations from the robot map onto model inputs and how the model outputs map onto robot actions, respectively. For a simple existing example such transforms, see [src/openpi/policies/droid_policy.py](src/openpi/policies/droid_policy.py).
-
-We assume that the robot client produces a dict with the following fields, and that images are `uint8` RGB in the range [0, 255]. The model expects 224x224 resolution images, but we can add a transformation to our processor stack that will resize them if necessary (more on this later):
-- `joints`: 6D vector of joint angles
-- `gripper`: 1D gripper position in the range [0, 1]
-- `base_rgb`: RGB image from the base camera
-- `wrist_rgb`: RGB image from the wrist camera
-
-Here is an example input transformation:
-
-```python
-@dataclasses.dataclass(frozen=True)
-class UR5Inputs(transforms.DataTransformFn):
-    # This is the action dimensionality of the model (not the robot!). The model has the same
-    # state and action dimensionality, so this variable can be used to determine how to pad
-    # state and action inputs loaded from the dataset.
-    action_dim: int
-
-    def __call__(self, data: dict) -> dict:
-        # First, concatenate the joints and gripper into the state vector.
-        # Pad to the expected input dimensionality of the model (same as action_dim).
-        state = np.concatenate([data["joints"], data["gripper"]])
-        state = transforms.pad_to_dim(state, self.action_dim)
-
-        inputs = {
-            "state": state,
-            # Dictionary containing image inputs, the keys must have these names.
-            "image": {
-                "base_0_rgb": data["base_rgb"],
-                "left_wrist_0_rgb": data["wrist_rgb"]
-                # Since there is no right wrist, replace with zeros
-                "right_wrist_0_rgb": np.zeros_like(data["base_rgb"]),
-            },
-            # 1D bool indicating if the image exists.
-            "image_mask": {
-                "base_0_rgb": np.True_,
-                "left_wrist_0_rgb": np.True_,
-                # Since the "slot" for the right wrist is not used, this mask is set
-                # to False
-                "right_wrist_0_rgb": np.False_,
-            },
-        }
-
-        # If this is called during training, actions will also be available.
-        if "actions" in data:
-            # The robot produces 7D actions (6 DoF + 1 gripper), and we pad these.
-            inputs["actions"] = transforms.pad_to_dim(data["actions"], self.action_dim)
-
-        # Pass the prompt along to the model.
-        if "prompt" in data:
-            inputs["prompt"] = data["prompt"]
-
-        return inputs
-```
-
-Here is an example output transformation:
-
-```python
-@dataclasses.dataclass(frozen=True)
-class UR5Outputs(transforms.DataTransformFn):
-    def __call__(self, data: dict) -> dict:
-        # Since the robot has 7 action dimensions (6 DoF + gripper), return the first 7 dims
-        return {"actions": np.asarray(data["actions"][:, :7])}
-```
-
-You will also need to define a new entry in the `EnvMode` enum in [scripts/serve_policy.py](scripts/serve_policy.py) (e.g., `UR5`). You do not need to do anything with this entry unless you want to use the `pi0_base` model in zero-shot, which is **almost certainly** the case if you are adding your own robot that $\pi_0$ was not trained on. But if you do want to use $\pi_0$ in zero-shot on a supported robot: You will need to add the right processor under `DEFAULT_EXPORTED` (if the model already supports your robot, this should exist, but you may need to file a Github issue to get the name), and add a case to `create_default_policy`, e.g.:
-
-```python
-        case EnvMode.UR5:
-            config = make_policy_config(
-                input_layers=[
-                    ur5_policy.UR5Inputs(action_dim=model.action_dim),
-                ],
-                output_layers=[
-                    ur5_policy.UR5Outputs(),
-                ],
-            )
-```
-
-### Define the training config
-
-To create a configuration for training on your robot, it will be necessary to add two things to [src/openpi/training/config.py](src/openpi/training/config.py): a `DataConfigFactory` subclass that defines the data source for your robot, and a `TrainConfig` object added to the `_CONFIGS` list, which lists the available training configs. Let's start with the `DataConfigFactory`: [config.py](src/openpi/training/config.py) already has one example (`LeRobotAlohaDataConfig`), which uses the LeRobot dataset format to import data for the ALOHA platform. This example is a bit more involved than we will need, since ALOHA has a few quirks that require special handling. Here is an example of `DataConfigFactory` subclass for our UR5 example above:
-
-```python
-@dataclasses.dataclass(frozen=True)
-class UR5DataConfig(DataConfigFactory):
-    # This is the repo id from LeRobot for this dataset repo.
-    # If you are creating a config just for running a model and do not intend to train it,
-    # and therefore might not have a dataset, this default indicates that this config is
-    # not used for training.
-    repo_id: str = tyro.MISSING
-    # If true, will convert joint dimensions to deltas with respect to the current state
-    # before passing to the model. Most models expect this. Grippers do not use delta.
-    use_delta_joint_actions: bool = False
-    # By default, the prompt will be "be a good robot", but we can override it here.
-    # We can also set the prompt in the command line, but it's good to specify a reasonable
-    # default that matches a reasonable prompt in the training set.
-    default_prompt: str | None = None
-    # If true, will disable syncing the dataset from the huggingface hub.
-    local_files_only: bool = False
-
-    def create(self, metadata_dir: pathlib.Path, model: _model.Model) -> DataConfig:
-        # This is standard boilerplate for loading norm stats for openpi checkpoints.
-        norm_stats = None
-        if self.repo_id is not tyro.MISSING:
-            norm_stats_path = metadata_dir / self.repo_id / "norm_stats.json"
-            if norm_stats_path.exist():
-                norm_stats = _normalize.deserialize_json(norm_stats_path.read_text())
-
-        # These transforms are the ones we wrote earlier.
-        data_transforms=_transforms.Group(
-            inputs=[ur5_policy.UR5Inputs(action_dim=model.action_dim)],
-            outputs=[ur5_policy.UR5Outputs()],
-        )
-
-        if self.use_delta_joint_actions:
-            # This mask defines which action/state dimensions correspond to grippers.
-            # Positive arguments to make_bool_mask create that number of True values,
-            # negative arguments create that number of False values, so this call will
-            # create a bool array with 6xTrue followed by 1xFalse.
-            delta_action_mask = _transforms.make_bool_mask(6, -1)
-            data_transforms = data_transforms.push(
-                inputs=[_transforms.DeltaActions(delta_action_mask)],
-                outputs=[_transforms.AbsoluteActions(delta_action_mask)],
-            )
-        
-        return DataConfig(
-            repo_id=self.repo_id,
-            norm_stats=norm_stats,
-            data_transforms=data_transforms,
-            # These transformations resize the images and tokenize the prompt.
-            model_transforms=_transforms.Group(
-                inputs=[
-                    # This is only necessary if we expect the input images to require
-                    # resizing. If your data is already 224x224 and your robot produces
-                    # 224x224 images, then you can omit this, but it's also fine to leave
-                    # this in as a precaution -- if the images are already 224x224, this
-                    # adds no additional cost.
-                    _transforms.ResizeImages(224, 224),
-                    _transforms.TokenizePrompt(
-                        _tokenizer.PaligemmaTokenizer(model.max_token_len),
-                        default_prompt=self.default_prompt,
-                    ),
-                ]
-            ),
-            local_files_only=self.local_files_only,
-        )
-```
-
-Then, the `TrainConfig` that we add to the list `_CONFIGS` can look like this. You can further modify this if you want to tweak any other parameters, such as learning rate, batch size, and number of training steps (see the `TrainConfig` class for the full list of parameters):
-
-```python
-TrainConfig(
-    name="ur5",
-    data=UR5DataConfig(
-        # This points to the repo ID for your dataset.
-        repo_id="lerobot/my_ur5_dataset",
-        # We set this to True because pi0_base expects delta actions.
-        use_delta_joint_actions=True,
-        # Set a reasonable default here.
-        default_prompt="be a good robot",
-        # Set this to True if you are using a dataset that is not on the HuggingFace hub.
-        local_files_only=True,
-    ),
-    # This is the standard pi0 pretrained checkpoint.
-    weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
-),
-```
-
-### Write your robot client
-
-The openpi policy server serves the policy, and your robot can run a client to connect to this server, sending it observations and getting back actions. You can write your own robot client in whatever way you want, but if you would like to build on our client, we recommend installing the accompanying `openpi_client` package:
-
-```bash
-pip install -e packages/openpi-client
-```
-
- Take a look at [examples/aloha_real/main.py](examples/aloha_real/main.py) for an example. The important bit of code is this:
-
-```python
-def main(args: Args) -> None:
-    runtime = _runtime.Runtime(
-        # This specifies the environment (which you will implement to interface with your robot).
-        environment=_env.AlohaRealEnvironment(),
-        agent=_policy_agent.PolicyAgent(
-            policy=action_chunk_broker.ActionChunkBroker(
-                policy=_websocket_client_policy.WebsocketClientPolicy(
-                    host=args.host,
-                    port=args.port,
-                ),
-                # This is the number of steps before getting a new action chunk.
-                # Here it is taken from the CLI arguments, but you can also hard-code it.
-                action_horizon=args.action_horizon,
-            )
-        ),
-        subscribers=[],
-        # The expected real-time frequency of the robot.
-        max_hz=50,
-    )
-
-    runtime.run()
-```
-
-If we look at the [Environment](packages/openpi-client/src/openpi_client/runtime/environment.py) class, we see that we need to implement just four methods (see [examples/aloha_real/env.py](examples/aloha_real/env.py)) for how these are implemented for the ALOHA robot:
-
-- `def reset(self)`: This is called at the start of each episodes and might, for example, move the robot to a starting home position.
-- `def done(self) -> bool`: This method returns `True` if the robot is done with the task, times out, etc. It is reasonable to always return `False` if you want the episode to run forever.
-- `def get_observation(self) -> dict`: This method returns a dictionary of observations. If you followed this guide, your `UR5Inputs` class will receive exactly this dictionary as input. But it is possible to add other input transformations as well (which our ALOHA example does, see [aloha_policy.py](src/openpi/policies/aloha_policy.py)).
-- `def apply_action(self, action: dict)`: This method sets the actions on the robot as specified by the dictionary `action`, which also matches the output of `UR5Outputs` unless other transformations are applied.
-
-You should interface each of these functions with your own robot code as needed.
-
-Congratulations, you are now done with all the additional openpi code!
-
-### Convert your dataset and train
-
-As described in the [Running Training](#running-training) section, we need to run two commands to train on this dataset. First, we need to compute normalization statistics for our training config. This needs to only be done once for the dataset (and redone if the dataset changes):
-
-```bash
-uv run scripts/compute_norm_stats.py --config-name ur5
-```
-
-Then we can run training:
-
-```bash
-uv run scripts/train.py ur5 --exp-name=my_experiment
-```
-
-You can use the `--overwrite` flag if you previously ran an experiment with the same name and would like to overwrite it, or `--resume` if you want to instead resume it from where you left off. Remember to set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` to allow JAX to use up to 90% of GPU memory. We optimized training to use H100 GPUs, though it will likely work on other high-memory GPUs. We use wandb to track training, and the script will prompt you to link to your wandb account and project the first time you start it. You can also disable it in the `TrainConfig` definition.
-
-
-### Serve your policy
-
-Once your model is trained, you can start the model server by running
-
-```bash
-uv run scripts/serve_policy.py --env UR5 policy:checkpoint --policy.config=ur5 --policy.dir=checkpoints/ur5/my_experiment/29999
-```
-
-where we use `29999` as the step number if we want the final checkpoint for a 30,000 step training run.
-
-To start the robot client, if you used our client code, just run
-
-```bash
-python your_client_main.py
-```
-
-It is also possible to run the client with Docker, as described earlier in this document.

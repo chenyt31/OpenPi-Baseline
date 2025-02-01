@@ -448,8 +448,7 @@ _CONFIGS = [
     # Fine-tuning Aloha configs.
     #
     # This is a test config that is used to illustate how train on a custom LeRobot dataset.
-    # TODO(michael): Add pi0_aloha_pen_uncap and a link to the tutorial. Upload the dataset and make sure
-    # that we have instructions for creating a local one in the tutorial.
+    # For instuctions on how to convert and train on your own Aloha dataset see examples/aloha_real/README.md
     TrainConfig(
         name="pi0_aloha_pen_uncap",
         model=pi0.Pi0Config(),

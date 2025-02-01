@@ -40,7 +40,7 @@ roslaunch --wait aloha ros_nodes.launch
 Terminal window 3:
 
 ```bash
-uv run scripts/serve_policy.py --env ALOHA --default_prompt='toast out of toaster'
+uv run scripts/serve_policy.py --env ALOHA --default_prompt='take the toast out of the toaster'
 ```
 ## **Model Guide**
 

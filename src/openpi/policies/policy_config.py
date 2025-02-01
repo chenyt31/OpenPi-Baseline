@@ -6,7 +6,6 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from openpi.models import tokenizer
 import openpi.models.model as _model
 import openpi.policies.policy as _policy
 import openpi.shared.download as download
@@ -26,59 +25,6 @@ class PolicyConfig:
     model_type: _model.ModelType = _model.ModelType.PI0
     default_prompt: str | None = None
     sample_kwargs: dict[str, Any] | None = None
-
-
-def create_policy(config: PolicyConfig) -> _policy.Policy:
-    """Create a policy from a policy config."""
-    match config.model_type:
-        case _model.ModelType.PI0:
-            return _create_pi0_policy(config)
-        case _model.ModelType.PI0_FAST:
-            return _create_pi0_fast_policy(config)
-        case _:
-            raise ValueError(f"Unsupported model type: {config.model_type}")
-
-
-def _create_pi0_policy(config: PolicyConfig) -> _policy.Policy:
-    return _policy.Policy(
-        config.model,
-        transforms=[
-            *config.input_layers,
-            transforms.InjectDefaultPrompt(config.default_prompt),
-            transforms.Normalize(config.norm_stats),
-            transforms.TokenizePrompt(
-                tokenizer.PaligemmaTokenizer(config.model.max_token_len),
-            ),
-        ],
-        output_transforms=[
-            transforms.Unnormalize(config.norm_stats),
-            *config.output_layers,
-        ],
-        sample_kwargs=config.sample_kwargs,
-    )
-
-
-def _create_pi0_fast_policy(config: PolicyConfig) -> _policy.Policy:
-    """Creates a pi0 FAST policy."""
-    return _policy.Policy(
-        config.model,
-        transforms=[
-            *config.input_layers,
-            transforms.InjectDefaultPrompt(config.default_prompt),
-            transforms.Normalize(config.norm_stats, use_quantiles=True),
-            transforms.TokenizeFASTInputs(tokenizer.FASTTokenizer(config.model.max_token_len)),
-        ],
-        output_transforms=[
-            transforms.ExtractFASTActions(
-                tokenizer.FASTTokenizer(config.model.max_token_len),
-                action_horizon=config.model.action_horizon,
-                action_dim=config.model.action_dim,
-            ),
-            transforms.Unnormalize(config.norm_stats, use_quantiles=True),
-            *config.output_layers,
-        ],
-        sample_kwargs=config.sample_kwargs,
-    )
 
 
 def create_trained_policy(
@@ -113,6 +59,8 @@ def create_trained_policy(
     if norm_stats is None:
         # We are loading the norm stats from the checkpoint instead of the config assets dir to make sure
         # that the policy is using the same normalization stats as the original training process.
+        if data_config.asset_id is None:
+            raise ValueError("Asset id is required to load norm stats.")
         norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets", data_config.asset_id)
 
     return _policy.Policy(

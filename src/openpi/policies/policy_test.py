@@ -1,21 +1,9 @@
 from openpi_client import action_chunk_broker
 import pytest
 
-from openpi.models import exported as _exported
 from openpi.policies import aloha_policy
 from openpi.policies import policy_config as _policy_config
 from openpi.training import config as _config
-
-
-def create_exported_config() -> _policy_config.PolicyConfig:
-    model = _exported.PiModel("s3://openpi-assets/exported/pi0_base/model")
-
-    return _policy_config.PolicyConfig(
-        model=model,
-        norm_stats=model.norm_stats("trossen_biarm_single_base_cam_32dim"),
-        input_layers=[aloha_policy.AlohaInputs(action_dim=model.action_dim)],
-        output_layers=[aloha_policy.AlohaOutputs()],
-    )
 
 
 @pytest.mark.manual
@@ -27,17 +15,6 @@ def test_infer():
     result = policy.infer(example)
 
     assert result["actions"].shape == (config.model.action_horizon, 14)
-
-
-@pytest.mark.manual
-def test_infer_exported():
-    config = create_exported_config()
-    policy = _policy_config.create_policy(config)
-
-    example = aloha_policy.make_aloha_example()
-    outputs = policy.infer(example)
-
-    assert outputs["actions"].shape == (config.model.action_horizon, 14)
 
 
 @pytest.mark.manual

@@ -225,6 +225,7 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
                         "observation/wrist_image": "wrist_image",
                         "observation/state": "state",
                         "actions": "actions",
+                        "prompt": "prompt",
                     }
                 )
             ]

@@ -3,8 +3,8 @@
 openpi holds open-source models and packages for robotics, published by the [Physical Intelligence team](https://www.physicalintelligence.company/).
 
 Currently, this repo contains two types of models:
-- the [$\pi_0$ model](https://www.physicalintelligence.company/blog/pi0), a flow-based diffusion vision-language-action model (VLA)
-- the [$\pi_0$-FAST model](https://www.physicalintelligence.company/research/fast), an autoregressive VLA, based on the FAST action tokenizer.
+- the [π₀ model](https://www.physicalintelligence.company/blog/pi0), a flow-based diffusion vision-language-action model (VLA)
+- the [π₀-FAST model](https://www.physicalintelligence.company/research/fast), an autoregressive VLA, based on the FAST action tokenizer.
 
 For both models, we provide _base model_ checkpoints, pre-trained on 10k+ hours of robot data, and examples for using them out of the box or fine-tuning them to your own datasets.
 
@@ -55,8 +55,8 @@ We provide multiple base VLA model checkpoints. These checkpoints have been pre-
 
 | Model | Use Case | Description | Checkpoint Path |
 |-------|----------|----------------|----------------|
-| $\pi_0$ | Fine-Tuning | Base diffusion [$\pi_0$ model](https://www.physicalintelligence.company/blog/pi0) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_base` |
-| $\pi_0$-FAST | Fine-Tuning | Base autoregressive [$\pi_0$-FAST model](https://www.physicalintelligence.company/research/fast) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_fast_base` |
+| $\pi_0$ | Fine-Tuning | Base diffusion [π₀ model](https://www.physicalintelligence.company/blog/pi0) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_base` |
+| $\pi_0$-FAST | Fine-Tuning | Base autoregressive [π₀-FAST model](https://www.physicalintelligence.company/research/fast) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_fast_base` |
 
 ### Fine-Tuned Models
 We also provide "expert" checkpoints for various robot platforms and tasks. These models are fine-tuned from the base models above and can be used out-of-the-box to solve tasks on your robot.
@@ -131,7 +131,7 @@ To fine-tune a base model on your own data, you need to define configs for data 
 - [`LeRobotLiberoDataConfig`](src/openpi/training/config.py): Defines how to process raw Libero data from LeRobot dataset for training.
 - [`TrainConfig`](src/openpi/training/config.py): Defines fine-tuning hyperparameters, data config, and weight loader.
 
-We provide example fine-tuning configs for both, [$\pi_0$](src/openpi/training/config.py) and [$\pi_0$-FAST](src/openpi/training/config.py) on Libero data.
+We provide example fine-tuning configs for both, [π₀](src/openpi/training/config.py) and [π₀-FAST](src/openpi/training/config.py) on Libero data.
 
 Before we can run training, we need to compute the normalization statistics for the training data. Run the script below with the name of your training config:
 

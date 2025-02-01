@@ -103,7 +103,7 @@ This task involves opening a tupperware filled with food and pouring the content
 - **Objects needed**: Tupperware, food (or food-like items), and a plate.  
 - **Object Distribution**:  
   - Works on various types of fake food (e.g., fake chicken nuggets, fries, and fried chicken).  
-  - Compatible with tupperware of different lid colors and shapes, with best performance on square tupperware.  
+  - Compatible with tupperware of different lid colors and shapes, with best performance on square tupperware with a corner flap (see images below).  
   - The policy has seen plates of varying solid colors.  
 
 ### **Scene Setup Guidelines** 

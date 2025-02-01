@@ -12,6 +12,12 @@ import tyro
 import openpi.shared.normalize as normalize
 import openpi.training.config as _config
 import openpi.training.data_loader as _data_loader
+import openpi.transforms as transforms
+
+
+class RemoveStrings(transforms.DataTransformFn):
+    def __call__(self, x: dict) -> dict:
+        return {k: v for k, v in x.items() if not np.issubdtype(np.asarray(v).dtype, np.str_)}
 
 
 def create_dataset(config: _config.TrainConfig) -> tuple[_config.DataConfig, _data_loader.Dataset]:
@@ -21,7 +27,12 @@ def create_dataset(config: _config.TrainConfig) -> tuple[_config.DataConfig, _da
     dataset = _data_loader.create_dataset(data_config, config.model)
     dataset = _data_loader.TransformedDataset(
         dataset,
-        [*data_config.repack_transforms.inputs, *data_config.data_transforms.inputs],
+        [
+            *data_config.repack_transforms.inputs,
+            *data_config.data_transforms.inputs,
+            # Remove strings since they are not supported by JAX and are not needed to compute norm stats.
+            RemoveStrings(),
+        ],
     )
     return data_config, dataset
 

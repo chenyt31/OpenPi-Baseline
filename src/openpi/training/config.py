@@ -102,7 +102,7 @@ class ModelTransformFactory(GroupFactory):
 
     def __call__(self, model_config: _model.BaseModelConfig) -> _transforms.Group:
         match model_config.model_type:
-            case ModelType.PI0:
+            case _model.ModelType.PI0:
                 return _transforms.Group(
                     inputs=[
                         _transforms.InjectDefaultPrompt(self.default_prompt),
@@ -112,7 +112,7 @@ class ModelTransformFactory(GroupFactory):
                         ),
                     ],
                 )
-            case ModelType.PI0_FAST:
+            case _model.ModelType.PI0_FAST:
                 return _transforms.Group(
                     inputs=[
                         _transforms.InjectDefaultPrompt(self.default_prompt),
@@ -159,10 +159,11 @@ class DataConfigFactory(abc.ABC):
             return None
         try:
             data_assets_dir = str(assets_dir / asset_id)
-            logging.info(f"Loading norm stats from: {data_assets_dir}")
-            return _normalize.load(_download.maybe_download(data_assets_dir))
+            norm_stats = _normalize.load(_download.maybe_download(data_assets_dir))
+            logging.info(f"Loaded norm stats from {data_assets_dir}")
+            return norm_stats
         except FileNotFoundError:
-            logging.warning(f"Norm stats not found in: {data_assets_dir}, skipping.")
+            logging.info(f"Norm stats not found in {data_assets_dir}, skipping.")
         return None
 
 
@@ -371,12 +372,15 @@ class TrainConfig:
 # Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
     #
-    # Base models.
+    # Inference Aloha configs.
     #
-    # TODO: Add pi0_base and pi0_fast_base
-    #
-    # Aloha configs.
-    #
+    TrainConfig(
+        name="pi0_aloha",
+        model=pi0.Pi0Config(),
+        data=LeRobotAlohaDataConfig(
+            assets=AssetsConfig(asset_id="trossen"),
+        ),
+    ),
     TrainConfig(
         name="pi0_aloha_towel",
         model=pi0.Pi0Config(),
@@ -394,7 +398,7 @@ _CONFIGS = [
         ),
     ),
     #
-    # DROID configs.
+    # Inference DROID configs.
     #
     TrainConfig(
         name="pi0_fast_droid",
@@ -411,11 +415,12 @@ _CONFIGS = [
         ),
     ),
     #
-    # Simulation configs.
+    # Fine-tuning Libero configs.
     #
     TrainConfig(
         name="pi0_libero",
-        model=pi0.Pi0Config(),
+        # TODO(ury): Retrain the checkpoint with the latest base model and update the config.
+        model=pi0.Pi0Config(action_dim=24),
         data=LeRobotLiberoDataConfig(
             repo_id="physical-intelligence/libero",
             base_config=DataConfig(
@@ -440,7 +445,7 @@ _CONFIGS = [
         num_train_steps=30_000,
     ),
     #
-    # Examples:
+    # Fine-tuning Aloha configs.
     #
     # This is a test config that is used to illustate how train on a custom LeRobot dataset.
     # TODO(michael): Add pi0_aloha_pen_uncap and a link to the tutorial. Upload the dataset and make sure

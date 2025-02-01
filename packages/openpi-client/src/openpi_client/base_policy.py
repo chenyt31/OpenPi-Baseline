@@ -7,6 +7,6 @@ class BasePolicy(abc.ABC):
     def infer(self, obs: Dict) -> Dict:
         """Infer actions from observations."""
 
-    @abc.abstractmethod
     def reset(self) -> None:
         """Reset the policy to its initial state."""
+        pass

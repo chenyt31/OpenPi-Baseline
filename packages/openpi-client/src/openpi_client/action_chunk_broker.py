@@ -40,7 +40,6 @@ class ActionChunkBroker(_base_policy.BasePolicy):
 
     @override
     def reset(self) -> None:
-        print("resetting")
         self._policy.reset()
         self._last_results = None
         self._cur_step = 0

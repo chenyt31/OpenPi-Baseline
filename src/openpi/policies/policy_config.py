@@ -109,11 +109,11 @@ def create_trained_policy(
     logging.info("Loading model...")
     model = train_config.model.load(_model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16))
 
-    data_config = train_config.data.create(train_config.metadata_dir, train_config.model)
+    data_config = train_config.data.create(train_config.assets_dirs, train_config.model)
     if norm_stats is None:
-        # We are loading the norm stats from the checkpoint, instead of the metadata dir to make sure
+        # We are loading the norm stats from the checkpoint instead of the config assets dir to make sure
         # that the policy is using the same normalization stats as the original training process.
-        norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets")
+        norm_stats = _checkpoints.load_norm_stats(checkpoint_dir / "assets", data_config.asset_id)
 
     return _policy.Policy(
         model,

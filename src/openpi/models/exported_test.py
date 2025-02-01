@@ -57,27 +57,21 @@ def test_processor_loading():
 def test_convert_pi0_to_openpi(tmp_path: pathlib.Path):
     output_dir = tmp_path / "output"
 
-    exported.convert_to_openpi(
-        "s3://openpi-assets/exported/pi0_base/model",
-        output_dir,
-        processor="trossen_biarm_single_base_cam_32dim",
-    )
+    exported.convert_to_openpi("s3://openpi-assets/exported/pi0_base/model", output_dir)
 
-    # Make sure that we can load the params and norm stats.
+    # Make sure that we can load the params.
     _ = _model.restore_params(output_dir / "params")
-    _ = _checkpoints.load_norm_stats(output_dir / "assets")
+    # Make sure that norm stats are present.
+    _ = _checkpoints.load_norm_stats(output_dir / "assets", "trossen")
 
 
 @pytest.mark.manual
 def test_convert_pi0_fast_to_openpi(tmp_path: pathlib.Path):
     output_dir = tmp_path / "output"
 
-    exported.convert_to_openpi(
-        "s3://openpi-assets/exported/pi0_fast_base/model",
-        output_dir,
-        processor="trossen_biarm_single_base_cam_32dim",
-    )
+    exported.convert_to_openpi("s3://openpi-assets/exported/pi0_fast_base/model", output_dir)
 
-    # Make sure that we can load the params and norm stats.
+    # Make sure that we can load the params.
     _ = _model.restore_params(output_dir / "params")
-    _ = _checkpoints.load_norm_stats(output_dir / "assets")
+    # Make sure that norm stats are present.
+    _ = _checkpoints.load_norm_stats(output_dir / "assets", "trossen")

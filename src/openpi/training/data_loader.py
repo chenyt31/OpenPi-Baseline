@@ -150,7 +150,7 @@ def create_data_loader(
         num_workers: The number of worker processes to use. If zero, the data loader will
             execute in the main process.
     """
-    data_config = config.data.create(config.metadata_dir, config.model)
+    data_config = config.data.create(config.assets_dirs, config.model)
 
     dataset = create_dataset(data_config, config.model)
     dataset = transform_dataset(dataset, data_config, skip_norm_stats=skip_norm_stats)

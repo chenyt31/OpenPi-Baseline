@@ -66,9 +66,10 @@ def save_state(
 ):
     def save_assets(directory: epath.Path):
         # Save the normalization stats.
-        norm_stats = data_loader.data_config().norm_stats
-        if norm_stats is not None:
-            _normalize.save(directory, norm_stats)
+        data_config = data_loader.data_config()
+        norm_stats = data_config.norm_stats
+        if norm_stats is not None and data_config.asset_id is not None:
+            _normalize.save(directory / data_config.asset_id, norm_stats)
 
     # Split params that can be used for inference into a separate item.
     train_state, params = _split_params(state)
@@ -101,8 +102,8 @@ def restore_state(
     return _merge_params(restored["train_state"], restored["params"])
 
 
-def load_norm_stats(assets_dir: epath.Path | str) -> dict[str, _normalize.NormStats]:
-    return _normalize.load(assets_dir)
+def load_norm_stats(assets_dir: epath.Path | str, asset_id: str) -> dict[str, _normalize.NormStats] | None:
+    return _normalize.load(epath.Path(assets_dir) / asset_id)
 
 
 class Callback(Protocol):

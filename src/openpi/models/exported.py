@@ -42,7 +42,6 @@ def convert_to_openpi(
     ckpt_dir: pathlib.Path | str,
     out_dir: pathlib.Path | str,
     *,
-    processor: str | None = None,
     config: ConvertConfig | None = None,
 ) -> None:
     """Convert an internal checkpoint to an openpi checkpoint.
@@ -50,8 +49,6 @@ def convert_to_openpi(
     Args:
         ckpt_dir: The directory containing the internal exported model.
         out_dir: The directory to save the openpi checkpoint.
-        processor: The processor name to use to extract the norm stats. If None, the first processor
-            in the checkpoint is used if there's only one available.
         config: The configuration to use when converting the checkpoint params. If not provided, the right
             configuration will be inferred from the checkpoint.
     """
@@ -70,20 +67,11 @@ def convert_to_openpi(
         config = _detect_convert_config(params)
 
     model = PiModel(ckpt_dir, params=params)
-    print("Processors:    ", model.processor_names())
+    processor_names = model.processor_names()
+    print("Processors:    ", processor_names)
     print("Action dim:    ", model.action_dim)
     print("Action horizon:", model.action_horizon)
     print("Max token len: ", model.max_token_len)
-
-    if processor is None:
-        processor_names = model.processor_names()
-        if len(processor_names) != 1:
-            raise ValueError(
-                f"Multiple processors found in the checkpoint. Please specify a processor name: {processor_names}"
-            )
-        processor = processor_names[0]
-
-    norm_stats = _import_norm_stats(ckpt_dir, processor)
 
     if config.param_path:
         for part in config.param_path.split("/"):
@@ -109,7 +97,12 @@ def convert_to_openpi(
     ckpt.wait_until_finished()
 
     # Save norm stats.
-    _normalize.save(out_dir / "assets", norm_stats)
+    for processor_name in processor_names:
+        assets_dir = out_dir / "assets"
+        if openpi_name := PROCESSOR_NAME_MAP.get(processor_name):
+            print(f"Saving norm stats: '{processor_name}' -> '{openpi_name}'")
+            norm_stats = _import_norm_stats(ckpt_dir, processor_name)
+            _normalize.save(assets_dir / openpi_name, norm_stats)
 
 
 class PiModel(_model.BaseModel):
@@ -386,6 +379,20 @@ def _detect_convert_config(params: at.PyTree) -> ConvertConfig:
         )
 
     return ConvertConfig()
+
+
+# Map from internal processor names to public norm_stats names.
+PROCESSOR_NAME_MAP = {
+    "arx_agilex_32dim": "arx",
+    "arx_slate_mobile_biarm_32dim": "arx_mobile",
+    "fibocom_32dim": "fibocom_mobile",
+    "fr3_32dim": "franka",
+    "mobile_trossen_32dim": "trossen_mobile",
+    "openx_droid": "droid",
+    "trossen_biarm_single_base_cam_32dim": "trossen",
+    "ur5_biarm_32dim": "ur5e_dual",
+    "ur5_single_32dim": "ur5e",
+}
 
 
 class IgnoreCustomTagsLoader(yaml.Loader):

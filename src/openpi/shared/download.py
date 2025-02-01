@@ -278,8 +278,8 @@ def _get_mtime(year: int, month: int, day: int) -> float:
 # Partial matching will be used from top to bottom and the first match will be chosen.
 # Cached entries will be retained only if they are newer than the expiration timestamp.
 _INVALIDATE_CACHE_DIRS: dict[re.Pattern, float] = {
-    re.compile("openpi-assets/checkpoints/"): _get_mtime(2025, 1, 28),
-    re.compile("openpi-assets/exported/"): _get_mtime(2025, 1, 28),
+    re.compile("openpi-assets/checkpoints/"): _get_mtime(2025, 1, 31),
+    re.compile("openpi-assets/exported/"): _get_mtime(2025, 1, 31),
 }
 
 

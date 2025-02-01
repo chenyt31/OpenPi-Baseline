@@ -51,6 +51,7 @@ class Runtime:
         """Runs a single episode."""
         logging.info("Starting episode...")
         self._environment.reset()
+        self._agent.reset()
         for subscriber in self._subscribers:
             subscriber.on_episode_start()
 

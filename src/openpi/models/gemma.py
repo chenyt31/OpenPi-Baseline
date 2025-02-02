@@ -110,7 +110,18 @@ def get_config(variant: Variant) -> Config:
             num_heads=8,
             num_kv_heads=1,
             head_dim=256,
-            lora_configs={"default": lora.LoRAConfig(rank=64, alpha=64.0)},
+            lora_configs={"attn": lora.LoRAConfig(rank=16, alpha=16.0), "ffn": lora.LoRAConfig(rank=16, alpha=16.0)},
+        )
+    if variant == "gemma_300m_lora":
+        # 311M params
+        return Config(
+            width=1024,
+            depth=18,
+            mlp_dim=4096,
+            num_heads=8,
+            num_kv_heads=1,
+            head_dim=256,
+            lora_configs={"attn": lora.LoRAConfig(rank=32, alpha=32.0), "ffn": lora.LoRAConfig(rank=32, alpha=32.0)},
         )
     raise ValueError(f"Unknown variant: {variant}")
 
@@ -176,7 +187,7 @@ class Attention(nn.Module):
                     shape=(3, config.num_heads, config.width, config.head_dim),
                     name=_name("qkv_einsum", i),
                     init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0, 1)),
-                    lora_config=config.lora_configs.get("default"),
+                    lora_config=config.lora_configs.get("attn"),
                 )
                 qkvs.append(qkv_einsum("BSD,3KDH->3BSKH", x))
             else:
@@ -184,14 +195,14 @@ class Attention(nn.Module):
                     shape=(config.num_heads, config.width, config.head_dim),
                     name=_name("q_einsum", i),
                     init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0,)),
-                    lora_config=config.lora_configs.get("default"),
+                    lora_config=config.lora_configs.get("attn"),
                 )
                 q = q_einsum("BTD,NDH->BTNH", x)
                 kv_einsum = lora.Einsum(
                     shape=(2, config.num_kv_heads, config.width, config.head_dim),
                     name=_name("kv_einsum", i),
                     init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0, 1)),
-                    lora_config=config.lora_configs.get("default"),
+                    lora_config=config.lora_configs.get("attn"),
                 )
                 k, v = kv_einsum("BSD,2KDH->2BSKH", x)
                 qkvs.append((q, k, v))
@@ -237,7 +248,7 @@ class Attention(nn.Module):
                     shape=(config.num_heads, config.head_dim, config.width),
                     name=_name("attn_vec_einsum", i),
                     init_fn=nn.initializers.lecun_normal(in_axis=(-3, -2), out_axis=-1),
-                    lora_config=config.lora_configs.get("default"),
+                    lora_config=config.lora_configs.get("attn"),
                 )
                 out.append(out_einsum("BTNH,NHD->BTD", encoded[:, start:end]))
                 start = end
@@ -311,10 +322,11 @@ class Block(nn.Module):
         for i, (x, config) in enumerate(zip(xs, self.configs, strict=True)):
             if x is not None:
                 x = RMSNorm(name=_name("pre_ffw_norm", i))(x)  # noqa: PLW2901
-                x = FeedForward(  # noqa: PLW2901
+                x = lora.FeedForward(  # noqa: PLW2901
                     features=config.width,
                     hidden_dim=config.mlp_dim,
                     name=_name("mlp", i),
+                    lora_config=config.lora_configs.get("ffn"),
                 )(x)
             out.append(x)
 

@@ -16,6 +16,7 @@ import wandb
 
 import openpi.models.model as _model
 import openpi.shared.array_typing as at
+import openpi.shared.nnx_utils as nnx_utils
 import openpi.training.checkpoints as _checkpoints
 import openpi.training.config as _config
 import openpi.training.data_loader as _data_loader
@@ -153,9 +154,11 @@ def train_step(
     # Filter out params that aren't kernels.
     kernel_params = nnx.state(
         model,
-        lambda path, variable: variable.type == nnx.Param
-        and variable.value.ndim > 1
-        and not any(x in path[-1] for x in ("bias", "scale", "pos_embedding", "input_embedding")),
+        nnx.All(
+            nnx.Param,
+            nnx.Not(nnx_utils.PathRegex(".*/(bias|scale|pos_embedding|input_embedding)")),
+            lambda _, x: x.value.ndim > 1,
+        ),
     )
     info = {
         "loss": loss,

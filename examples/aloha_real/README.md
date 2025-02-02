@@ -42,26 +42,18 @@ Terminal window 3:
 ```bash
 uv run scripts/serve_policy.py --env ALOHA --default_prompt='take the toast out of the toaster'
 ```
-## **Model Guide**
+## **Tips and Tricks for ALOHA Checkpoints**
 
-The $\pi_0$ base model is an out-of-the-box model for general tasks. While we strongly recommend fine-tuning the model to your own data to adapt it to particular tasks, it may be possible to prompt the model to attempt some tasks that were in the pre-training data.  For example, the model has been trained to take toast out of a toaster when prompted to "take the toast out of the toaster".
+The `pi0_base` model can be used in zero shot for a simple task on the ALOHA platform, and we additionally provide two example fine-tuned checkpoints, “fold the towel” and “open the tupperware and put the food on the plate,” which can perform more advanced tasks on the ALOHA.
 
-We additionally provide a few example policies fine-tuned to:
-- Fold towels (config: `pi0_aloha_towel`)
-- Take food out of tupperware and place it onto a plate (config: `pi0_aloha_tupperware`)
+While we’ve found the policies to work in unseen conditions across multiple ALOHA stations, we provide some pointers here on how best to set up scenes to maximize the chance of policy success. We cover the prompts to use for the policies, objects we’ve seen it work well on, and well-represented initial state distributions. Running these policies in zero shot is still a very experimental feature, and there is no guarantee that they will work on your robot. The recommended way to use `pi0_base` is by finetuning with data from the target robot.
 
-While we have found these policies to work in unseen conditions across multiple ALOHA stations, we provide some pointers below on how to best set up scenes to maximize the chance of policy success.  
-
-We cover:
-- The prompts to use for each policy
-- Objects we’ve seen it work well on  
-- Well-represented initial state distributions  
 
 ---
 
 ### **Toast Task**  
 
-This task involves the robot taking **two pieces of toast out of a toaster** and placing them on a plate.  
+This task involves the robot taking two pieces of toast out of a toaster and placing them on a plate.  
 
 - **Prompt**: "take the toast out of the toaster"
 - **Objects needed**: Two pieces of toast, a plate, and a standard toaster.  

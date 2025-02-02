@@ -150,7 +150,13 @@ def train_step(
             )
         )
 
-    kernel_params = nnx.state(model, lambda path, _: path[-1] == "kernel")
+    # Filter out params that aren't kernels.
+    kernel_params = nnx.state(
+        model,
+        lambda path, variable: variable.type == nnx.Param
+        and variable.value.ndim > 1
+        and not any(x in path[-1] for x in ("bias", "scale", "pos_embedding", "input_embedding")),
+    )
     info = {
         "loss": loss,
         "grad_norm": optax.global_norm(grads),  # TODO: do not compute norm for frozen params

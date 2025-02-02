@@ -6,9 +6,10 @@ import dataclasses
 import difflib
 import logging
 import pathlib
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeAlias
 
 import etils.epath as epath
+import flax.nnx as nnx
 from typing_extensions import override
 import tyro
 
@@ -25,7 +26,9 @@ import openpi.training.optimizer as _optimizer
 import openpi.training.weight_loaders as weight_loaders
 import openpi.transforms as _transforms
 
-ModelType = _model.ModelType
+ModelType: TypeAlias = _model.ModelType
+# Work around a tyro issue with using nnx.filterlib.Filter directly.
+Filter: TypeAlias = nnx.filterlib.Filter
 
 
 @dataclasses.dataclass(frozen=True)
@@ -310,6 +313,9 @@ class TrainConfig:
     optimizer: _optimizer.OptimizerConfig = dataclasses.field(default_factory=_optimizer.AdamW)
     ema_decay: float | None = 0.99
 
+    # Specifies which weights should be frozen.
+    freeze_filter: tyro.conf.Suppress[Filter] = dataclasses.field(default_factory=nnx.Nothing)
+
     # Determines the data to be trained on.
     data: DataConfigFactory = dataclasses.field(default_factory=FakeDataConfig)
 
@@ -363,6 +369,11 @@ class TrainConfig:
         if not self.exp_name:
             raise ValueError("--exp_name must be set")
         return (pathlib.Path(self.checkpoint_base_dir) / self.name / self.exp_name).resolve()
+
+    @property
+    def trainable_filter(self) -> nnx.filterlib.Filter:
+        """Get the filter for the trainable parameters."""
+        return nnx.All(nnx.Param, nnx.Not(self.freeze_filter))
 
     def __post_init__(self) -> None:
         if self.resume and self.overwrite:

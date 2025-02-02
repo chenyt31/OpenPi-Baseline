@@ -1,4 +1,5 @@
 import dataclasses
+import functools
 import logging
 import platform
 from typing import Any
@@ -83,10 +84,7 @@ def _load_weights_and_validate(loader: _weight_loaders.WeightLoader, params_shap
 def init_train_state(
     config: _config.TrainConfig, init_rng: at.KeyArrayLike, mesh: jax.sharding.Mesh, *, resume: bool
 ) -> tuple[training_utils.TrainState, Any]:
-    tx = _optimizer.create_optimizer(
-        config.optimizer, config.lr_schedule, weight_decay_mask=None, freeze_weights_mask=None
-    )
-    replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
+    tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask=None)
 
     def init(rng: at.KeyArrayLike, partial_params: at.Params | None = None) -> training_utils.TrainState:
         rng, model_rng = jax.random.split(rng)
@@ -101,12 +99,15 @@ def init_train_state(
             model = nnx.merge(graphdef, state)
 
         params = nnx.state(model)
+        # Convert frozen params to bfloat16.
+        params = nnx_utils.state_map(params, config.freeze_filter, lambda p: p.replace(p.value.astype(jnp.bfloat16)))
+
         return training_utils.TrainState(
             step=0,
             params=params,
             model_def=nnx.graphdef(model),
             tx=tx,
-            opt_state=tx.init(params),
+            opt_state=tx.init(params.filter(config.trainable_filter)),
             ema_decay=config.ema_decay,
             ema_params=None if config.ema_decay is None else params,
         )
@@ -118,6 +119,7 @@ def init_train_state(
         return train_state_shape, state_sharding
 
     partial_params = _load_weights_and_validate(config.weight_loader, train_state_shape.params.to_pure_dict())
+    replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
     # Initialize the train state and mix in the partial params.
     train_state = jax.jit(
@@ -132,6 +134,7 @@ def init_train_state(
 
 @at.typecheck
 def train_step(
+    config: _config.TrainConfig,
     rng: at.KeyArrayLike,
     state: training_utils.TrainState,
     batch: tuple[_model.Observation, _model.Actions],
@@ -148,15 +151,26 @@ def train_step(
 
     train_rng = jax.random.fold_in(rng, state.step)
     observation, actions = batch
-    loss, grads = nnx.value_and_grad(loss_fn)(model, train_rng, observation, actions)
-    updates, new_opt_state = state.tx.update(grads, state.opt_state, state.params)
-    new_params = optax.apply_updates(state.params, updates)
-    new_state = state.replace(step=state.step + 1, params=new_params, opt_state=new_opt_state)
+
+    # Filter out frozen params.
+    diff_state = nnx.DiffState(0, config.trainable_filter)
+    loss, grads = nnx.value_and_grad(loss_fn, argnums=diff_state)(model, train_rng, observation, actions)
+
+    params = state.params.filter(config.trainable_filter)
+    updates, new_opt_state = state.tx.update(grads, state.opt_state, params)
+    new_params = optax.apply_updates(params, updates)
+
+    # Update the model in place and return the new full state.
+    nnx.update(model, new_params)
+    new_params = nnx.state(model)
+
+    new_state = dataclasses.replace(state, step=state.step + 1, params=new_params, opt_state=new_opt_state)
     if state.ema_decay is not None:
-        new_state = new_state.replace(
+        new_state = dataclasses.replace(
+            new_state,
             ema_params=jax.tree.map(
                 lambda old, new: state.ema_decay * old + (1 - state.ema_decay) * new, state.ema_params, new_params
-            )
+            ),
         )
 
     # Filter out params that aren't kernels.
@@ -170,7 +184,7 @@ def train_step(
     )
     info = {
         "loss": loss,
-        "grad_norm": optax.global_norm(grads),  # TODO: do not compute norm for frozen params
+        "grad_norm": optax.global_norm(grads),
         "param_norm": optax.global_norm(kernel_params),
     }
     return new_state, info
@@ -221,7 +235,7 @@ def main(config: _config.TrainConfig):
         train_state = _checkpoints.restore_state(checkpoint_manager, train_state, data_loader)
 
     ptrain_step = jax.jit(
-        train_step,
+        functools.partial(train_step, config),
         in_shardings=(replicated_sharding, train_state_sharding, data_sharding),
         out_shardings=(train_state_sharding, replicated_sharding),
         donate_argnums=(1,),

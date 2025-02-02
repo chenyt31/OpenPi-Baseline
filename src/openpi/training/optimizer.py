@@ -1,7 +1,6 @@
 import dataclasses
 from typing import Protocol, runtime_checkable
 
-import jax
 import jax.numpy as jnp
 import optax
 
@@ -103,18 +102,7 @@ class SGD(OptimizerConfig):
 
 
 def create_optimizer(
-    optimizer: OptimizerConfig,
-    lr_schedule: LRScheduleConfig,
-    weight_decay_mask: at.PyTree | None = None,
-    freeze_weights_mask: at.PyTree | None = None,
+    optimizer: OptimizerConfig, lr_schedule: LRScheduleConfig, weight_decay_mask: at.PyTree | None = None
 ) -> optax.GradientTransformation:
     lr = lr_schedule.create()
-    tx = optimizer.create(lr, weight_decay_mask=weight_decay_mask)
-
-    if freeze_weights_mask is not None:
-        tx = optax.multi_transform(
-            {"online": tx, "frozen": optax.set_to_zero()},
-            jax.tree.map(lambda x: "frozen" if x else "online", freeze_weights_mask),
-        )
-
-    return tx
+    return optimizer.create(lr, weight_decay_mask=weight_decay_mask)

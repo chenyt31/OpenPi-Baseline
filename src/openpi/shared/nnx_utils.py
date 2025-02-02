@@ -61,3 +61,9 @@ class PathRegex:
         joined_path = self.sep.join(str(x) for x in path)
         assert isinstance(self.pattern, re.Pattern)
         return self.pattern.fullmatch(joined_path) is not None
+
+
+def state_map(state: nnx.State, filter: nnx.filterlib.Filter, fn: Callable[[Any], Any]) -> nnx.State:
+    """Apply a function to the leaves of the state that match the filter."""
+    filtered_keys = set(state.filter(filter).flat_state())
+    return state.map(lambda k, v: fn(v) if k in filtered_keys else v)

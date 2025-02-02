@@ -1,5 +1,4 @@
 import dataclasses
-from functools import partial
 import logging
 import platform
 from typing import Any
@@ -7,6 +6,7 @@ from typing import Any
 import etils.epath as epath
 import flax.nnx as nnx
 from flax.training import common_utils
+import flax.traverse_util as traverse_util
 import jax
 import jax.experimental
 import jax.numpy as jnp
@@ -68,38 +68,37 @@ def init_wandb(config: _config.TrainConfig, *, resuming: bool, log_code: bool = 
         wandb.run.log_code(epath.Path(__file__).parent.parent)
 
 
-def _load_weights_and_validate(weight_loader: _weight_loaders.WeightLoader, params: at.Params) -> at.Params:
-    """Runs the weight loader and validates that the params structure, shapes, and dtypes are unchanged."""
-    new_params = weight_loader.load(jax.tree.map(lambda x: x, params))
+def _load_weights_and_validate(loader: _weight_loaders.WeightLoader, params_shape: at.Params) -> at.Params:
+    """Loads and validates the weights. Returns a loaded subset of the weights."""
+    loaded_params = loader.load(params_shape)
+    at.check_pytree_equality(expected=params_shape, got=loaded_params, check_shapes=True, check_dtypes=True)
 
-    at.check_pytree_equality(expected=params, got=new_params, check_shapes=True, check_dtypes=True)
-    return new_params
+    # Remove jax.ShapeDtypeStruct from the loaded params. This makes sure that only the loaded params are returned.
+    return traverse_util.unflatten_dict(
+        {k: v for k, v in traverse_util.flatten_dict(loaded_params).items() if not isinstance(v, jax.ShapeDtypeStruct)}
+    )
 
 
 @at.typecheck
 def init_train_state(
     config: _config.TrainConfig, init_rng: at.KeyArrayLike, mesh: jax.sharding.Mesh, *, resume: bool
 ) -> tuple[training_utils.TrainState, Any]:
-    weight_decay_mask = None
-    freeze_mask = None
-    tx = _optimizer.create_optimizer(config.optimizer, config.lr_schedule, weight_decay_mask, freeze_mask)
-
+    tx = _optimizer.create_optimizer(
+        config.optimizer, config.lr_schedule, weight_decay_mask=None, freeze_weights_mask=None
+    )
     replicated_sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
 
-    def init(rng: at.KeyArrayLike) -> training_utils.TrainState:
+    def init(rng: at.KeyArrayLike, partial_params: at.Params | None = None) -> training_utils.TrainState:
         rng, model_rng = jax.random.split(rng)
-        # initialize the model (and its parameters)
+        # initialize the model (and its parameters).
         model = config.model.create(model_rng)
-        # extract a pure PyTree of params
-        graphdef, state = nnx.split(model)
-        params = state.to_pure_dict()
-        # run the weight loader on this pure PyTree
-        params = jax.lax.with_sharding_constraint(params, replicated_sharding)
-        params = jax.pure_callback(partial(_load_weights_and_validate, config.weight_loader), params, params)
-        params = jax.lax.with_sharding_constraint(params, replicated_sharding)
-        # update the model with loaded params
-        state.replace_by_pure_dict(params)
-        model = nnx.merge(graphdef, state)
+
+        # Merge the partial params into the model.
+        if partial_params is not None:
+            graphdef, state = nnx.split(model)
+            # This will produce an error if the partial params are not a subset of the state.
+            state.replace_by_pure_dict(partial_params)
+            model = nnx.merge(graphdef, state)
 
         params = nnx.state(model)
         return training_utils.TrainState(
@@ -118,7 +117,16 @@ def init_train_state(
     if resume:
         return train_state_shape, state_sharding
 
-    train_state = jax.jit(init, in_shardings=replicated_sharding, out_shardings=state_sharding)(init_rng)
+    partial_params = _load_weights_and_validate(config.weight_loader, train_state_shape.params.to_pure_dict())
+
+    # Initialize the train state and mix in the partial params.
+    train_state = jax.jit(
+        init,
+        donate_argnums=(1,),  # donate the partial params buffer.
+        in_shardings=replicated_sharding,
+        out_shardings=state_sharding,
+    )(init_rng, partial_params)
+
     return train_state, state_sharding
 
 

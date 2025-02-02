@@ -48,3 +48,47 @@ def test_lora_einsum_same_output():
 
     # Results are the same since the LoRA parameters are initialized to zeros.
     assert jnp.allclose(output, output_lora)
+
+
+def test_lora_ffn_params_shape():
+    ffn = lora.FeedForward(features=8, hidden_dim=32)
+    ffn_lora = lora.FeedForward(
+        features=8,
+        hidden_dim=32,
+        lora_config=lora.LoRAConfig(rank=2),
+    )
+
+    key = jax.random.key(0)
+    x = jax.random.normal(key, (2, 8))
+
+    params = ffn.init(key, x)
+    assert params["params"]["gating_einsum"].shape == (2, 8, 32)
+    assert params["params"]["linear"].shape == (32, 8)
+
+    params_lora = ffn_lora.init(key, x)
+    assert params_lora["params"]["gating_einsum"].shape == (2, 8, 32)
+    assert params_lora["params"]["linear"].shape == (32, 8)
+    assert params_lora["params"]["gating_einsum_lora_a"].shape == (2, 8, 2)
+    assert params_lora["params"]["gating_einsum_lora_b"].shape == (2, 2, 32)
+    assert params_lora["params"]["linear_lora_a"].shape == (32, 2)
+    assert params_lora["params"]["linear_lora_b"].shape == (2, 8)
+
+
+def test_lora_ffn_same_output():
+    ffn = lora.FeedForward(features=8, hidden_dim=32)
+    ffn_lora = lora.FeedForward(
+        features=8,
+        hidden_dim=32,
+        lora_config=lora.LoRAConfig(rank=2, init_fn=nn.initializers.zeros),
+    )
+
+    key = jax.random.key(0)
+    x = jax.random.normal(key, (2, 8))
+
+    params = ffn.init(key, x)
+    output = ffn.apply(params, x)
+
+    params_lora = ffn_lora.init(key, x)
+    output_lora = ffn_lora.apply(params_lora, x)
+
+    assert jnp.allclose(output, output_lora)

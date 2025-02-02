@@ -1,7 +1,7 @@
 import contextlib
 import functools as ft
 import inspect
-from typing import TypeVar, cast
+from typing import TypeAlias, TypeVar, cast
 
 import beartype
 import jax
@@ -17,7 +17,6 @@ from jaxtyping import Key  # noqa: F401
 from jaxtyping import Num  # noqa: F401
 from jaxtyping import PyTree
 from jaxtyping import Real  # noqa: F401
-from jaxtyping import Shaped
 from jaxtyping import UInt8  # noqa: F401
 from jaxtyping import config
 from jaxtyping import jaxtyped
@@ -41,10 +40,8 @@ def _check_dataclass_annotations(self, typechecker):
 
 jaxtyping._decorator._check_dataclass_annotations = _check_dataclass_annotations  # noqa: SLF001
 
-KeyArrayLike = jax.typing.ArrayLike
-
-Params = PyTree[Float[ArrayLike, "..."]]
-Batch = PyTree[Shaped[ArrayLike, "b ..."]]
+KeyArrayLike: TypeAlias = jax.typing.ArrayLike
+Params: TypeAlias = PyTree[Float[ArrayLike, "..."]]
 
 T = TypeVar("T")
 

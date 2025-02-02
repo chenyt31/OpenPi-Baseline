@@ -1,5 +1,4 @@
 from collections.abc import Callable
-import re
 from typing import Any
 
 from flax import nnx
@@ -22,19 +21,6 @@ class TrainState:
 
     ema_decay: float | None = struct.field(pytree_node=False)
     ema_params: nnx.State | None = None
-
-
-@at.typecheck
-def mask_from_regex(regex: str, pytree: at.PyTree) -> at.PyTree[bool]:
-    """Returns a PyTree of the same structure as `pytree` where each leaf is `True` if the leaf's keypath matches the regex.
-
-    Keypaths are generated using `jax.tree_util.keystr`, so they'll typically look something like `['a']['b']['c']['d']`
-    (for a plain dictionary).
-    """
-    compiled = re.compile(regex)
-    return jax.tree_util.tree_map_with_path(
-        lambda path, _: compiled.fullmatch(jax.tree_util.keystr(path)) is not None, pytree
-    )
 
 
 @at.typecheck

@@ -12,17 +12,19 @@ For both models, we provide _base model_ checkpoints, pre-trained on 10k+ hours 
 
 ## Requirements
 
-To use the VLAs in this repo, you will need an NVIDIA GPU with at least the following specs:
+To run the models in this repository, you will need an NVIDIA GPU with at least the following specifications. These estimations assume a single GPU, but you can also use multiple GPUs with model parallelism to reduce per-GPU memory requirements by configuring `fsdp_devices` in the training config. Please also note that the current training script does not yet support multi-node training.
 
 | Mode               | Memory Required | Example GPU |
 |--------------------|-----------------|---------------|
-| Inference          | XXXGB           | RTX 4090      |
-| Fine-Tuning (LoRA) | XXXGB           | RTX 4090      |
-| Fine-Tuning (Full) | XXXGB           | A100 (80GB)   |
+| Inference          | > 8 GB[^1]        | RTX 4090      |
+| Fine-Tuning (LoRA) | > 22.5 GB[^2]      | RTX 4090      |
+| Fine-Tuning (Full) | > 70 GB[^3]       | A100 (80GB) / H100   |
 
 The repo has been tested with Ubuntu 22.04, we do not currently support other operating systems.
 
-
+[^1]: Inference with batch size of 1 and bfloat16 weights.
+[^2]: This memory estimation is based on running the `pi0_libero_low_mem_finetune` configuration.
+[^3]: This memory estimation is based on running the `pi0_libero` configuration.
 
 ## Installation
 

@@ -12,7 +12,6 @@ class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
 
     Currently only implements the `load` and `infer` methods.
-    TODO: Implement the other methods.
     """
 
     def __init__(

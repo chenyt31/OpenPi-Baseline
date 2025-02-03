@@ -77,14 +77,12 @@ def maybe_download(url: str, **kwargs) -> pathlib.Path:
         scratch_path = local_path.with_suffix(".partial")
 
         if _is_openpi_url(url):
-            # Download with openpi credentials.
-            # TODO(ury): Remove once the bucket becomes public.
-            boto_session = boto3.session.Session(
-                aws_access_key_id="AKIA4MTWIIQIZBO44C62",
-                aws_secret_access_key="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",
-                region_name="us-east-1",
+            # Download without credentials.
+            _download_boto3(
+                url,
+                scratch_path,
+                botocore_config=botocore.config.Config(signature_version=botocore.UNSIGNED),
             )
-            _download_boto3(url, scratch_path, boto_session=boto_session)
         elif url.startswith("s3://"):
             # Download with default boto3 credentials.
             _download_boto3(url, scratch_path)
@@ -120,6 +118,7 @@ def _download_boto3(
     local_path: pathlib.Path,
     *,
     boto_session: boto3.Session | None = None,
+    botocore_config: botocore.config.Config | None = None,
     workers: int = 16,
 ) -> None:
     """Download a file from the OpenPI S3 bucket using boto3. This is a more performant version of download but can
@@ -129,6 +128,7 @@ def _download_boto3(
         url: URL to openpi checkpoint path.
         local_path: local path to the downloaded file.
         boto_session: Optional boto3 session, will create by default if not provided.
+        botocore_config: Optional botocore config.
         workers: number of workers for downloading.
     """
 
@@ -143,7 +143,7 @@ def _download_boto3(
     bucket_name, prefix = validate_and_parse_url(url)
     session = boto_session or boto3.Session()
 
-    s3api = session.resource("s3")
+    s3api = session.resource("s3", config=botocore_config)
     bucket = s3api.Bucket(bucket_name)
 
     # Check if prefix points to an object and if not, assume that it's a directory and add a trailing slash.
@@ -162,7 +162,7 @@ def _download_boto3(
 
     total_size = sum(obj.size for obj in objects)
 
-    s3t = _get_s3_transfer_manager(session, workers)
+    s3t = _get_s3_transfer_manager(session, workers, botocore_config=botocore_config)
 
     def transfer(
         s3obj: ObjectSummary, dest_path: pathlib.Path, progress_func
@@ -206,9 +206,13 @@ def _download_boto3(
         s3t.shutdown()
 
 
-def _get_s3_transfer_manager(session: boto3.Session, workers: int) -> s3_transfer.TransferManager:
-    botocore_config = botocore.config.Config(max_pool_connections=workers)
-    s3client = session.client("s3", config=botocore_config)
+def _get_s3_transfer_manager(
+    session: boto3.Session, workers: int, botocore_config: botocore.config.Config | None = None
+) -> s3_transfer.TransferManager:
+    config = botocore.config.Config(max_pool_connections=workers)
+    if botocore_config is not None:
+        config = config.merge(botocore_config)
+    s3client = session.client("s3", config=config)
     transfer_config = s3_transfer.TransferConfig(
         use_threads=True,
         max_concurrency=workers,
@@ -278,7 +282,7 @@ def _get_mtime(year: int, month: int, day: int) -> float:
 # Partial matching will be used from top to bottom and the first match will be chosen.
 # Cached entries will be retained only if they are newer than the expiration timestamp.
 _INVALIDATE_CACHE_DIRS: dict[re.Pattern, float] = {
-    re.compile("openpi-assets/checkpoints/"): _get_mtime(2025, 1, 31),
+    re.compile("openpi-assets/checkpoints/"): _get_mtime(2025, 2, 3),
 }
 
 

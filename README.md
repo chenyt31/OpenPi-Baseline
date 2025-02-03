@@ -8,6 +8,7 @@ Currently, this repo contains two types of models:
 
 For both models, we provide _base model_ checkpoints, pre-trained on 10k+ hours of robot data, and examples for using them out of the box or fine-tuning them to your own datasets.
 
+This is an experiment: $\pi_0$ was developed for our own robots, which differ from the widely used platforms such as [ALOHA](https://tonyzhaozh.github.io/aloha/) and [DROID](https://droid-dataset.github.io/), and though we are optimistic that researchers and practitioners will be able to run creative new experiments adapting $\pi_0$ to their own platforms, we do not expect every such attempt to be successful. All this is to say: $\pi_0$ may or may not work for you, but you are welcome to try it and see!
 
 
 ## Requirements
@@ -61,7 +62,7 @@ We provide multiple base VLA model checkpoints. These checkpoints have been pre-
 | $\pi_0$-FAST | Fine-Tuning | Base autoregressive [π₀-FAST model](https://www.physicalintelligence.company/research/fast) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_fast_base` |
 
 ### Fine-Tuned Models
-We also provide "expert" checkpoints for various robot platforms and tasks. These models are fine-tuned from the base models above and can be used out-of-the-box to solve tasks on your robot.
+We also provide "expert" checkpoints for various robot platforms and tasks. These models are fine-tuned from the base models above and intended to run directly on the target robot. These may or may not work on your particular robot. Since these checkpoints were fine-tuned on relatively small datasets collected with more widely available robots, such as ALOHA and the DROID Franka setup, they might not generalize to your particular setup, though we found some of these, especially the DROID checkpoint, to generalize quite broadly in practice.
 
 | Model | Use Case | Description | Checkpoint Path |
 |-------|----------|----------------|----------------|

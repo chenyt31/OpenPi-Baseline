@@ -8,7 +8,8 @@ Currently, this repo contains two types of models:
 
 For both models, we provide _base model_ checkpoints, pre-trained on 10k+ hours of robot data, and examples for using them out of the box or fine-tuning them to your own datasets.
 
-This is an experiment: π₀ is not designed to work well with robots other than the ones we used in our initial experiments, and though we are optimistic that researchers and practitioners will be able to run creative new experiments adapting π₀ to their own platforms, we do not expect every such attempt to be successful. This is not a production-quality system, but rather a prototype that we are providing to the community to foster creative experimentation, lower the barrier to entry for research on robotic foundation models, and facilitate collaborations between Physical Intelligence and other companies, researchers, and practitioners. All this is to say: π₀ may or may not work for you, but you are welcome to try it and see!
+This is an experiment: $\pi_0$ was developed for our own robots, which differ from the widely used platforms such as [ALOHA](https://tonyzhaozh.github.io/aloha/) and [DROID](https://droid-dataset.github.io/), and though we are optimistic that researchers and practitioners will be able to run creative new experiments adapting $\pi_0$ to their own platforms, we do not expect every such attempt to be successful. All this is to say: $\pi_0$ may or may not work for you, but you are welcome to try it and see!
+
 
 ## Requirements
 

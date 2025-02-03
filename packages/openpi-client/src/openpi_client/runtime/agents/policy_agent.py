@@ -4,7 +4,6 @@ from openpi_client import base_policy as _base_policy
 from openpi_client.runtime import agent as _agent
 
 
-# TODO: Consider unifying policies and agents.
 class PolicyAgent(_agent.Agent):
     """An agent that uses a policy to determine actions."""
 

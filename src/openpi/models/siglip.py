@@ -180,7 +180,6 @@ class MAPHead(nn.Module):
             kernel_init=nn.initializers.xavier_uniform(),
         )(probe, x)
 
-        # TODO: dropout on head?
         y = nn.LayerNorm(dtype=self.dtype_mm)(x)
         x = x + MlpBlock(mlp_dim=self.mlp_dim, dtype=self.dtype_mm)(y)
         return x[:, 0]

@@ -27,7 +27,6 @@ We follow this einsum axis naming convention:
 
 from collections.abc import Sequence
 import dataclasses
-import logging
 from typing import Literal, TypeAlias
 
 import einops
@@ -40,22 +39,6 @@ import openpi.shared.array_typing as at
 import openpi.training.sharding as sharding
 
 PALIGEMMA_VOCAB_SIZE = 257_152
-
-
-@dataclasses.dataclass
-class LoRAConfig:
-    rank: int
-    alpha: float
-    dropout: float = 0.0
-    # https://arxiv.org/pdf/2312.03732
-    rslora: bool = False
-    rank_annotation: str = "L"
-
-    def __post_init__(self):
-        if self.rank != int(self.alpha):
-            logging.warning(
-                "Rank and alpha are not the same, this will cause accuracy error when merging LoRA params currently."
-            )
 
 
 @dataclasses.dataclass

@@ -279,7 +279,6 @@ def _get_mtime(year: int, month: int, day: int) -> float:
 # Cached entries will be retained only if they are newer than the expiration timestamp.
 _INVALIDATE_CACHE_DIRS: dict[re.Pattern, float] = {
     re.compile("openpi-assets/checkpoints/"): _get_mtime(2025, 1, 31),
-    re.compile("openpi-assets/exported/"): _get_mtime(2025, 1, 31),
 }
 
 

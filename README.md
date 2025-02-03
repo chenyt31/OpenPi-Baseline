@@ -17,15 +17,11 @@ To run the models in this repository, you will need an NVIDIA GPU with at least 
 
 | Mode               | Memory Required | Example GPU |
 |--------------------|-----------------|---------------|
-| Inference          | > 8 GB[^1]        | RTX 4090      |
-| Fine-Tuning (LoRA) | > 22.5 GB[^2]      | RTX 4090      |
-| Fine-Tuning (Full) | > 70 GB[^3]       | A100 (80GB) / H100   |
+| Inference          | > 8 GB        | RTX 4090      |
+| Fine-Tuning (LoRA) | > 22.5 GB      | RTX 4090      |
+| Fine-Tuning (Full) | > 70 GB       | A100 (80GB) / H100   |
 
 The repo has been tested with Ubuntu 22.04, we do not currently support other operating systems.
-
-[^1]: Inference with batch size of 1 and bfloat16 weights.
-[^2]: This memory estimation is based on running the `pi0_libero_low_mem_finetune` configuration.
-[^3]: This memory estimation is based on running the `pi0_libero` configuration.
 
 ## Installation
 

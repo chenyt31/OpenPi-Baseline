@@ -430,8 +430,7 @@ _CONFIGS = [
     #
     TrainConfig(
         name="pi0_libero",
-        # TODO(ury): Retrain the checkpoint with the latest base model and update the config.
-        model=pi0.Pi0Config(action_dim=24),
+        model=pi0.Pi0Config(),
         data=LeRobotLiberoDataConfig(
             repo_id="physical-intelligence/libero",
             base_config=DataConfig(
@@ -441,6 +440,23 @@ _CONFIGS = [
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi0_libero_low_mem_finetune",
+        model=pi0.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
+        data=LeRobotLiberoDataConfig(
+            repo_id="physical-intelligence/libero",
+            base_config=DataConfig(
+                local_files_only=False,  # Set to True for local-only datasets.
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+        freeze_filter=pi0.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
+        ).get_freeze_filter(),
+        ema_decay=None,
     ),
     TrainConfig(
         name="pi0_fast_libero",

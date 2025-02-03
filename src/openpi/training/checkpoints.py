@@ -72,7 +72,8 @@ def save_state(
             _normalize.save(directory / data_config.asset_id, norm_stats)
 
     # Split params that can be used for inference into a separate item.
-    train_state, params = _split_params(state)
+    with at.disable_typechecking():
+        train_state, params = _split_params(state)
     items = {
         "assets": save_assets,
         "train_state": train_state,

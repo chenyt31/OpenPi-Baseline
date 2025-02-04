@@ -1,6 +1,6 @@
 # Run Aloha (Real Robot)
 
-This example demonstrates how to run with a real robot using an [ALOHA setup](https://github.com/tonyzhaozh/aloha).
+This example demonstrates how to run with a real robot using an [ALOHA setup](https://github.com/tonyzhaozh/aloha). See [here](../../../openpi/docs/remote_inference.md) for instructions on how to load checkpoints and run inference. We list the relevant checkpoint paths for each provided fine-tuned model below.
 
 ## Prerequisites
 
@@ -42,7 +42,9 @@ Terminal window 3:
 ```bash
 uv run scripts/serve_policy.py --env ALOHA --default_prompt='take the toast out of the toaster'
 ```
-## **Tips and Tricks for ALOHA Checkpoints**
+
+## **ALOHA Checkpoint Guide**
+
 
 The `pi0_base` model can be used in zero shot for a simple task on the ALOHA platform, and we additionally provide two example fine-tuned checkpoints, “fold the towel” and “open the tupperware and put the food on the plate,” which can perform more advanced tasks on the ALOHA.
 
@@ -55,6 +57,7 @@ While we’ve found the policies to work in unseen conditions across multiple AL
 
 This task involves the robot taking two pieces of toast out of a toaster and placing them on a plate.  
 
+- **Checkpoint path**: `s3://openpi-assets/checkpoints/pi0_base`
 - **Prompt**: "take the toast out of the toaster"
 - **Objects needed**: Two pieces of toast, a plate, and a standard toaster.  
 - **Object Distribution**:  
@@ -75,6 +78,7 @@ This task involves the robot taking two pieces of toast out of a toaster and pla
 
 This task involves folding a small towel (e.g., roughly the size of a hand towel) into eighths.
 
+- **Checkpoint path**: `s3://openpi-assets/checkpoints/pi0_aloha_towel`
 - **Prompt**: "fold the towel"  
 - **Object Distribution**:  
   - Works on towels of varying solid colors 
@@ -91,6 +95,7 @@ This task involves folding a small towel (e.g., roughly the size of a hand towel
 
 This task involves opening a tupperware filled with food and pouring the contents onto a plate.  
 
+- **Checkpoint path**: `s3://openpi-assets/checkpoints/pi0_aloha_tupperware`
 - **Prompt**: "open the tupperware and put the food on the plate"
 - **Objects needed**: Tupperware, food (or food-like items), and a plate.  
 - **Object Distribution**:  

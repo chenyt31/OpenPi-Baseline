@@ -15,11 +15,11 @@ This is an experiment: $\pi_0$ was developed for our own robots, which differ fr
 
 To run the models in this repository, you will need an NVIDIA GPU with at least the following specifications. These estimations assume a single GPU, but you can also use multiple GPUs with model parallelism to reduce per-GPU memory requirements by configuring `fsdp_devices` in the training config. Please also note that the current training script does not yet support multi-node training.
 
-| Mode               | Memory Required | Example GPU |
-|--------------------|-----------------|---------------|
-| Inference          | > 8 GB        | RTX 4090      |
-| Fine-Tuning (LoRA) | > 22.5 GB      | RTX 4090      |
-| Fine-Tuning (Full) | > 70 GB       | A100 (80GB) / H100   |
+| Mode               | Memory Required | Example GPU        |
+| ------------------ | --------------- | ------------------ |
+| Inference          | > 8 GB          | RTX 4090           |
+| Fine-Tuning (LoRA) | > 22.5 GB       | RTX 4090           |
+| Fine-Tuning (Full) | > 70 GB         | A100 (80GB) / H100 |
 
 The repo has been tested with Ubuntu 22.04, we do not currently support other operating systems.
 
@@ -52,20 +52,20 @@ NOTE: `GIT_LFS_SKIP_SMUDGE=1` is needed to pull LeRobot as a dependency.
 ### Base Models
 We provide multiple base VLA model checkpoints. These checkpoints have been pre-trained on 10k+ hours of robot data, and can be used for fine-tuning.
 
-| Model | Use Case | Description | Checkpoint Path |
-|-------|----------|----------------|----------------|
-| $\pi_0$ | Fine-Tuning | Base diffusion [π₀ model](https://www.physicalintelligence.company/blog/pi0) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_base` |
+| Model        | Use Case    | Description                                                                                                 | Checkpoint Path                                |
+| ------------ | ----------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| $\pi_0$      | Fine-Tuning | Base diffusion [π₀ model](https://www.physicalintelligence.company/blog/pi0) for fine-tuning                | `s3://openpi-assets/checkpoints/pi0_base`      |
 | $\pi_0$-FAST | Fine-Tuning | Base autoregressive [π₀-FAST model](https://www.physicalintelligence.company/research/fast) for fine-tuning | `s3://openpi-assets/checkpoints/pi0_fast_base` |
 
 ### Fine-Tuned Models
 We also provide "expert" checkpoints for various robot platforms and tasks. These models are fine-tuned from the base models above and intended to run directly on the target robot. These may or may not work on your particular robot. Since these checkpoints were fine-tuned on relatively small datasets collected with more widely available robots, such as ALOHA and the DROID Franka setup, they might not generalize to your particular setup, though we found some of these, especially the DROID checkpoint, to generalize quite broadly in practice.
 
-| Model | Use Case | Description | Checkpoint Path |
-|-------|----------|----------------|----------------|
-| $\pi_0$-FAST-DROID | Inference | $\pi_0$-FAST model fine-tuned on the [DROID dataset](https://droid-dataset.github.io/), can perform a wide range of simple table-top manipulation tasks 0-shot in new scenes on the DROID robot platform | `s3://openpi-assets/checkpoints/pi0_fast_droid` |
-| $\pi_0$-ALOHA-towel | Inference | $\pi_0$ model fine-tuned on internal ALOHA data, can fold diverse towels 0-shot on [ALOHA](https://tonyzhaozh.github.io/aloha/) robot platforms | `s3://openpi-assets/checkpoints/pi0_aloha_towel` |
-| $\pi_0$-ALOHA-tupperware | Inference | $\pi_0$ model fine-tuned on internal ALOHA data, can unpack food from a tupperware container | `s3://openpi-assets/checkpoints/pi0_aloha_tupperware` |
-| $\pi_0$-ALOHA-pen-uncap | Inference | $\pi_0$ model fine-tuned on [public ALOHA data](XXX), can uncap a pen | `s3://openpi-assets/checkpoints/pi0_aloha_pen_uncap` |
+| Model                    | Use Case  | Description                                                                                                                                                                                              | Checkpoint Path                                       |
+| ------------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| $\pi_0$-FAST-DROID       | Inference | $\pi_0$-FAST model fine-tuned on the [DROID dataset](https://droid-dataset.github.io/), can perform a wide range of simple table-top manipulation tasks 0-shot in new scenes on the DROID robot platform | `s3://openpi-assets/checkpoints/pi0_fast_droid`       |
+| $\pi_0$-ALOHA-towel      | Inference | $\pi_0$ model fine-tuned on internal ALOHA data, can fold diverse towels 0-shot on [ALOHA](https://tonyzhaozh.github.io/aloha/) robot platforms                                                          | `s3://openpi-assets/checkpoints/pi0_aloha_towel`      |
+| $\pi_0$-ALOHA-tupperware | Inference | $\pi_0$ model fine-tuned on internal ALOHA data, can unpack food from a tupperware container                                                                                                             | `s3://openpi-assets/checkpoints/pi0_aloha_tupperware` |
+| $\pi_0$-ALOHA-pen-uncap  | Inference | $\pi_0$ model fine-tuned on [public ALOHA data](XXX), can uncap a pen                                                                                                                                    | `s3://openpi-assets/checkpoints/pi0_aloha_pen_uncap`  |
 
 
 By default, checkpoints are automatically downloaded from `s3://openpi-assets` and are cached in `~/.cache/openpi` when needed. You can overwrite the download path by setting the `OPENPI_DATA_HOME` environment variable.
@@ -96,12 +96,13 @@ example = {
 }
 action_chunk = policy.infer(example)["actions"]
 ```
+You can also test this out in the [example notebook](examples/inference.ipynb).
 
 We provide detailed step-by-step examples for running inference of our pre-trained checkpoints on [DROID](examples/droid/README.md) and [ALOHA](examples/aloha_real/README.md) robots.
 
 **Remote Inference**: We provide [examples and code](docs/remote_inference.md) for running inference of our models **remotely**: the model can run on a different server and stream actions to the robot via a websocket connection. This makes it easy to use more powerful GPUs off-robot and keep robot and policy environments separate.
 
-**Test inference without a robot**: We provide a script for testing inference without a robot in [`examples/simple_client/main.py`](examples/simple_client/main.py). This script will generate a random observation and run inference with the model. See [here](examples/simple_client/README.md) for more details.
+**Test inference without a robot**: We provide a [script](examples/simple_client/README.md) for testing inference without a robot. This script will generate a random observation and run inference with the model. See [here](examples/simple_client/README.md) for more details.
 
 
 
@@ -169,14 +170,14 @@ We provide more examples for how to fine-tune and run inference with our models 
 
 We will collect common issues and their solutions here. If you encounter an issue, please check here first. If you can't find a solution, please file an issue on the repo (see [here](CONTRIBUTING.md) for guidelines).
 
-| Issue | Resolution |
-|-------|------------|
+| Issue                                     | Resolution                                                                                                                                                                                   |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `uv sync` fails with dependency conflicts | Try removing the virtual environment directory (`rm -rf .venv`) and running `uv sync` again. If issues persist, check that you have the latest version of `uv` installed (`uv self update`). |
-| Training runs out of GPU memory | Make sure you set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` before running training to allow JAX to use more GPU memory. You can also try reducing the batch size in your training config. |
-| Policy server connection errors | Check that the server is running and listening on the expected port. Verify network connectivity and firewall settings between client and server. |
-| Missing norm stats error when training | Run `scripts/compute_norm_stats.py` with your config name before starting training. |
-| Dataset download fails | Check your internet connection. If using `local_files_only=True`, verify the dataset exists locally. For HuggingFace datasets, ensure you're logged in (`huggingface-cli login`). |
-| CUDA/GPU errors | Verify NVIDIA drivers and CUDA toolkit are installed correctly. For Docker, ensure nvidia-container-toolkit is installed. Check GPU compatibility. |
-| Import errors when running examples | Make sure you've installed all dependencies with `uv sync` and activated the virtual environment. Some examples may have additional requirements listed in their READMEs. |
-| Action dimensions mismatch | Verify your data processing transforms match the expected input/output dimensions of your robot. Check the action space definitions in your policy classes. |
+| Training runs out of GPU memory           | Make sure you set `XLA_PYTHON_CLIENT_MEM_FRACTION=0.9` before running training to allow JAX to use more GPU memory. You can also try reducing the batch size in your training config.        |
+| Policy server connection errors           | Check that the server is running and listening on the expected port. Verify network connectivity and firewall settings between client and server.                                            |
+| Missing norm stats error when training    | Run `scripts/compute_norm_stats.py` with your config name before starting training.                                                                                                          |
+| Dataset download fails                    | Check your internet connection. If using `local_files_only=True`, verify the dataset exists locally. For HuggingFace datasets, ensure you're logged in (`huggingface-cli login`).            |
+| CUDA/GPU errors                           | Verify NVIDIA drivers and CUDA toolkit are installed correctly. For Docker, ensure nvidia-container-toolkit is installed. Check GPU compatibility.                                           |
+| Import errors when running examples       | Make sure you've installed all dependencies with `uv sync` and activated the virtual environment. Some examples may have additional requirements listed in their READMEs.                    |
+| Action dimensions mismatch                | Verify your data processing transforms match the expected input/output dimensions of your robot. Check the action space definitions in your policy classes.                                  |
 

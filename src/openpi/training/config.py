@@ -488,7 +488,7 @@ _CONFIGS = [
 
     TrainConfig(
         name="pi0_fast_libero_low_mem_finetune",
-        model=pi0_fast.Pi0FASTConfig(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
+        model=pi0_fast.Pi0FASTConfig(paligemma_variant="gemma_2b_lora"),
         data=LeRobotLiberoDataConfig(
             repo_id="physical-intelligence/libero",
             base_config=DataConfig(

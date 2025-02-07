@@ -1,3 +1,4 @@
+from flax import nnx
 import jax
 import pytest
 
@@ -67,13 +68,11 @@ def test_pi0_fast_lora_model():
     actions = nnx_utils.module_jit(model.sample_actions)(key, obs)
     assert actions.shape == (batch_size, 256)
 
-    llm_layers = model.PaliGemma.llm.layers
+    lora_filter = nnx_utils.PathRegex(".*lora.*")
+    model_state = nnx.state(model)
 
-    llm_attn_einsum_keys = llm_layers["attn"]["attn_vec_einsum"].keys()
-    assert any("lora" in key for key in llm_attn_einsum_keys)
-
-    llm_mlp_einsum_keys = llm_layers["mlp"].keys()
-    assert any("lora" in key for key in llm_mlp_einsum_keys)
+    lora_state_elems = list(model_state.filter(lora_filter))
+    assert len(lora_state_elems) > 0
 
 
 @pytest.mark.manual

@@ -121,24 +121,12 @@ class Pi0FASTConfig(_model.BaseModelConfig):
 
     def get_freeze_filter(self) -> nnx.filterlib.Filter:
         """Returns the freeze filter based on the model config."""
-        filters = []
-        has_lora = False
-        gemma_params_filter = nnx_utils.PathRegex(".*llm.*")
-        # action_expert_params_filter = nnx_utils.PathRegex(".*llm.*_1.*")
         if "lora" in self.paligemma_variant:
-            filters.append(
-                gemma_params_filter,
+            return nnx.All(
+                nnx_utils.PathRegex(".*llm.*"),
+                nnx.Not(nnx_utils.PathRegex(".*lora.*"))
             )
-            has_lora = True
-
-        if has_lora:
-            # If any lora is used, exclude all lora params.
-            filters.append(
-                nnx.Not(nnx_utils.PathRegex(".*lora.*")),
-            )
-        if not filters:
-            return nnx.Nothing
-        return nnx.All(*filters)
+        return nnx.Nothing
 
 
 class Pi0FAST(_model.BaseModel):

@@ -18,7 +18,7 @@ Used for FAST autoregressive policies.
 """
 
 import dataclasses
-from typing import Any, Literal, TypeAlias
+from typing import Literal, TypeAlias
 
 import einops
 import flax.linen as nn
@@ -236,7 +236,7 @@ class Block(nn.Module):
     dropout: float = 0.0
     dropout_bdims: tuple[int, ...] = ()
     cache_dtype: str | None = None
-    lora_configs: Any = dataclasses.field(default_factory=dict)
+    lora_configs: ml_collections.ConfigDict = dataclasses.field(default_factory=ml_collections.ConfigDict)
 
     def setup(self):
         self.pre_attention_norm = RMSNorm()
@@ -299,7 +299,7 @@ class Module(nn.Module):
 
     scan: bool = False
     remat_policy: str = "none"
-    lora_configs: Any = dataclasses.field(default_factory=dict)
+    lora_configs: ml_collections.ConfigDict = dataclasses.field(default_factory=ml_collections.ConfigDict)
 
     @nn.compact
     def __call__(

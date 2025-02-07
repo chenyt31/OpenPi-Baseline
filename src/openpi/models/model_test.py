@@ -67,6 +67,14 @@ def test_pi0_fast_lora_model():
     actions = nnx_utils.module_jit(model.sample_actions)(key, obs)
     assert actions.shape == (batch_size, 256)
 
+    llm_layers = model.PaliGemma.llm.layers
+
+    llm_attn_einsum_keys = llm_layers["attn"]["attn_vec_einsum"].keys()
+    assert any("lora" in key for key in llm_attn_einsum_keys)
+
+    llm_mlp_einsum_keys = llm_layers["mlp"].keys()
+    assert any("lora" in key for key in llm_mlp_einsum_keys)
+
 
 @pytest.mark.manual
 def test_model_restore():

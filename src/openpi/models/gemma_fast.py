@@ -65,7 +65,8 @@ def get_config(variant):
                 "scan": True,
                 "remat_policy": "nothing_saveable",
                 "lora_configs": {
-                    "attn": lora.LoRAConfig(rank=16, alpha=16.0), "ffn": lora.LoRAConfig(rank=16, alpha=16.0)
+                    "attn": lora.LoRAConfig(rank=16, alpha=16.0),
+                    "ffn": lora.LoRAConfig(rank=16, alpha=16.0),
                 },
             }
         )
@@ -136,18 +137,18 @@ class Attention(nn.Module):
     def setup(self):
         if self.num_kv_heads == self.num_heads:
             self.qkv_einsum = lora.Einsum(
-                    shape=(3, self.num_heads, self.features, self.head_dim),
-                    name="qkv_einsum",
-                    init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0, 1)),
-                    lora_config=self.lora_config,
-                )
+                shape=(3, self.num_heads, self.features, self.head_dim),
+                name="qkv_einsum",
+                init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0, 1)),
+                lora_config=self.lora_config,
+            )
         else:
             self.q_einsum = lora.Einsum(
-                    shape=(self.num_heads, self.features, self.head_dim),
-                    name="q_einsum",
-                    init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0,)),
-                    lora_config=self.lora_config,
-                )
+                shape=(self.num_heads, self.features, self.head_dim),
+                name="q_einsum",
+                init_fn=nn.initializers.lecun_normal(in_axis=-2, out_axis=-1, batch_axis=(0,)),
+                lora_config=self.lora_config,
+            )
             self.kv_einsum = lora.Einsum(
                 shape=(2, self.num_kv_heads, self.features, self.head_dim),
                 name="kv_einsum",
@@ -250,10 +251,7 @@ class Block(nn.Module):
         )
         self.pre_ffw_norm = RMSNorm()
         self.mlp = lora.FeedForward(
-            features=self.embed_dim,
-            hidden_dim=self.hidden_dim,
-            name="mlp",
-            lora_config=self.lora_configs.get("ffn")
+            features=self.embed_dim, hidden_dim=self.hidden_dim, name="mlp", lora_config=self.lora_configs.get("ffn")
         )
         if self.dropout:
             self.drop = nn.Dropout(self.dropout, self.dropout_bdims)

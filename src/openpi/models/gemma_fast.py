@@ -391,6 +391,7 @@ class Module(nn.Module):
             "dropout": self.dropout,
             "dropout_bdims": self.dropout_bdims,
             "cache_dtype": self.cache_dtype,
+            "lora_configs": self.lora_configs,
         }
         layers = self.scope.push("layers")
         blocks = [

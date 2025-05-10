@@ -110,7 +110,6 @@ class MixtureDataset(Dataset[T_co]):
 
         self._datasets = datasets
 
-        # Use uniform weights if none provided
         if weights is None:
             weights = [1.0] * len(datasets)
 
@@ -158,16 +157,13 @@ class MixtureDataset(Dataset[T_co]):
         return len(self._sampling_order)
 
     def __getitem__(self, index: SupportsIndex) -> T_co:
-        # Convert index to integer
         idx = index.__index__()
 
         if idx >= len(self._sampling_order):
             raise IndexError(f"Index {idx} out of range for dataset of length {len(self._sampling_order)}")
 
-        # Get the dataset_idx and element_idx from the sampling order
         dataset_idx, element_idx = self._sampling_order[idx]
 
-        # Return the item from the selected dataset
         return self._datasets[dataset_idx][element_idx]
 
 

@@ -221,16 +221,12 @@ class SimpleDataConfig(DataConfigFactory):
 class MixtureDataConfigFactory(DataConfigFactory):
     """Factory for creating a data config that samples from multiple datasets with weighted probabilities."""
 
-    # Override the repo_id field to make it optional since we'll have multiple datasets
     repo_id: str = "mixture"
 
-    # List of data config factories for the datasets we want to mix
     data_configs: Sequence[DataConfigFactory] = dataclasses.field(default_factory=list)
 
-    # Weights for each dataset (will be normalized)
     weights: Sequence[float] = None
 
-    # Whether to stop sampling when any dataset is exhausted
     stop_on_empty_dataset: bool = False
 
     @override

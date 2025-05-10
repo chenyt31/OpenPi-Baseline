@@ -42,25 +42,24 @@ def create_dataset(config: _config.TrainConfig) -> tuple[_config.DataConfig, _da
             transformed_datasets.append(transformed_dataset)
 
         return data_config.mixture_configs, transformed_datasets
-    else:
-        dataset = _data_loader.create_dataset(data_config, config.model)
-        dataset = _data_loader.TransformedDataset(
-            dataset,
-            [
-                *data_config.repack_transforms.inputs,
-                *data_config.data_transforms.inputs,
-                # Remove strings since they are not supported by JAX and are not needed to compute norm stats.
-                RemoveStrings(),
-            ],
-        )
-        return [data_config], [dataset]
+    dataset = _data_loader.create_dataset(data_config, config.model)
+    dataset = _data_loader.TransformedDataset(
+        dataset,
+        [
+            *data_config.repack_transforms.inputs,
+            *data_config.data_transforms.inputs,
+            # Remove strings since they are not supported by JAX and are not needed to compute norm stats.
+            RemoveStrings(),
+        ],
+    )
+    return [data_config], [dataset]
 
 
 def main(config_name: str, max_frames: int | None = None):
     config = _config.get_config(config_name)
     data_configs, datasets = create_dataset(config)
 
-    for data_config, dataset in zip(data_configs, datasets):
+    for data_config, dataset in zip(data_configs, datasets, strict=True):
         num_frames = len(dataset)
         shuffle = False
 
@@ -88,7 +87,7 @@ def main(config_name: str, max_frames: int | None = None):
 
         output_path = config.assets_dirs / data_config.repo_id
         print(f"Writing stats to: {output_path}")
-        normalize.save(output_path, norm_stats) 
+        normalize.save(output_path, norm_stats)
 
 
 if __name__ == "__main__":

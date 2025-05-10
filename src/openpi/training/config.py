@@ -635,66 +635,6 @@ _CONFIGS = [
         # Turn off EMA for LoRA finetuning.
         ema_decay=None,
     ),
-    TrainConfig(
-        name="pi0_fast_libero_mixture_low_mem",
-        model=pi0_fast.Pi0FASTConfig(
-            action_dim=7, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b_lora"
-        ),
-        data=MixtureDataConfigFactory(
-            data_configs=[
-                LeRobotLiberoDataConfig(
-                    repo_id="akuramshin/libero_10",
-                    base_config=DataConfig(
-                        local_files_only=True,
-                        prompt_from_task=True,
-                    ),
-                ),
-                LeRobotLiberoDataConfig(
-                    repo_id="akuramshin/libero_90",
-                    base_config=DataConfig(
-                        local_files_only=True,
-                        prompt_from_task=True,
-                    ),
-                ),
-            ],
-            weights=[1.0, 2.0],
-        ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
-        num_train_steps=30_000,
-        freeze_filter=pi0_fast.Pi0FASTConfig(
-            action_dim=7, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b_lora"
-        ).get_freeze_filter(),
-        # Turn off EMA for LoRA finetuning.
-        ema_decay=None,
-        wandb_enabled=False,
-    ),
-    TrainConfig(
-        name="pi0_fast_libero_mixture",
-        model=pi0_fast.Pi0FASTConfig(action_dim=7, action_horizon=10, max_token_len=180),
-        data=MixtureDataConfigFactory(
-            data_configs=[
-                LeRobotLiberoDataConfig(
-                    repo_id="akuramshin/libero_10",
-                    base_config=DataConfig(
-                        local_files_only=True,
-                        prompt_from_task=True,
-                    ),
-                ),
-                LeRobotLiberoDataConfig(
-                    repo_id="akuramshin/libero_90",
-                    base_config=DataConfig(
-                        local_files_only=True,
-                        prompt_from_task=True,
-                    ),
-                ),
-            ],
-            weights=[1.0, 2.0],
-        ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
-        num_train_steps=30_000,
-        wandb_enabled=False,
-        optimizer=_optimizer.AdamW(accumulation_steps=4),
-    ),
     #
     # Fine-tuning Aloha configs.
     #

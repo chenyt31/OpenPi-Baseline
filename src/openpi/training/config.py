@@ -229,6 +229,30 @@ class MixtureDataConfigFactory(DataConfigFactory):
 
     stop_on_empty_dataset: bool = False
 
+    primary_dataset_id: str = None
+
+    @property
+    def mixture_asset_id(self) -> str:
+        """Generate a consistent asset ID for this mixture dataset."""
+        if self.assets.asset_id:
+            return self.assets.asset_id
+
+        import hashlib
+
+        repo_ids = [
+            str(config.repo_id)
+            for config in self.data_configs
+            if hasattr(config, "repo_id") and config.repo_id is not tyro.MISSING
+        ]
+
+        weights_str = ",".join(str(w) for w in self.weights) if self.weights else ""
+        mixture_str = f"{'-'.join(repo_ids)}_{weights_str}"
+
+        hash_obj = hashlib.md5(mixture_str.encode())
+        hash_str = hash_obj.hexdigest()[:8]  # Use first 8 chars of hash
+
+        return f"mixture_{hash_str}"
+
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
         """Create a data config for mixing multiple datasets."""
@@ -241,14 +265,35 @@ class MixtureDataConfigFactory(DataConfigFactory):
             )
 
         configs = [config.create(assets_dirs, model_config) for config in self.data_configs]
+        asset_id = self.assets.asset_id or self.mixture_asset_id
 
         return dataclasses.replace(
-            self.base_config or DataConfig(),
-            repo_id=self.repo_id,
+            self.create_base_config(assets_dirs),
+            asset_id=asset_id,
             mixture_configs=configs,
             mixture_weights=self.weights,
             mixture_stop_on_empty=self.stop_on_empty_dataset,
         )
+
+    @override
+    def _load_norm_stats(self, assets_dir: epath.Path, asset_id: str | None) -> dict[str, _transforms.NormStats] | None:
+        """Load normalization statistics from the primary dataset."""
+        if self.primary_dataset_id not in [cfg.assets.asset_id or cfg.repo_id for cfg in self.data_configs]:
+            logging.warning(
+                f"Primary dataset ID {self.primary_dataset_id} not found in data configs. Using first dataset."
+            )
+            primary_dataset_id = self.data_configs[0].assets.asset_id or self.data_configs[0].repo_id
+        else:
+            primary_dataset_id = self.primary_dataset_id
+
+        try:
+            data_assets_dir = str(assets_dir / primary_dataset_id)
+            norm_stats = _normalize.load(data_assets_dir)
+            logging.info(f"Loaded norm stats from {data_assets_dir}")
+            return norm_stats
+        except FileNotFoundError:
+            logging.warning(f"Norm stats for {primary_dataset_id} not found at {data_assets_dir}")
+            return None
 
 
 @dataclasses.dataclass(frozen=True)

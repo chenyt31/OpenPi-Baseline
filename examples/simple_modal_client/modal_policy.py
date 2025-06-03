@@ -11,6 +11,7 @@ import time
 
 import numpy as np
 from openpi_client import base_policy as _base_policy, msgpack_numpy
+import random
 from quic_portal import Portal
 
 import modal
@@ -41,9 +42,9 @@ volume = modal.Volume.from_name("openpi-cache", create_if_missing=True)
     image=openpi_image,
     region="us-west-1",
     timeout=3600,
+    scaledown_window=600,
     gpu="h100",
     volumes={"/root/.cache/openpi": volume},
-    max_inputs=1,
 )
 class ModalPolicyClass:
     policy_name: str = modal.parameter(default="pi0_aloha_sim")
@@ -63,7 +64,8 @@ class ModalPolicyClass:
 
     @modal.method()
     def serve(self, rendezvous: modal.Dict):
-        portal = Portal.create_server(rendezvous)
+        random_port = random.randint(5555, 65535)
+        portal = Portal.create_server(rendezvous, local_port=random_port)
         packer = msgpack_numpy.Packer()
 
         assert portal.recv() == b"hello"
@@ -100,14 +102,15 @@ class ModalPolicy(_base_policy.BasePolicy):
             try:
                 with modal.Dict.ephemeral() as rendezvous:
                     handle = fn.spawn(rendezvous)
-                    portal = Portal.create_client(rendezvous)
+                    random_port = random.randint(5555, 65535)
+                    portal = Portal.create_client(rendezvous, local_port=random_port)
 
                 portal.send(b"hello")
                 self._server_metadata = msgpack_numpy.unpackb(portal.recv())
                 self._portal = portal
                 return
             except Exception as e:
-                print(f"[client] Error creating portal: {e}")
+                print(f"[client] Still connecting to server ... ")
                 if handle:
                     handle.cancel()
                 if attempt == 4:
@@ -122,4 +125,3 @@ class ModalPolicy(_base_policy.BasePolicy):
 
     def close(self):
         self._portal.send(b"exit")
-        self._portal.close()

@@ -123,6 +123,33 @@ class MixtureDataset(Dataset[T_co]):
         self._length = sum(len(dataset) for dataset in datasets)
         self._sampling_order = self._calculate_sampling_order()
 
+    @property
+    def datasets(self) -> Sequence[Dataset]:
+        """Get the datasets in this mixture."""
+        return self._datasets
+
+    @datasets.setter
+    def datasets(self, new_datasets: Sequence[Dataset]) -> None:
+        """Set new datasets for this mixture.
+
+        Args:
+            new_datasets: A sequence of datasets to sample from.
+
+        Raises:
+            ValueError: If the number of weights doesn't match the number of datasets.
+        """
+        if not new_datasets:
+            raise ValueError("At least one dataset must be provided.")
+
+        if len(new_datasets) != len(self._weights):
+            raise ValueError(
+                f"Number of weights ({len(self._weights)}) must match number of datasets ({len(new_datasets)})."
+            )
+
+        self._datasets = new_datasets
+        self._length = sum(len(dataset) for dataset in new_datasets)
+        self._sampling_order = self._calculate_sampling_order()
+
     def _calculate_sampling_order(self):
         """Calculate the sampling order for this dataset mixture."""
         remaining_indices = [list(range(len(dataset))) for dataset in self._datasets]
@@ -167,8 +194,20 @@ class MixtureDataset(Dataset[T_co]):
         return self._datasets[dataset_idx][element_idx]
 
 
-def create_dataset(data_config: _config.DataConfig, model_config: _model.BaseModelConfig) -> Dataset:
+def create_dataset(data_config: _config.DataConfigBase, model_config: _model.BaseModelConfig) -> Dataset:
     """Create a dataset for training."""
+    if isinstance(data_config, _config.DataMixtureConfig):
+        datasets = []
+        for config in data_config.dataset_configs:
+            dataset = create_dataset(config, model_config)
+            datasets.append(dataset)
+
+        return MixtureDataset(
+            datasets,
+            weights=data_config.weights,
+            stop_on_empty_dataset=data_config.stop_on_empty_dataset,
+        )
+
     repo_id = data_config.repo_id
     if repo_id is None:
         raise ValueError("Repo ID is not set. Cannot create dataset.")
@@ -191,8 +230,17 @@ def create_dataset(data_config: _config.DataConfig, model_config: _model.BaseMod
     return dataset
 
 
-def transform_dataset(dataset: Dataset, data_config: _config.DataConfig, *, skip_norm_stats: bool = False) -> Dataset:
+def transform_dataset(
+    dataset: Dataset, data_config: _config.DataConfigBase, *, skip_norm_stats: bool = False
+) -> Dataset:
     """Transform the dataset by applying the data transforms."""
+    if isinstance(dataset, MixtureDataset):
+        dataset.datasets = [
+            transform_dataset(d, cfg, skip_norm_stats=skip_norm_stats)
+            for d, cfg in zip(dataset.datasets, data_config.dataset_configs, strict=True)
+        ]
+        return dataset
+
     norm_stats = {}
     if data_config.repo_id != "fake" and not skip_norm_stats:
         if data_config.norm_stats is None:
@@ -237,25 +285,8 @@ def create_data_loader(
             execute in the main process.
     """
     data_config = config.data.create(config.assets_dirs, config.model)
-
-    if data_config.mixture_configs:
-        datasets = [create_dataset(cfg, config.model) for cfg in data_config.mixture_configs]
-
-        transformed_datasets = []
-        for i, dataset in enumerate(datasets):
-            cfg = data_config.mixture_configs[i]
-            transformed_dataset = transform_dataset(dataset, cfg, skip_norm_stats=skip_norm_stats)
-            transformed_datasets.append(transformed_dataset)
-
-        dataset = MixtureDataset(
-            transformed_datasets,
-            weights=data_config.mixture_weights,
-            stop_on_empty_dataset=data_config.mixture_stop_on_empty,
-            seed=config.seed,
-        )
-    else:
-        dataset = create_dataset(data_config, config.model)
-        dataset = transform_dataset(dataset, data_config, skip_norm_stats=skip_norm_stats)
+    dataset = create_dataset(data_config, config.model)
+    dataset = transform_dataset(dataset, data_config, skip_norm_stats=skip_norm_stats)
 
     data_loader = TorchDataLoader(
         dataset,

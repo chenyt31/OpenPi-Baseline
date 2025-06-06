@@ -5,6 +5,8 @@ will compute the mean and standard deviation of the data in the dataset and save
 to the config assets directory.
 """
 
+from collections.abc import Sequence
+
 import numpy as np
 import tqdm
 import tyro
@@ -20,30 +22,8 @@ class RemoveStrings(transforms.DataTransformFn):
         return {k: v for k, v in x.items() if not np.issubdtype(np.asarray(v).dtype, np.str_)}
 
 
-def create_dataset(config: _config.TrainConfig) -> tuple[_config.DataConfig, _data_loader.Dataset]:
-    data_config = config.data.create(config.assets_dirs, config.model)
-    if data_config.repo_id is None:
-        raise ValueError("Data config must have a repo_id")
-    if data_config.mixture_configs:
-        datasets = [_data_loader.create_dataset(cfg, config.model) for cfg in data_config.mixture_configs]
-
-        transformed_datasets = []
-        for i, dataset in enumerate(datasets):
-            cfg = data_config.mixture_configs[i]
-            transformed_dataset = _data_loader.TransformedDataset(
-                dataset,
-                [
-                    *cfg.repack_transforms.inputs,
-                    *cfg.data_transforms.inputs,
-                    # Remove strings since they are not supported by JAX and are not needed to compute norm stats.
-                    RemoveStrings(),
-                ],
-            )
-            transformed_datasets.append(transformed_dataset)
-
-        return data_config.mixture_configs, transformed_datasets
-    dataset = _data_loader.create_dataset(data_config, config.model)
-    dataset = _data_loader.TransformedDataset(
+def transform_dataset(dataset, data_config):
+    return _data_loader.TransformedDataset(
         dataset,
         [
             *data_config.repack_transforms.inputs,
@@ -52,6 +32,20 @@ def create_dataset(config: _config.TrainConfig) -> tuple[_config.DataConfig, _da
             RemoveStrings(),
         ],
     )
+
+
+def create_dataset(config: _config.TrainConfig) -> tuple[Sequence[_config.DataConfig], Sequence[_data_loader.Dataset]]:
+    data_config = config.data.create(config.assets_dirs, config.model)
+    if data_config.repo_id is None:
+        raise ValueError("Data config must have a repo_id")
+    if data_config.dataset_configs:
+        datasets = [_data_loader.create_dataset(cfg, config.model) for cfg in data_config.dataset_configs]
+        transformed_datasets = [
+            transform_dataset(dataset, cfg) for dataset, cfg in zip(datasets, data_config.dataset_configs, strict=True)
+        ]
+        return data_config.dataset_configs, transformed_datasets
+    dataset = _data_loader.create_dataset(data_config, config.model)
+    dataset = transform_dataset(dataset, data_config)
     return [data_config], [dataset]
 
 

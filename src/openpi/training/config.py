@@ -850,6 +850,19 @@ _CONFIGS = [
         num_train_steps=10,
         wandb_enabled=False,
     ),
+    TrainConfig(
+        name="demo3_frames_grab3",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/demo3_frames_grab3",
+            base_config=DataConfig(
+                local_files_only=False,
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),
 ]
 
 if len({config.name for config in _CONFIGS}) != len(_CONFIGS):

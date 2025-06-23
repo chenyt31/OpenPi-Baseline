@@ -54,9 +54,9 @@ def init_logging():
 def init_tracking(config: _config.TrainConfig, *, resuming: bool, log_code: bool = False):
     """Initialize tracking systems (WandB and/or MLflow).
 
-    This function sets up both tracking systems if enabled and yields their
-    respective run objects. It handles proper context management for both
-    tracking tools, ensuring they're properly started and cleaned up.
+    This function sets up both tracking systems if enabled.
+    It handles proper context management for both tracking tools,
+    ensuring they're properly started and cleaned up.
 
     Args:
         config: The training configuration containing tracking settings
@@ -71,16 +71,17 @@ def init_tracking(config: _config.TrainConfig, *, resuming: bool, log_code: bool
     wandb_run = init_wandb(config, resuming=resuming, log_code=log_code)
 
     # Start MLflow, creates a  context manager
-    mlflow_ctx = mlflow.start_run() if config.mlflow_enabled else nullcontext(None)
+    mlflow_run = mlflow.start_run() if config.mlflow_enabled else nullcontext(None)
 
     # Use MLflow's context manager to initialize and yield both run objects
-    with mlflow_ctx as mlflow_run:
+    with wandb_run, mlflow_run:
         if config.mlflow_enabled:
             mlflow_log_params_and_set_tags(config)
         yield (wandb_run, mlflow_run)
 
 
-def init_wandb(config: _config.TrainConfig, *, resuming: bool, log_code: bool = False) -> wandb.run:
+@contextmanager
+def init_wandb(config: _config.TrainConfig, *, resuming: bool, log_code: bool = False):
     """Initialize Weights & Biases tracking system.
 
     This function sets up a WandB run based on the provided configuration.
@@ -92,8 +93,8 @@ def init_wandb(config: _config.TrainConfig, *, resuming: bool, log_code: bool = 
         resuming: Whether this is resuming a previous run
         log_code: Whether to log the source code to WandB
 
-    Returns:
-        The initialized WandB run object
+    Yields:
+        The WandB context manager
 
     Raises:
         FileNotFoundError: If the checkpoint directory does not exist
@@ -119,7 +120,7 @@ def init_wandb(config: _config.TrainConfig, *, resuming: bool, log_code: bool = 
     if log_code:
         run.log_code(epath.Path(__file__).parent.parent)
 
-    return run
+    yield run
 
 
 def mlflow_log_params_and_set_tags(config: _config.TrainConfig) -> None:

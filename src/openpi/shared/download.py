@@ -297,7 +297,7 @@ def _ensure_permissions(path: pathlib.Path) -> None:
 
 def _is_openpi_url(url: str) -> bool:
     """Check if the url is an OpenPI S3 bucket url."""
-    return url.startswith("s3://openpi-assets/")
+    return url.startswith("s3://openpi-assets/") or url.startswith("s3://openpi-assets-simeval/")
 
 
 def _get_mtime(year: int, month: int, day: int) -> float:

@@ -184,6 +184,7 @@ class ResizeImages(DataTransformFn):
         return data
 
 import cv2
+import random
 @dataclasses.dataclass(frozen=True)
 class GaussianBlurImages(DataTransformFn):
     """Applies a random Gaussian blur to each image in data['image']."""

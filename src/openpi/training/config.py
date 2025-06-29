@@ -666,6 +666,37 @@ _CONFIGS = [
     #
     # Fine-tuning DROID configs.
     #
+
+    TrainConfig(
+        name="pi0_fast_droid_jointpos_encoderfinetune",
+        model=pi0_fast.Pi0FASTConfig(
+            action_dim=8,
+            action_horizon=10,
+            max_token_len=180,
+        ),
+        data=RLDSDroidDataConfig(
+            repo_id="droid",
+            rlds_data_dir="/mnt/bigguy",
+            action_space=droid_rlds_dataset.DroidActionSpace.JOINT_POSITION,
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets-simeval/pi0_fast_droid_jointpos/params"),
+        freeze_filter=pi0_fast.Pi0FASTConfig(
+              action_dim=8, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b"
+              ).get_freeze_filter(mode="encoder"),
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        num_train_steps=240_000,
+        batch_size=128,
+        log_interval=100,
+        save_interval=5000,
+        keep_period=10_000,
+        num_workers=0,  # Important: RLDS DataLoader requires num_workers=0, handles multi-processing internally
+    ),
+    
     TrainConfig(
         name="pi0_fast_droid_jointpos_fullfinetune",
         model=pi0_fast.Pi0FASTConfig(

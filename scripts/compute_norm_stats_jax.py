@@ -5,10 +5,8 @@ normalization statistics for a given config. It computes the mean, standard devi
 and quantiles of the data in the dataset and saves it to the config assets directory.
 """
 
-import os
-import time
 from functools import partial
-from typing import Any, Dict, List, Optional, Tuple
+import time
 
 import jax
 import jax.numpy as jnp
@@ -16,7 +14,6 @@ import numpy as np
 import tqdm
 import tyro
 
-import openpi.models.model as _model
 import openpi.shared.normalize as normalize
 import openpi.training.config as _config
 import openpi.training.data_loader as _data_loader
@@ -28,16 +25,11 @@ class RemoveStrings(transforms.DataTransformFn):
         return {k: v for k, v in x.items() if not np.issubdtype(np.asarray(v).dtype, np.str_)}
 
 
-def create_torch_dataloader(
-    data_config: _config.DataConfig,
-    action_horizon: int,
-    batch_size: int,
-    model_config: _model.BaseModelConfig,
-    max_frames: int | None = None,
-) -> tuple[_data_loader.Dataset, int]:
+def create_dataset(config: _config.TrainConfig) -> tuple[_config.DataConfig, _data_loader.Dataset]:
+    data_config = config.data.create(config.assets_dirs, config.model)
     if data_config.repo_id is None:
         raise ValueError("Data config must have a repo_id")
-    dataset = _data_loader.create_torch_dataset(data_config, action_horizon, model_config)
+    dataset = _data_loader.create_torch_dataset(data_config, config.model.action_horizon, config.model)
     dataset = _data_loader.TransformedDataset(
         dataset,
         [
@@ -47,48 +39,7 @@ def create_torch_dataloader(
             RemoveStrings(),
         ],
     )
-    if max_frames is not None and max_frames < len(dataset):
-        num_batches = max_frames // batch_size
-        shuffle = True
-    else:
-        num_batches = len(dataset) // batch_size
-        shuffle = False
-    data_loader = _data_loader.TorchDataLoader(
-        dataset,
-        local_batch_size=batch_size,
-        num_workers=8,
-        shuffle=shuffle,
-        num_batches=num_batches,
-    )
-    return data_loader, num_batches
-
-
-def create_rlds_dataloader(
-    data_config: _config.DataConfig,
-    action_horizon: int,
-    batch_size: int,
-    max_frames: int | None = None,
-) -> tuple[_data_loader.Dataset, int]:
-    dataset = _data_loader.create_rlds_dataset(data_config, action_horizon, batch_size, shuffle=False)
-    dataset = _data_loader.IterableTransformedDataset(
-        dataset,
-        [
-            *data_config.repack_transforms.inputs,
-            *data_config.data_transforms.inputs,
-            # Remove strings since they are not supported by JAX and are not needed to compute norm stats.
-            RemoveStrings(),
-        ],
-        is_batched=True,
-    )
-    if max_frames is not None and max_frames < len(dataset):
-        num_batches = max_frames // batch_size
-    else:
-        num_batches = len(dataset) // batch_size
-    data_loader = _data_loader.RLDSDataLoader(
-        dataset,
-        num_batches=num_batches,
-    )
-    return data_loader, num_batches
+    return data_config, dataset
 
 
 class JaxRunningStats:
@@ -212,7 +163,7 @@ class JaxRunningStats:
             target_count = q * self._count
             q_values = []
 
-            for hist, edges in zip(self._histograms, self._bin_edges):
+            for hist, edges in zip(self._histograms, self._bin_edges, strict=True):
                 cumsum = np.cumsum(hist)
                 idx = np.searchsorted(cumsum, target_count)
                 q_values.append(edges[idx])
@@ -239,6 +190,7 @@ class JaxRunningStats:
         return normalize.NormStats(mean=mean_np, std=stddev, q01=q01, q99=q99)
 
 
+# Simple implementation that will be faster for now
 class FastRunningStats:
     """A simplified, faster stats implementation."""
 
@@ -293,13 +245,9 @@ class FastRunningStats:
         return normalize.NormStats(mean=mean, std=std, q01=q01, q99=q99)
 
 
-def main(
-    config_name: str,
-    max_frames: int | None = None,
-    use_fast_stats: bool = True,
-    max_time_minutes: int = 120,
-):
+def main(config_name: str, max_frames: int | None = None, *, use_fast_stats: bool = True):
     """Main function that computes and saves normalization statistics."""
+    max_time_minutes = 120  # Maximum runtime in minutes
     start_time = time.time()
 
     # Print info about JAX devices
@@ -307,16 +255,14 @@ def main(
 
     # Use same setup as original
     config = _config.get_config(config_name)
-    data_config = config.data.create(config.assets_dirs, config.model)
+    data_config, dataset = create_dataset(config)
 
-    if data_config.rlds_data_dir is not None:
-        data_loader, num_batches = create_rlds_dataloader(
-            data_config, config.model.action_horizon, config.batch_size, max_frames
-        )
-    else:
-        data_loader, num_batches = create_torch_dataloader(
-            data_config, config.model.action_horizon, config.batch_size, config.model, max_frames
-        )
+    num_frames = len(dataset)
+    shuffle = False
+
+    if max_frames is not None and max_frames < num_frames:
+        num_frames = max_frames
+        shuffle = True
 
     # Calculate appropriate batch size for GPUs - but don't make it too large
     # Large batches can cause excessive memory usage
@@ -326,21 +272,34 @@ def main(
     batch_size = per_device_batch * num_devices
 
     # Limit batch size based on dataset size
-    batch_size = min(batch_size, len(data_loader.dataset) // 10)
+    batch_size = min(batch_size, num_frames // 10)
     batch_size = max(batch_size, 16)  # Ensure minimum batch size
 
+    # Ensure batch size is divisible by number of devices for proper sharding
+    batch_size = (batch_size // num_devices) * num_devices
+    batch_size = max(batch_size, num_devices)  # Ensure minimum batch size is at least num_devices
+
     print(f"Using batch size: {batch_size} across {num_devices} devices")
+
+    data_loader = _data_loader.TorchDataLoader(
+        dataset,
+        local_batch_size=batch_size,
+        num_workers=16,  # More workers for faster loading
+        shuffle=shuffle,
+        num_batches=num_frames,
+    )
 
     # Same keys as original
     keys = ["state", "actions"]
 
     # Choose which stats implementation to use
-    StatsClass = FastRunningStats if use_fast_stats else JaxRunningStats
-    stats = {key: StatsClass() for key in keys}
+    stats_class = FastRunningStats if use_fast_stats else JaxRunningStats
+    stats = {key: stats_class() for key in keys}
 
-    print(f"Processing {num_batches} batches...")
+    total_batches = (num_frames + batch_size - 1) // batch_size
+    print(f"Processing {total_batches} batches...")
 
-    for batch_idx, batch in enumerate(tqdm.tqdm(data_loader, total=num_batches, desc="Computing stats")):
+    for batch_idx, batch in enumerate(tqdm.tqdm(data_loader, total=total_batches, desc="Computing stats")):
         batch_start = time.time()
         for key in keys:
             values = np.asarray(batch[key])
@@ -352,9 +311,9 @@ def main(
         # Log timing info for first few batches
         if batch_idx < 5:
             batch_time = time.time() - batch_start
-            print(f"Batch {batch_idx+1}/{num_batches} processed in {batch_time:.2f}s")
+            print(f"Batch {batch_idx + 1}/{total_batches} processed in {batch_time:.2f}s")
 
-        if batch_idx >= num_batches:
+        if batch_idx >= total_batches:
             print("Reached target number of batches, stopping.")
             break
 
@@ -368,7 +327,7 @@ def main(
     # After calculating stats and before saving
     # Create directory if it doesn't exist
     output_path = config.assets_dirs / data_config.repo_id
-    os.makedirs(output_path.parent, exist_ok=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         # Save to the same location with same format
@@ -380,8 +339,8 @@ def main(
         print(f"Error saving stats: {e}")
 
     total_time = time.time() - start_time
-    print(f"Total processing time: {total_time:.2f}s ({total_time/60:.2f} minutes)")
+    print(f"Total processing time: {total_time:.2f}s ({total_time / 60:.2f} minutes)")
 
 
 if __name__ == "__main__":
-    tyro.cli(main) 
+    tyro.cli(main)

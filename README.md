@@ -149,7 +149,7 @@ uv run scripts/compute_norm_stats.py --config-name pi0_fast_libero
 uv run scripts/compute_norm_stats_jax.py --config-name pi0_fast_libero --use-fast-stats=True
 ```
 
-**Note:** The JAX-accelerated version provides ~100x speedup on H100 GPUs for large datasets. See [JAX Acceleration Documentation](docs/jax_acceleration.md) for more details.
+**Note:** The JAX-accelerated version provides significant speedup on GPU-enabled machines, especially for larger datasets. The script automatically detects and utilizes available GPUs, with optimal performance on H100 and similar high-end GPUs. See [JAX Acceleration Documentation](docs/jax_acceleration.md) for detailed performance benchmarks and technical details.
 
 Now we can kick off training with the following command (the `--overwrite` flag is used to overwrite existing checkpoints if you rerun fine-tuning with the same config):
 

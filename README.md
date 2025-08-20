@@ -1,3 +1,78 @@
+# OpenPi-Baseline
+
+## Installation
+```bash
+cd baselines/OpenPi-Baseline
+uv venv .openpi-baseline
+source ~/.bashrc
+source .openpi-baseline/bin/activate
+GIT_LFS_SKIP_SMUDGE=1 uv sync --active
+
+cd ../../third_party/robot-colosseum
+uv pip install -r requirements.txt
+uv pip install -e .
+cd ../RVT/rvt/libs/
+cd PyRep
+uv pip install -r requirements.txt
+uv pip install -e . --no-build-isolation
+cd ../RLBench
+uv pip install -r requirements.txt
+uv pip install -e .
+```
+
+## Training
+```bash
+cd baselines/OpenPi-Baseline
+source .openpi-baseline/bin/activate
+cd ../../
+export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/third_party/RVT/rvt/libs/PyRep:$PWD/third_party/RVT/rvt/libs/RLBench:$PWD/third_party/RVT/rvt/libs/point-renderer:$PWD/third_party/robot-colosseum
+cd baselines/OpenPi-Baseline
+unset LEROBOT_HOME
+export HF_LEROBOT_HOME="/data2/share/openpi/dataset"
+
+# dataset
+CUDA_VISIBLE_DEVICES=7 uv run --active examples/rlbench/convert_rlbench_data_to_lerobot.py \
+    --data_dir /data1/cyt/HiMan_data/train \
+    --repo_name openpi_baseline_less_L1
+
+# norm
+CUDA_VISIBLE_DEVICES=7 uv run --active scripts/compute_norm_stats.py \
+    --config-name openpi_baseline_low_mem_finetune
+
+# training
+CUDA_VISIBLE_DEVICES=7 XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --active scripts/train.py \
+    openpi_baseline_low_mem_finetune \
+    --exp-name=my_experiment \
+    --checkpoint-base-dir=/data1/cyt/HiMan_data/train_logs_baseline_openpi \
+    --overwrite
+```
+
+## Evaluation
+```bash
+cd baselines/OpenPi-Baseline
+source .openpi-baseline/bin/activate
+cd ../../
+export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/third_party/RVT/rvt/libs/PyRep:$PWD/third_party/RVT/rvt/libs/RLBench:$PWD/third_party/RVT/rvt/libs/point-renderer:$PWD/third_party/robot-colosseum
+cd baselines/OpenPi-Baseline
+unset LEROBOT_HOME
+unset ftp_proxy
+unset socks_proxy
+unset ip_proxy
+unset FTP_PROXY
+unset SOCKS_PROXY
+unset IP_PROXY
+
+# server
+CUDA_VISIBLE_DEVICES=6 uv run --active scripts/serve_policy.py \
+    --port=8001 policy:checkpoint \
+    --policy.config=openpi_baseline_low_mem_finetune \
+    --policy.dir=/data1/cyt/HiMan_data/train_logs_baseline_openpi/openpi_baseline_low_mem_finetune/my_experiment/10000
+
+# Run the simulation
+bash examples/rlbench/eval_atomic.sh
+```
+
+
 # openpi
 
 openpi holds open-source models and packages for robotics, published by the [Physical Intelligence team](https://www.physicalintelligence.company/).

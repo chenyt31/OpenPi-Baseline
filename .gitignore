@@ -135,6 +135,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.openpi-baseline
 
 # Spyder project settings
 .spyderproject

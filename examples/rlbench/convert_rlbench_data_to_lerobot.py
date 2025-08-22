@@ -20,6 +20,7 @@ Running this conversion script will take approximately 30 minutes.
 
 import glob
 import os
+from pathlib import Path
 import pickle
 import random
 import shutil
@@ -66,11 +67,10 @@ class JointPositionsProprioMode(ProprioModeBase):
 
 def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = False):
 
-    assert train_mode == "vanilla" or train_mode == "half"
+    assert train_mode in ("vanilla", "half")
 
-    REPO_NAME = repo_name
     # Clean up any existing dataset in the output directory
-    output_path = HF_LEROBOT_HOME / REPO_NAME
+    output_path = HF_LEROBOT_HOME / repo_name
     if output_path.exists():
         shutil.rmtree(output_path)
 
@@ -78,7 +78,7 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
     # OpenPi assumes that proprio is stored in `state` and actions in `action`
     # LeRobot assumes that dtype of image data is `image`
     dataset = LeRobotDataset.create(
-        repo_id=REPO_NAME,
+        repo_id=repo_name,
         robot_type="panda",
         fps=10,
         features={
@@ -118,25 +118,23 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
     )
 
     # Initialize proprio mode
-    PROPRIO_MODE = JointPositionsProprioMode(joint_count=7)  # 7 joints for single arm
+    proprio_mode = JointPositionsProprioMode(joint_count=7)  # 7 joints for single arm
     # Loop over raw Libero datasets and write episodes to the LeRobot dataset
     # You can modify this for your own data format
     
-    task_folders = glob.glob(data_dir + "/*")
+    task_folders = Path.glob(data_dir + "/*")
     for task_folder in task_folders:
-        if not os.path.isdir(task_folder):
+        if not Path.is_dir(task_folder):
             continue
         
-        # Extract the task name from the last part of the task_folder path
-        task_name = os.path.basename(task_folder)
-        
-        episodes_paths = glob.glob(task_folder + "/all_variations/episodes/*")
+        # Extract the task name from the last part of the task_folder path        
+        episodes_paths = Path.glob(task_folder + "/all_variations/episodes/*")
 
         for episode_path in episodes_paths:
 
             # language
             descriptions_path = episode_path + "/variation_descriptions.pkl"
-            with open(descriptions_path, "rb") as file:
+            with Path.open(descriptions_path, "rb") as file:
                 all_descriptions = pickle.load(file)
                 description_vanilla = all_descriptions['vanilla'][0]
                 description_half = all_descriptions['oracle_half'][0].split('\n')
@@ -144,10 +142,10 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
 
             # action
             low_dim_obs_path = episode_path + "/low_dim_obs.pkl"
-            with open(low_dim_obs_path, "rb") as file:
+            with Path.open(low_dim_obs_path, "rb") as file:
                 low_dim_obs = pickle.load(file)
 
-            for step_idx, step in enumerate(low_dim_obs):
+            for step_idx, _ in enumerate(low_dim_obs):
                 if step_idx == len(low_dim_obs) - 1:
                     break
                 front_image_path = episode_path + f"/front_rgb/{step_idx}.png"
@@ -158,8 +156,8 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                 # left_shoulder_image = np.array(Image.open(left_shoulder_image_path))
                 # right_shoulder_image = np.array(Image.open(right_shoulder_image_path))
                 wrist_image = np.array(Image.open(wrist_image_path))
-                proprio = PROPRIO_MODE.convert_low_dim_obs_to_proprio(step_idx, low_dim_obs)
-                proprio_next = PROPRIO_MODE.convert_low_dim_obs_to_proprio(step_idx+1, low_dim_obs)
+                proprio = proprio_mode.convert_low_dim_obs_to_proprio(step_idx, low_dim_obs)
+                proprio_next = proprio_mode.convert_low_dim_obs_to_proprio(step_idx+1, low_dim_obs)
 
                 if train_mode == "half":
                     description = description_vanilla

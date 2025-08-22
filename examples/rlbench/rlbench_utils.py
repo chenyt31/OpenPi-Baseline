@@ -7,22 +7,12 @@ from rlbench.task_environment import TaskEnvironment
 from openpi_client import image_tools
 from openpi_client import websocket_client_policy as _websocket_client_policy
 import numpy as np
-from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Rotation
 from rlbench.backend.observation import Observation
 from typing import List, Tuple
 from collections import deque
 from PIL import Image
 import torch
-
-def task_file_to_task_class(task_file):
-    import importlib
-
-    name = task_file.replace(".py", "")
-    class_name = "".join([w[0].upper() + w[1:] for w in name.split("_")])
-    mod = importlib.import_module("rlbench.tasks.%s" % name)
-    mod = importlib.reload(mod)
-    task_class = getattr(mod, class_name)
-    return task_class
 
 def create_obs_config(
         image_size, apply_rgb, apply_depth, apply_pc, apply_cameras, **kwargs
@@ -52,7 +42,7 @@ def create_obs_config(
         kwargs = {}
         for n in camera_names:
             kwargs[n] = used_cams
-        obs_config = ObservationConfig(
+        return ObservationConfig(
             front_camera=kwargs.get("front", unused_cams),
             left_shoulder_camera=kwargs.get("left_shoulder", unused_cams),
             right_shoulder_camera=kwargs.get("right_shoulder", unused_cams),
@@ -69,13 +59,12 @@ def create_obs_config(
             gripper_joint_positions=True,
         )
 
-        return obs_config
 
 def convert_proprio_to_euler(proprio):
     ee_position = proprio[:3]
     ee_orientation = proprio[3:-1]
 
-    ee_rotation = R.from_quat(ee_orientation)
+    ee_rotation = Rotation.from_quat(ee_orientation)
     ee_euler_orientation = ee_rotation.as_euler("xyz")
 
     return np.concatenate(
@@ -84,69 +73,6 @@ def convert_proprio_to_euler(proprio):
         dtype=np.float64,
     )
 
-class Mover:
-
-    def __init__(self, task: TaskEnvironment, disabled=False, max_tries=1):
-        self._task = task
-        self._last_action = None
-        self._step_id = 0
-        self._max_tries = max_tries
-        self._disabled = disabled
-
-    def __call__(self, action, collision_checking=False, record_callback=None):
-        if self._disabled:
-            return self._task.step(action)
-
-        target = action.copy()
-        if self._last_action is not None:
-            action[7] = self._last_action[7].copy()
-
-        images = []
-        try_id = 0
-        obs: Observation = None
-        terminate = None
-        reward = 0
-
-        for try_id in range(self._max_tries):
-            action_collision = np.ones(action.shape[0]+1)
-            action_collision[:-1] = action
-            if collision_checking:
-                action_collision[-1] = 0
-            obs, reward, terminate = self._task.step(action_collision, record_callback)
-
-            pos = obs.gripper_pose[:3]
-            rot = obs.gripper_pose[3:7]
-            dist_pos = np.sqrt(np.square(target[:3] - pos).sum())
-            dist_rot = np.sqrt(np.square(target[3:7] - rot).sum())
-            criteria = (dist_pos < 5e-3,)
-
-            if all(criteria) or reward == 1:
-                break
-
-            print(
-                f"Too far away (pos: {dist_pos:.3f}, rot: {dist_rot:.3f}, step: {self._step_id})... Retrying..."
-            )
-
-        # we execute the gripper action after re-tries
-        action = target
-        if (
-            not reward == 1.0
-            and self._last_action is not None
-            and action[7] != self._last_action[7]
-        ):
-            action_collision = np.ones(action.shape[0]+1)
-            action_collision[:-1] = action
-            if collision_checking:
-                action_collision[-1] = 0
-            obs, reward, terminate = self._task.step(action_collision, record_callback)
-
-        if try_id == self._max_tries:
-            print(f"Failure after {self._max_tries} tries")
-
-        self._step_id += 1
-        self._last_action = action.copy()
-
-        return obs, reward, terminate, images
     
 class Actioner:
     def __init__(
@@ -158,7 +84,6 @@ class Actioner:
     ):
         """
         Initialize Actioner
-        
         Args:
             cfg: Configuration object
             model: Pre-trained model
@@ -176,7 +101,6 @@ class Actioner:
     def predict(self, proprio, img, wrist_img, instruction, **kwargs):
         """
         Predict next action
-        
         Args:
             proprio: proprioceptive states
             images: RGB image
@@ -220,7 +144,6 @@ class Actioner:
 
 def _is_stopped(low_dim_obs: List[Observation], i, stopped_buffer, delta):
     """判断机器人是否停止运动
-    
     Args:
         low_dim_obs: RLBench观测序列
         i: 当前时间步
@@ -246,11 +169,9 @@ def _is_stopped(low_dim_obs: List[Observation], i, stopped_buffer, delta):
 
 def keypoint_discovery(low_dim_obs: List[Observation], stopping_delta=0.1) -> List[int]:
     """发现轨迹中的关键点
-    
     Args:
         low_dim_obs: RLBench观测序列
         stopping_delta: 判断停止的速度阈值
-        
     Returns:
         episode_keypoints: 关键点索引列表
     """
@@ -277,11 +198,9 @@ def keypoint_discovery(low_dim_obs: List[Observation], stopping_delta=0.1) -> Li
 
 def get_key_steps(low_dim_obs: List[Observation], velocity_threshold: float = 0.1) -> Tuple[List[int], List[Observation]]:
     """选择观测序列中的关键帧
-    
     Args:
         low_dim_obs: RLBench观测序列
         velocity_threshold: 判断机器人停止的关节速度阈值
-        
     Returns:
         key_steps: 选中的关键帧索引列表
         now_low_dim_obs: 对应的观测列表

@@ -39,17 +39,17 @@ class Args:
     output_file: Path = Path(__file__).parent / "eval.json" # log file
     eval_mode: str = "vanilla"
 
-def save_video(vid, save_path, fps=10):
+def save_video(vid, save_path: Path, fps=10):
     import imageio
     vid = vid.transpose(0, 2, 3, 1)  # (T, H, W, C)
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    Path.mkdir(save_path.parent, parents=True, exist_ok=True)
     imageio.mimsave(save_path, vid, fps=fps)
 
 def eval_rlbench(args: Args) -> None:
     # Save results here
-    os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
-    log_dirpath = os.path.dirname(args.output_file)
-    txt_log_path = os.path.join(log_dirpath, "episode_log.txt")
+    Path.mkdir(args.output_file.parent, parents=True, exist_ok=True)
+    log_dirpath = args.output_file.parent
+    txt_log_path = log_dirpath / "episode_log.txt"
 
     # set random seeds
     seed = args.random_seed
@@ -87,7 +87,7 @@ def eval_rlbench(args: Args) -> None:
         task_name = args.tasks[task_id]
         success_list = []
         for ep in range(args.start_episode, args.start_episode + args.num_episodes):
-            sr, vid = env._evaluate_task_on_one_variation(
+            sr, vid = env.evaluate_task_on_one_variation(
                 task_str=task_name,
                 eval_demo_seed=ep,
                 max_steps=args.max_steps,
@@ -96,16 +96,16 @@ def eval_rlbench(args: Args) -> None:
                 eval_mode=args.eval_mode
             )
             # log eps info
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             log_line = f"{timestamp} | [Task {task_name}] Episode {ep} -> Success={sr}\n"
             print(log_line.strip())
-            with open(txt_log_path, "a") as f:
+            with Path.open(txt_log_path, "a") as f:
                 f.write(log_line)
 
             # log video
-            video_dir = os.path.join(log_dirpath, "video")
-            os.makedirs(video_dir, exist_ok=True)
-            video_path = os.path.join(video_dir, f"{task_name}_ep{ep}_{sr}.mp4")
+            video_dir = log_dirpath / "video"
+            Path.mkdir(video_dir, parents=True, exist_ok=True)
+            video_path = video_dir / f"{task_name}_ep{ep}_{sr}.mp4"
             save_video(vid, video_path, fps=15)
             print(f'save video in {video_path}')
 
@@ -115,7 +115,7 @@ def eval_rlbench(args: Args) -> None:
         avg_sr = float(np.mean(success_list))
         avg_line = f"[{task_name}]: {avg_sr:.3f}\n"
         print(avg_line.strip())
-        with open(args.output_file, "a") as f:
+        with Path.open(args.output_file, "a") as f:
             f.write(avg_line)
 
     env.env.shutdown()

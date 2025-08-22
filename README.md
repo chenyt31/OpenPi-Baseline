@@ -75,7 +75,7 @@ CUDA_VISIBLE_DEVICES=6 uv run --active scripts/serve_policy.py \
 
 # eval atomic
 bash examples/rlbench/eval.sh \
-    --host 127.0.0.1 \
+    --host 114.212.189.99 \
     --port 8001 \
     --max_steps 20 \
     --num_episodes 1 \

@@ -28,23 +28,28 @@ cd ../../
 export PYTHONPATH=$PYTHONPATH:$PWD:$PWD/third_party/RVT/rvt/libs/PyRep:$PWD/third_party/RVT/rvt/libs/RLBench:$PWD/third_party/RVT/rvt/libs/point-renderer:$PWD/third_party/robot-colosseum
 cd baselines/OpenPi-Baseline
 unset LEROBOT_HOME
+export WANDB_DISABLED=true
 export HF_LEROBOT_HOME="/data2/share/openpi/dataset"
 
 # dataset
-CUDA_VISIBLE_DEVICES=7 uv run --active examples/rlbench/convert_rlbench_data_to_lerobot.py \
+CUDA_VISIBLE_DEVICES=6 uv run --active examples/rlbench/convert_rlbench_data_to_lerobot.py \
     --data_dir /data1/cyt/HiMan_data/train \
-    --repo_name openpi_baseline_less_L1
+    --repo_name openpi_baseline_less_L1_half \
+    --train_mode half
 
 # norm
-CUDA_VISIBLE_DEVICES=7 uv run --active scripts/compute_norm_stats.py \
-    --config-name openpi_baseline_low_mem_finetune
+CUDA_VISIBLE_DEVICES=6 uv run --active scripts/compute_norm_stats.py \
+    openpi_baseline_low_mem_finetune \
+    --data.repo_id=openpi_baseline_less_L1_half \
+    --exp-name dataset
 
 # training
-CUDA_VISIBLE_DEVICES=7 XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --active scripts/train.py \
+CUDA_VISIBLE_DEVICES=6 XLA_PYTHON_CLIENT_MEM_FRACTION=0.95 uv run --active scripts/train.py \
     openpi_baseline_low_mem_finetune \
-    --exp-name=my_experiment \
+    --exp-name=debug \
     --checkpoint-base-dir=/data1/cyt/HiMan_data/train_logs_baseline_openpi \
-    --overwrite
+    --overwrite \
+    --data.repo_id=openpi_baseline_less_L1
 ```
 
 ## Evaluation
@@ -66,10 +71,29 @@ unset IP_PROXY
 CUDA_VISIBLE_DEVICES=6 uv run --active scripts/serve_policy.py \
     --port=8001 policy:checkpoint \
     --policy.config=openpi_baseline_low_mem_finetune \
-    --policy.dir=/data1/cyt/HiMan_data/train_logs_baseline_openpi/openpi_baseline_low_mem_finetune/my_experiment/10000
+    --policy.dir=/data1/cyt/HiMan_data/train_logs_baseline_openpi/openpi_baseline_low_mem_finetune/my_experiment/50000
 
-# Run the simulation
-bash examples/rlbench/eval_atomic.sh
+# eval atomic
+bash examples/rlbench/eval.sh \
+    --host 127.0.0.1 \
+    --port 8001 \
+    --max_steps 20 \
+    --num_episodes 1 \
+    --tasks_type atomic \
+    --output_file /data1/cyt/HiMan_data/train_logs_baseline_openpi/openpi_baseline_low_mem_finetune/my_experiment/eval_log_atomic \
+    --data_dir /data1/cyt/HiMan_data/test_atomic \
+    --eval_mode half
+
+# eval compositional
+bash examples/rlbench/eval.sh \
+    --host 127.0.0.1 \
+    --port 8001 \
+    --max_steps 20 \
+    --num_episodes 1 \
+    --tasks_type compositional \
+    --output_file /data1/cyt/HiMan_data/train_logs_baseline_openpi/openpi_baseline_low_mem_finetune/my_experiment/eval_log_compositional \
+    --data_dir /data1/cyt/HiMan_data/test_compositional \
+    --eval_mode vanilla
 ```
 
 

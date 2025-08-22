@@ -64,7 +64,10 @@ class JointPositionsProprioMode(ProprioModeBase):
         return (self.joint_count + 1,)
 
 
-def main(data_dir: str, repo_name: str, *, push_to_hub: bool = False):
+def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = False):
+
+    assert train_mode == "vanilla" or train_mode == "half"
+
     REPO_NAME = repo_name
     # Clean up any existing dataset in the output directory
     output_path = HF_LEROBOT_HOME / REPO_NAME
@@ -134,7 +137,10 @@ def main(data_dir: str, repo_name: str, *, push_to_hub: bool = False):
             # language
             descriptions_path = episode_path + "/variation_descriptions.pkl"
             with open(descriptions_path, "rb") as file:
-                description = pickle.load(file)['vanilla'][0]
+                all_descriptions = pickle.load(file)
+                description_vanilla = all_descriptions['vanilla'][0]
+                description_half = all_descriptions['oracle_half'][0].split('\n')
+                instr_index = 0
 
             # action
             low_dim_obs_path = episode_path + "/low_dim_obs.pkl"
@@ -154,6 +160,14 @@ def main(data_dir: str, repo_name: str, *, push_to_hub: bool = False):
                 wrist_image = np.array(Image.open(wrist_image_path))
                 proprio = PROPRIO_MODE.convert_low_dim_obs_to_proprio(step_idx, low_dim_obs)
                 proprio_next = PROPRIO_MODE.convert_low_dim_obs_to_proprio(step_idx+1, low_dim_obs)
+
+                if train_mode == "half":
+                    description = description_vanilla
+                else:
+                    description = description_half[instr_index]
+                    if abs(proprio[-1] - proprio_next[-1]) > 1e-9: # gripper openness change
+                        instr_index = (instr_index + 1) % len(description_half)
+
                 dataset.add_frame(
                     {
                         "front_image": front_image,

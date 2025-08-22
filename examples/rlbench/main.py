@@ -37,6 +37,7 @@ class Args:
     # Utility settings
     verbose: bool = True  # Verbose output
     output_file: Path = Path(__file__).parent / "eval.json" # log file
+    eval_mode: str = "vanilla"
 
 def save_video(vid, save_path, fps=10):
     import imageio
@@ -92,6 +93,7 @@ def eval_rlbench(args: Args) -> None:
                 max_steps=args.max_steps,
                 actioner=actioner,
                 verbose=args.verbose,
+                eval_mode=args.eval_mode
             )
             # log eps info
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")

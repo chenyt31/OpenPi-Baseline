@@ -121,7 +121,7 @@ class MultiTaskRLBenchEnv():
                  swap_task_every: int = 1,
                  base_cfg_name=None,
                  task_class_variation_idx=None):
-        super(MultiTaskRLBenchEnv, self).__init__()
+        # super(MultiTaskRLBenchEnv, self).__init__()
 
         self._task_classes = task_classes
         self._observation_config = observation_config
@@ -365,13 +365,21 @@ class RLBenchEnv:
         max_steps: int,
         actioner: Actioner,        
         verbose: bool = False,
+        eval_mode: str = "half" # vanilla | half | vlm
     ):
         # Reset task to demo state
-        instruction, obs = self.env.reset_to_demo(eval_demo_seed) 
-        instruction = instruction['vanilla'][0]
+        instruction, obs = self.env.reset_to_demo(eval_demo_seed)
+        # instr
+        # ============================================================================
+        instruction_vanilla = instruction['vanilla'][0]
+        instruction_oracle_half = instruction['oracle_half'][0].split('\n')
+        instruction = ""
+        instr_index = 0
+        grasped_objects = self.env._rlbench_env._scene.robot.gripper.get_grasped_objects()
+        prev_grasped_objects_len = len(grasped_objects)
+        # ============================================================================
+
         reward = 0.0
-        if verbose:
-            print(f'instruction: {instruction}')
         
         # Add task information to kwargs
         kwargs = {}
@@ -380,6 +388,19 @@ class RLBenchEnv:
         actioner.reset()
 
         for step_id in range(max_steps):
+            # ============================================================================
+            if eval_mode == "vanilla":
+                instruction = instruction_vanilla
+            elif eval_mode == "half":
+                instruction = instruction_oracle_half[instr_index]
+            elif eval_mode == "vlm":
+                pass
+            else:
+                raise ValueError(f"unknown eval mode: {eval_mode}")
+            if verbose:
+                print(f'instruction: {instruction}')
+            # ============================================================================
+            
             # Get front RGB image
             front_rgb = obs.front_rgb
             wrist_rgb = obs.wrist_rgb
@@ -398,10 +419,6 @@ class RLBenchEnv:
                 **kwargs
             )
 
-            if verbose:
-                print(f"Step {step_id}")
-                print(f'trajectory: {trajectory}')
-
             try:
                 # Execute actions
                 for action in trajectory:  
@@ -418,6 +435,15 @@ class RLBenchEnv:
                 print(task_str, eval_demo_seed, step_id, e)
                 reward = 0
                 #break
+            
+            # plan forward according to current task
+            # ============================================================================
+            grasped_objects = self.env._rlbench_env._scene.robot.gripper.get_grasped_objects()
+            cur_grasped_objects_len = len(grasped_objects)
+            if cur_grasped_objects_len != prev_grasped_objects_len:
+                instr_index = (instr_index + 1) % len(instruction_oracle_half)
+            prev_grasped_objects_len = cur_grasped_objects_len
+            # ============================================================================
 
         success = True if reward == 1 else False
         vid = self.env._append_final_frame(success)

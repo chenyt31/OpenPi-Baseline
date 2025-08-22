@@ -261,8 +261,7 @@ class MultiTaskRLBenchEnv():
         final_frames[:, :, :, 1 if success else 0] = 255
         self._recorded_images.extend(list(final_frames))
 
-        vid = np.array(self._recorded_images).transpose((0, 3, 1, 2))
-        return vid
+        return np.array(self._recorded_images).transpose((0, 3, 1, 2))
 
     def reset_to_demo(self, i, variation_number=-1):
         if self._episodes_this_task == self._swap_task_every:

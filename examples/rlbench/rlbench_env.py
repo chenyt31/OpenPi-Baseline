@@ -425,7 +425,7 @@ class RLBenchEnv:
             try:
                 # Execute actions
                 for action in trajectory:  
-                    obs, reward, terminate = self.env._task.step(action)
+                    obs, reward, terminate = self.env._task.step(action) # noqa: SLF001
             
                 if reward == 1:
                     break
@@ -449,5 +449,4 @@ class RLBenchEnv:
             # ============================================================================
 
         success = reward == 1
-        vid = self.env.append_final_frame(success)
-        return reward, vid
+        return reward, self.env.append_final_frame(success)

@@ -159,13 +159,12 @@ def _is_stopped(low_dim_obs: List[Observation], i, stopped_buffer, delta):
     )
     
     small_delta = np.allclose(low_dim_obs[i].joint_velocities, 0, atol=delta)
-    stopped = (
+    return (
         stopped_buffer <= 0
         and small_delta
         and (not next_is_not_final)
         and gripper_state_no_change
     )
-    return stopped
 
 def keypoint_discovery(low_dim_obs: List[Observation], stopping_delta=0.1) -> List[int]:
     """发现轨迹中的关键点

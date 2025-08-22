@@ -75,13 +75,14 @@ class RLBenchOutputs(transforms.DataTransformFn):
     def __call__(self, data: dict) -> dict:
         # Only return the first 8 dims.
         return {"actions": np.asarray(data["actions"][:, :8])}
-    
+
+
 @dataclasses.dataclass(frozen=True)
 class RLBenchBatchOutputs(transforms.DataTransformFn):
     action_dim: int
+
     def __call__(self, data: dict) -> dict:
         # Only return the first 8 dims.
         actions = transforms.pad_to_dim(data["actions"][:, :, :8], self.action_dim)
         data["actions"] = actions
         return data
-

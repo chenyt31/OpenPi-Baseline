@@ -21,7 +21,6 @@ import openpi.policies.aloha_policy as aloha_policy
 import openpi.policies.droid_policy as droid_policy
 import openpi.policies.libero_policy as libero_policy
 import openpi.policies.rlbench_policy as rlbench_policy
-
 import openpi.shared.download as _download
 import openpi.shared.normalize as _normalize
 import openpi.training.droid_rlds_dataset as droid_rlds_dataset
@@ -336,6 +335,7 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
             model_transforms=model_transforms,
         )
 
+
 @dataclasses.dataclass(frozen=True)
 class LeRobotRLBenchDataConfig(DataConfigFactory):
     @override
@@ -358,7 +358,9 @@ class LeRobotRLBenchDataConfig(DataConfigFactory):
         # Prepare data for policy training
         # Convert images to uint8 numpy arrays, add masks
         data_transforms = _transforms.Group(
-            inputs=[rlbench_policy.RLBenchInputs(action_dim=model_config.action_dim, model_type=model_config.model_type)],
+            inputs=[
+                rlbench_policy.RLBenchInputs(action_dim=model_config.action_dim, model_type=model_config.model_type)
+            ],
             outputs=[rlbench_policy.RLBenchOutputs()],
         )
 
@@ -371,6 +373,7 @@ class LeRobotRLBenchDataConfig(DataConfigFactory):
             data_transforms=data_transforms,
             model_transforms=model_transforms,
         )
+
 
 @dataclasses.dataclass(frozen=True)
 class RLDSDroidDataConfig(DataConfigFactory):
@@ -798,7 +801,7 @@ _CONFIGS = [
             paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
         ).get_freeze_filter(),
         ema_decay=None,
-        wandb_enabled=False
+        wandb_enabled=False,
     ),
     TrainConfig(
         name="openpi_baseline",
@@ -812,7 +815,7 @@ _CONFIGS = [
         save_interval=10_000,
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=50_000,
-        wandb_enabled=False
+        wandb_enabled=False,
     ),
 ]
 

@@ -18,11 +18,9 @@ The resulting dataset will get saved to the $LEROBOT_HOME directory.
 Running this conversion script will take approximately 30 minutes.
 """
 
-import glob
-import os
+from abc import abstractmethod
 from pathlib import Path
 import pickle
-import random
 import shutil
 
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
@@ -30,7 +28,7 @@ from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import numpy as np
 from PIL import Image
 import tyro
-from abc import abstractmethod
+
 
 class ProprioModeBase:
     @abstractmethod
@@ -40,12 +38,11 @@ class ProprioModeBase:
     @abstractmethod
     def get_description(self):
         """Returns a brief description of the action."""
-        pass
 
     @abstractmethod
     def get_shape(self):
         """Returns the shape the action."""
-        pass
+
 
 class JointPositionsProprioMode(ProprioModeBase):
     def __init__(self, joint_count):
@@ -66,7 +63,6 @@ class JointPositionsProprioMode(ProprioModeBase):
 
 
 def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = False):
-
     assert train_mode in ("vanilla", "half")
 
     # Clean up any existing dataset in the output directory
@@ -121,23 +117,22 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
     proprio_mode = JointPositionsProprioMode(joint_count=7)  # 7 joints for single arm
     # Loop over raw Libero datasets and write episodes to the LeRobot dataset
     # You can modify this for your own data format
-    
+
     task_folders = Path.glob(data_dir + "/*")
     for task_folder in task_folders:
         if not Path.is_dir(task_folder):
             continue
-        
-        # Extract the task name from the last part of the task_folder path        
+
+        # Extract the task name from the last part of the task_folder path
         episodes_paths = Path.glob(task_folder + "/all_variations/episodes/*")
 
         for episode_path in episodes_paths:
-
             # language
             descriptions_path = episode_path + "/variation_descriptions.pkl"
             with Path.open(descriptions_path, "rb") as file:
                 all_descriptions = pickle.load(file)
-                description_vanilla = all_descriptions['vanilla'][0]
-                description_half = all_descriptions['oracle_half'][0].split('\n')
+                description_vanilla = all_descriptions["vanilla"][0]
+                description_half = all_descriptions["oracle_half"][0].split("\n")
                 instr_index = 0
 
             # action
@@ -157,13 +152,13 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                 # right_shoulder_image = np.array(Image.open(right_shoulder_image_path))
                 wrist_image = np.array(Image.open(wrist_image_path))
                 proprio = proprio_mode.convert_low_dim_obs_to_proprio(step_idx, low_dim_obs)
-                proprio_next = proprio_mode.convert_low_dim_obs_to_proprio(step_idx+1, low_dim_obs)
+                proprio_next = proprio_mode.convert_low_dim_obs_to_proprio(step_idx + 1, low_dim_obs)
 
                 if train_mode == "half":
                     description = description_vanilla
                 else:
                     description = description_half[instr_index]
-                    if abs(proprio[-1] - proprio_next[-1]) > 1e-9: # gripper openness change
+                    if abs(proprio[-1] - proprio_next[-1]) > 1e-9:  # gripper openness change
                         instr_index = (instr_index + 1) % len(description_half)
 
                 dataset.add_frame(
@@ -174,7 +169,7 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                         "wrist_image": wrist_image,
                         "state": proprio,
                         "actions": proprio_next,
-                        "task": description
+                        "task": description,
                     }
                 )
             dataset.save_episode()

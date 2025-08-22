@@ -1,18 +1,17 @@
-import logging
-import numpy as np
-import argparse
-import tyro
-import yaml
-import torch
-from examples.rlbench.rlbench_env import RLBenchEnv
-from examples.rlbench.rlbench_utils import Actioner
-import dataclasses
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
-import random
+import datetime
+import logging
 import os
 from pathlib import Path
-import datetime
+import random
+
+import numpy as np
+import torch
+import tyro
+
+from examples.rlbench.rlbench_env import RLBenchEnv
+from examples.rlbench.rlbench_utils import Actioner
+
 
 @dataclass
 class Args:
@@ -23,9 +22,9 @@ class Args:
     replan_steps: int = -1
 
     # Environment parameters
-    data_dir: Optional[str] = ""  # Path to the dataset
+    data_dir: str | None = ""  # Path to the dataset
     random_seed: int = 42  # Random seed for the environment
-    tasks: Tuple[str, ...] = ("close_jar",)  # Tasks to evaluate, comma separated
+    tasks: tuple[str, ...] = ("close_jar",)  # Tasks to evaluate, comma separated
     apply_cameras: str = "left_shoulder,right_shoulder,wrist,front"  # Cameras to use, comma separated
     start_episode: int = 0
     num_episodes: int = 1  # Number of evaluation episodes per task
@@ -33,17 +32,20 @@ class Args:
     headless: bool = True  # Run headless
     image_size: str = "256,256"  # Image size (width,height)
     tasks_type: str = "atomic"
-    
+
     # Utility settings
     verbose: bool = True  # Verbose output
-    output_file: Path = Path(__file__).parent / "eval.json" # log file
+    output_file: Path = Path(__file__).parent / "eval.json"  # log file
     eval_mode: str = "vanilla"
+
 
 def save_video(vid, save_path: Path, fps=10):
     import imageio
+
     vid = vid.transpose(0, 2, 3, 1)  # (T, H, W, C)
     Path.mkdir(save_path.parent, parents=True, exist_ok=True)
     imageio.mimsave(save_path, vid, fps=fps)
+
 
 def eval_rlbench(args: Args) -> None:
     # Save results here
@@ -54,7 +56,7 @@ def eval_rlbench(args: Args) -> None:
     # set random seeds
     seed = args.random_seed
     random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -70,7 +72,7 @@ def eval_rlbench(args: Args) -> None:
         headless=bool(args.headless),
         apply_cameras=args.apply_cameras.split(","),
         tasks_type=args.tasks_type,
-        tasks=args.tasks
+        tasks=args.tasks,
     )
 
     # Create Actioner
@@ -93,10 +95,10 @@ def eval_rlbench(args: Args) -> None:
                 max_steps=args.max_steps,
                 actioner=actioner,
                 verbose=args.verbose,
-                eval_mode=args.eval_mode
+                eval_mode=args.eval_mode,
             )
             # log eps info
-            timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
             log_line = f"{timestamp} | [Task {task_name}] Episode {ep} -> Success={sr}\n"
             print(log_line.strip())
             with Path.open(txt_log_path, "a") as f:
@@ -107,10 +109,10 @@ def eval_rlbench(args: Args) -> None:
             Path.mkdir(video_dir, parents=True, exist_ok=True)
             video_path = video_dir / f"{task_name}_ep{ep}_{sr}.mp4"
             save_video(vid, video_path, fps=15)
-            print(f'save video in {video_path}')
+            print(f"save video in {video_path}")
 
             success_list.append(sr)
-    
+
         # log avg. sr to output file
         avg_sr = float(np.mean(success_list))
         avg_line = f"[{task_name}]: {avg_sr:.3f}\n"
@@ -119,6 +121,7 @@ def eval_rlbench(args: Args) -> None:
             f.write(avg_line)
 
     env.env.shutdown()
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

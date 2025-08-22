@@ -1,69 +1,58 @@
-import glob
-import logging
-import os
+from functools import reduce
+import json
 from pathlib import Path
-import numpy as np
-from examples.rlbench.rlbench_utils import (
-    create_obs_config, 
-)
+from typing import Any
 
+from colosseum import ASSETS_ATOMIC_CONFIGS_FOLDER
+from colosseum import ASSETS_ATOMIC_JSON_FOLDER
+from colosseum import ASSETS_COMPOSITIONAL_CONFIGS_FOLDER
+from colosseum import ASSETS_COMPOSITIONAL_JSON_FOLDER
+from colosseum import ATOMIC_TASKS_PY_FOLDER
+from colosseum import ATOMIC_TASKS_TTM_FOLDER
+from colosseum import COMPOSITIONAL_TASKS_PY_FOLDER
+from colosseum import COMPOSITIONAL_TASKS_TTM_FOLDER
+from colosseum import TASKS_PY_FOLDER
+from colosseum.rlbench.extensions.environment import EnvironmentExt
+from colosseum.rlbench.utils import name_to_class
+import numpy as np
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from pyrep.const import RenderMode
-from rlbench.action_modes.action_mode import ActionMode
-from rlbench.action_modes.arm_action_modes import JointPosition
-from rlbench.environment import Environment
-from rlbench.backend.exceptions import InvalidActionError
-from rlbench.action_modes.gripper_action_modes import Discrete
-from rlbench.observation_config import ObservationConfig
-from rlbench.backend.task import Task
+from pyrep.errors import ConfigurationPathError
+from pyrep.errors import IKError
 from pyrep.objects.dummy import Dummy
 from pyrep.objects.vision_sensor import VisionSensor
-from pyrep.errors import IKError, ConfigurationPathError
+from rlbench.action_modes.action_mode import ActionMode
+from rlbench.action_modes.arm_action_modes import JointPosition
+from rlbench.action_modes.gripper_action_modes import Discrete
+from rlbench.backend.exceptions import InvalidActionError
+from rlbench.backend.task import Task
+from rlbench.observation_config import ObservationConfig
 import torch
-from typing import List
+
 from examples.rlbench.rlbench_utils import Actioner
+from examples.rlbench.rlbench_utils import create_obs_config
 
-from typing import Optional, Type, List, Dict, Any
-import os
-import json
-from omegaconf import DictConfig, OmegaConf
-from colosseum import (
-    ASSETS_ATOMIC_CONFIGS_FOLDER,
-    ASSETS_ATOMIC_JSON_FOLDER,
-    ATOMIC_TASKS_TTM_FOLDER,
-    ASSETS_COMPOSITIONAL_CONFIGS_FOLDER,
-    ASSETS_COMPOSITIONAL_JSON_FOLDER,
-    COMPOSITIONAL_TASKS_TTM_FOLDER
-)
-from colosseum import TASKS_PY_FOLDER, ATOMIC_TASKS_PY_FOLDER, COMPOSITIONAL_TASKS_PY_FOLDER
-
-from colosseum.rlbench.extensions.environment import EnvironmentExt
-from colosseum.rlbench.utils import (
-    name_to_class,
-)
-from colosseum.variations.utils import safeGetValue
-from functools import reduce
 
 class MoveJointArmThenGripper(ActionMode):
-    """The arm action is first applied, followed by the gripper action. """
+    """The arm action is first applied, followed by the gripper action."""
 
     def action(self, scene, action: np.ndarray):
         arm_act_size = np.prod(self.arm_action_mode.action_shape(scene))
         arm_action = np.array(action[:arm_act_size])
-        ee_action = np.array(action[arm_act_size:arm_act_size+1])
+        ee_action = np.array(action[arm_act_size : arm_act_size + 1])
         self.arm_action_mode.action(scene, arm_action)
         self.gripper_action_mode.action(scene, ee_action)
 
     def action_shape(self, scene):
-        return np.prod(self.arm_action_mode.action_shape(scene)) + np.prod(
-            self.gripper_action_mode.action_shape(scene))
+        return np.prod(self.arm_action_mode.action_shape(scene)) + np.prod(self.gripper_action_mode.action_shape(scene))
+
 
 def change_case(str):
-    return reduce(lambda x, y: x + ('_' if y.isupper() else '') + y, str).lower()
+    return reduce(lambda x, y: x + ("_" if y.isupper() else "") + y, str).lower()
 
 
-def get_spreadsheet_config(
-    base_cfg: DictConfig, collection_cfg: Dict[str, Any], spreadsheet_idx: int
-) -> DictConfig:
+def get_spreadsheet_config(base_cfg: DictConfig, collection_cfg: dict[str, Any], spreadsheet_idx: int) -> DictConfig:
     """
     Creates a new config object based on a base configuration, updated with
     entries to match the options from the data collection strategy in JSON
@@ -86,9 +75,7 @@ def get_spreadsheet_config(
     """
     spreadsheet_cfg = base_cfg.copy()
 
-    collections_variation_cfg = collection_cfg["strategy"][spreadsheet_idx][
-        "variations"
-    ]
+    collections_variation_cfg = collection_cfg["strategy"][spreadsheet_idx]["variations"]
     for collection_var_cfg in collections_variation_cfg:
         var_type = collection_var_cfg["type"]
         var_name = collection_var_cfg["name"]
@@ -96,26 +83,25 @@ def get_spreadsheet_config(
         for variation_cfg in spreadsheet_cfg.env.scene.factors:
             if variation_cfg.variation != var_type:
                 continue
-            else:
-                if var_name == "any" or (
-                    "name" in variation_cfg and variation_cfg.name == var_name
-                ):
-                    variation_cfg.enabled = var_enabled
+            if var_name == "any" or ("name" in variation_cfg and variation_cfg.name == var_name):
+                variation_cfg.enabled = var_enabled
 
     return spreadsheet_cfg
 
-class MultiTaskRLBenchEnv():
 
-    def __init__(self,
-                 task_classes: List[Type[Task]],
-                 observation_config: ObservationConfig,
-                 action_mode: ActionMode,
-                 dataset_root: str = '',
-                 swap_task_every: int = 1,
-                 base_cfg_name=None,
-                 task_class_variation_idx=None,
-                 *,
-                 headless: bool = True):
+class MultiTaskRLBenchEnv:
+    def __init__(
+        self,
+        task_classes: list[type[Task]],
+        observation_config: ObservationConfig,
+        action_mode: ActionMode,
+        dataset_root: str = "",
+        swap_task_every: int = 1,
+        base_cfg_name=None,
+        task_class_variation_idx=None,
+        *,
+        headless: bool = True,
+    ):
         # super(MultiTaskRLBenchEnv, self).__init__()
 
         self._task_classes = task_classes
@@ -124,14 +110,14 @@ class MultiTaskRLBenchEnv():
         #     action_mode=action_mode, obs_config=observation_config,
         #     dataset_root=dataset_root, headless=headless)
         self._task = None
-        self._task_name = ''
-        self._lang_goal = 'unknown goal'
+        self._task_name = ""
+        self._lang_goal = "unknown goal"
         self._swap_task_every = swap_task_every
-        
+
         self._episodes_this_task = 0
         self._active_task_id = -1
 
-        self._task_name_to_idx = {change_case(tc.__name__):i for i, tc in enumerate(self._task_classes)}
+        self._task_name_to_idx = {change_case(tc.__name__): i for i, tc in enumerate(self._task_classes)}
         self._base_cfg_name = base_cfg_name
         self._task_class_variation_idx = task_class_variation_idx
         self._action_mode = action_mode
@@ -158,9 +144,7 @@ class MultiTaskRLBenchEnv():
         descriptions, _ = self._task.reset()
         self.descriptions = descriptions
         self._lang_goal = (
-            descriptions.get("vanilla", [descriptions[0]])[0]
-            if isinstance(descriptions, dict)
-            else descriptions[0]
+            descriptions.get("vanilla", [descriptions[0]])[0] if isinstance(descriptions, dict) else descriptions[0]
         )
         # self._lang_goal = descriptions[0] # first description variant
 
@@ -177,7 +161,7 @@ class MultiTaskRLBenchEnv():
             tasks_ttm_folder = Path(COMPOSITIONAL_TASKS_TTM_FOLDER)
         else:
             raise ValueError(f"Unknown task_type: {task_type}")
-            
+
         base_cfg_path = assets_configs_folder / f"{self._base_cfg_name[self._active_task_id]}.yaml"
         if base_cfg_path.exists():
             with base_cfg_path.open("r") as f:
@@ -187,26 +171,26 @@ class MultiTaskRLBenchEnv():
 
         collection_cfg_path: Path = assets_json_folder / f"{base_cfg.env.task_name}.json"
         with collection_cfg_path.open("r") as fh:
-            collection_cfg: Optional[Any] = json.load(fh)
+            collection_cfg: Any | None = json.load(fh)
 
         if not collection_cfg or "strategy" not in collection_cfg:
             return 1
 
         # num_spreadsheet_idx = len(collection_cfg["strategy"])
-            
+
         if self._task_class_variation_idx is not None:
             full_config = get_spreadsheet_config(
                 base_cfg,
                 collection_cfg,
                 self._task_class_variation_idx[self._active_task_id],
             )
-            _, env_cfg = full_config.data, full_config.env  
+            _, env_cfg = full_config.data, full_config.env
         else:
             env_cfg = None
 
         self._rlbench_env = EnvironmentExt(
             action_mode=self._action_mode,
-            obs_config=self._observation_config, 
+            obs_config=self._observation_config,
             path_task_ttms=tasks_ttm_folder,
             dataset_root=self._dataset_root,
             headless=self._headless,
@@ -251,12 +235,12 @@ class MultiTaskRLBenchEnv():
         # self._lang_goal = descriptions[0] # first description variant
 
         return descriptions, obs
-    
+
     def append_final_frame(self, *, success: bool):
         self._record_cam.handle_explicitly()
         img = (self._record_cam.capture_rgb() * 255).astype(np.uint8)
         self._recorded_images.append(img)
-        final_frames = np.zeros((10, ) + img.shape[:2] + (3,), dtype=np.uint8)
+        final_frames = np.zeros((10,) + img.shape[:2] + (3,), dtype=np.uint8)
         # Green/red for success/failure
         final_frames[:, :, :, 1 if success else 0] = 255
         self._recorded_images.extend(list(final_frames))
@@ -273,12 +257,13 @@ class MultiTaskRLBenchEnv():
 
         if self._task_class_variation_idx is not None:
             self._task.set_variation(-1)
-            self._task._task.task_path = self._task._task.name + f"_{str(self._task_class_variation_idx[self._active_task_id])}" # noqa: SLF001
+            self._task._task.task_path = (  # noqa: SLF001
+                self._task._task.name + f"_{self._task_class_variation_idx[self._active_task_id]!s}"  # noqa: SLF001
+            )
         else:
             self._task.set_variation(-1)
 
-        d = self._task.get_demos(
-            1, live_demos=False, random_selection=False, from_episode_number=i)[0]
+        d = self._task.get_demos(1, live_demos=False, random_selection=False, from_episode_number=i)[0]
 
         self._task.set_variation(d.variation_number)
         self._recorded_images.clear()
@@ -291,8 +276,8 @@ class MultiTaskRLBenchEnv():
             self._lang_goal = descriptions[0]
         return descriptions, obs
 
-class RLBenchEnv:
 
+class RLBenchEnv:
     def __init__(
         self,
         data_path,
@@ -300,14 +285,13 @@ class RLBenchEnv:
         apply_cameras=("left_shoulder", "right_shoulder", "wrist", "front"),
         tasks=None,
         *,
-        tasks_type='atomic',
+        tasks_type="atomic",
         apply_rgb=False,
         apply_depth=False,
         apply_pc=False,
         apply_mask=False,
         headless=True,
     ):
-
         # setup required inputs
         self.data_path = data_path
         self.apply_rgb = apply_rgb
@@ -322,30 +306,29 @@ class RLBenchEnv:
             apply_rgb=self.apply_rgb,
             apply_depth=self.apply_depth,
             apply_pc=self.apply_pc,
-            apply_cameras=self.apply_cameras
+            apply_cameras=self.apply_cameras,
         )
 
-        self.action_mode = MoveJointArmThenGripper(
-            arm_action_mode=JointPosition(),
-            gripper_action_mode=Discrete()
-        )
+        self.action_mode = MoveJointArmThenGripper(arm_action_mode=JointPosition(), gripper_action_mode=Discrete())
         self.tasks_type = tasks_type
         task_classes = []
         task_class_variation_idx = []
         task_class_base = []
         for task in tasks:
-            task_class_base.append('_'.join(task.split('_')[:-1]))
+            task_class_base.append("_".join(task.split("_")[:-1]))
             # if task_class_base[-1] not in task_files:
             #     raise ValueError('Task %s not recognised!.' % task)
-            if tasks_type == 'atomic':
+            if tasks_type == "atomic":
                 task_class = name_to_class(task_class_base[-1], ATOMIC_TASKS_PY_FOLDER)
-            elif tasks_type == 'compositional':
+            elif tasks_type == "compositional":
                 task_class = name_to_class(task_class_base[-1], COMPOSITIONAL_TASKS_PY_FOLDER)
             else:
-                task_class = name_to_class(task_class_base[-1], TASKS_PY_FOLDER) # task_file_to_task_class(task_class_base)
-            task_class_variation_idx.append(int(task.split('_')[-1]))
+                task_class = name_to_class(
+                    task_class_base[-1], TASKS_PY_FOLDER
+                )  # task_file_to_task_class(task_class_base)
+            task_class_variation_idx.append(int(task.split("_")[-1]))
             task_classes.append(task_class)
-        
+
         self.env = MultiTaskRLBenchEnv(
             task_classes=task_classes,
             observation_config=self.obs_config,
@@ -364,8 +347,8 @@ class RLBenchEnv:
         task_str: str,
         eval_demo_seed: int,
         max_steps: int,
-        actioner: Actioner,   
-        eval_mode: str = "half", # vanilla | half | vlm
+        actioner: Actioner,
+        eval_mode: str = "half",  # vanilla | half | vlm
         *,
         verbose: bool = False,
     ):
@@ -373,8 +356,8 @@ class RLBenchEnv:
         instruction, obs = self.env.reset_to_demo(eval_demo_seed)
         # instr
         # ============================================================================
-        instruction_vanilla = instruction['vanilla'][0]
-        instruction_oracle_half = instruction['oracle_half'][0].split('\n')
+        instruction_vanilla = instruction["vanilla"][0]
+        instruction_oracle_half = instruction["oracle_half"][0].split("\n")
         instruction = ""
         instr_index = 0
         grasped_objects = self.env._rlbench_env._scene.robot.gripper.get_grasped_objects()  # noqa: SLF001
@@ -382,10 +365,10 @@ class RLBenchEnv:
         # ============================================================================
 
         reward = 0.0
-        
+
         # Add task information to kwargs
         kwargs = {}
-        kwargs['task_str'] = task_str
+        kwargs["task_str"] = task_str
 
         actioner.reset()
 
@@ -400,9 +383,9 @@ class RLBenchEnv:
             else:
                 raise ValueError(f"unknown eval mode: {eval_mode}")
             if verbose:
-                print(f'instruction: {instruction}')
+                print(f"instruction: {instruction}")
             # ============================================================================
-            
+
             # Get front RGB image
             front_rgb = obs.front_rgb
             wrist_rgb = obs.wrist_rgb
@@ -411,33 +394,27 @@ class RLBenchEnv:
                 axis=-1,
                 dtype=np.float32,
             )
-            
+
             # Get action prediction
-            trajectory = actioner.predict(
-                proprio,
-                front_rgb,
-                wrist_rgb,
-                instruction,
-                **kwargs
-            )
+            trajectory = actioner.predict(proprio, front_rgb, wrist_rgb, instruction, **kwargs)
 
             try:
                 # Execute actions
-                for action in trajectory:  
-                    obs, reward, terminate = self.env._task.step(action) # noqa: SLF001
-            
+                for action in trajectory:
+                    obs, reward, terminate = self.env._task.step(action)  # noqa: SLF001
+
                 if reward == 1:
                     break
 
                 if terminate:
                     print("Episode terminated!")
                     break
-            
+
             except (IKError, ConfigurationPathError, InvalidActionError) as e:
                 print(task_str, eval_demo_seed, step_id, e)
                 reward = 0
-                #break
-            
+                # break
+
             # plan forward according to current task
             # ============================================================================
             grasped_objects = self.env._rlbench_env._scene.robot.gripper.get_grasped_objects()  # noqa: SLF001

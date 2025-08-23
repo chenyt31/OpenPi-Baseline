@@ -43,17 +43,24 @@ def save_video(vid, save_path: Path, fps=10):
     import imageio
 
     vid = vid.transpose(0, 2, 3, 1)  # (T, H, W, C)
-    Path.mkdir(save_path.parent, parents=True, exist_ok=True)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     imageio.mimsave(save_path, vid, fps=fps)
 
 
 def eval_rlbench(args: Args) -> None:
-    # Save results here
-    Path.mkdir(args.output_file.parent, parents=True, exist_ok=True)
+    # Resolve output file path and create parent directory
+    args.output_file = args.output_file.resolve()
+    args.output_file.parent.mkdir(parents=True, exist_ok=True)
     log_dirpath = args.output_file.parent
     txt_log_path = log_dirpath / "episode_log.txt"
 
-    # set random seeds
+    # Validate and resolve data_dir if provided
+    if args.data_dir and args.data_dir.strip():
+        args.data_dir = Path(args.data_dir).resolve()
+        if not args.data_dir.is_dir():
+            raise NotADirectoryError(f"Specified data_dir is not a valid directory: {args.data_dir}")
+
+    # Set random seeds
     seed = args.random_seed
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -63,16 +70,29 @@ def eval_rlbench(args: Args) -> None:
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+    # Parse image size
+    try:
+        image_size = [int(x.strip()) for x in args.image_size.split(",")]
+        if len(image_size) != 2:
+            raise ValueError("image_size must contain exactly two values (width, height)")
+    except ValueError as e:
+        raise ValueError(f"Invalid image_size format: {args.image_size}. Use 'width,height' (e.g., '256,256')") from e
+
+    # Parse apply_cameras
+    apply_cameras = [cam.strip() for cam in args.apply_cameras.split(",") if cam.strip()]
+    if not apply_cameras:
+        raise ValueError("apply_cameras cannot be empty. Provide at least one camera (e.g., 'front,wrist')")
+
     # Load RLBench environment
     env = RLBenchEnv(
-        data_path=args.data_dir,
-        image_size=[int(x) for x in args.image_size.split(",")],
+        data_path=str(args.data_dir) if args.data_dir else None,
+        image_size=image_size,
         apply_rgb=True,
         apply_pc=True,
-        headless=bool(args.headless),
-        apply_cameras=args.apply_cameras.split(","),
+        headless=args.headless,
+        apply_cameras=apply_cameras,
         tasks_type=args.tasks_type,
-        tasks=args.tasks,
+        tasks=list(args.tasks),
     )
 
     # Create Actioner
@@ -97,27 +117,27 @@ def eval_rlbench(args: Args) -> None:
                 verbose=args.verbose,
                 eval_mode=args.eval_mode,
             )
-            # log eps info
+            # Log episode info
             timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
             log_line = f"{timestamp} | [Task {task_name}] Episode {ep} -> Success={sr}\n"
             print(log_line.strip())
-            with Path.open(txt_log_path, "a") as f:
+            with txt_log_path.open("a") as f:
                 f.write(log_line)
 
-            # log video
+            # Save video
             video_dir = log_dirpath / "video"
-            Path.mkdir(video_dir, parents=True, exist_ok=True)
+            video_dir.mkdir(parents=True, exist_ok=True)
             video_path = video_dir / f"{task_name}_ep{ep}_{sr}.mp4"
             save_video(vid, video_path, fps=15)
-            print(f"save video in {video_path}")
+            print(f"Saved video to {video_path}")
 
             success_list.append(sr)
 
-        # log avg. sr to output file
-        avg_sr = float(np.mean(success_list))
+        # Log average success rate to output file
+        avg_sr = float(np.mean(success_list)) if success_list else 0.0
         avg_line = f"[{task_name}]: {avg_sr:.3f}\n"
         print(avg_line.strip())
-        with Path.open(args.output_file, "a") as f:
+        with args.output_file.open("a") as f:
             f.write(avg_line)
 
     env.env.shutdown()

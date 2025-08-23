@@ -148,8 +148,6 @@ class MultiTaskRLBenchEnv:
         )
         # self._lang_goal = descriptions[0] # first description variant
 
-    from pathlib import Path
-
     def launch(self, task_type=None):
         if task_type == "atomic":
             assets_configs_folder = Path(ASSETS_ATOMIC_CONFIGS_FOLDER)
@@ -341,6 +339,10 @@ class RLBenchEnv:
         )
         self.image_size = image_size
 
+    def _get_home_pose(self):
+        home_pose = np.array(Dummy("Panda_tip").get_pose())
+        return np.concatenate((home_pose, [1, 0]))
+
     @torch.no_grad()
     def evaluate_task_on_one_variation(
         self,
@@ -371,6 +373,7 @@ class RLBenchEnv:
         kwargs["task_str"] = task_str
 
         actioner.reset()
+        home_pose = self._get_home_pose()
 
         for step_id in range(max_steps):
             # ============================================================================
@@ -421,8 +424,12 @@ class RLBenchEnv:
             cur_grasped_objects_len = len(grasped_objects)
             if cur_grasped_objects_len != prev_grasped_objects_len:
                 instr_index = (instr_index + 1) % len(instruction_oracle_half)
+
+                # reset when grasped changed and gripper open
+                if abs(obs.gripper_open - 1.000) < 1e-9:
+                    obs, reward, terminate = self.env._task.step(home_pose)  # noqa: SLF001
             prev_grasped_objects_len = cur_grasped_objects_len
             # ============================================================================
 
         success = reward == 1
-        return reward, self.env.append_final_frame(success)
+        return reward, self.env.append_final_frame(success=success)

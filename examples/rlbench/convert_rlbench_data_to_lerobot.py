@@ -65,14 +65,14 @@ class JointPositionsProprioMode(ProprioModeBase):
 def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = False):
     assert train_mode in ("vanilla", "half")
 
-    # Clean up any existing dataset in the output directory
+    data_dir = Path(data_dir).resolve()
+    if not data_dir.is_dir():
+        raise NotADirectoryError(f"Specified data_dir is not a valid directory: {data_dir}")
+
     output_path = HF_LEROBOT_HOME / repo_name
     if output_path.exists():
         shutil.rmtree(output_path)
 
-    # Create LeRobot dataset, define features to store
-    # OpenPi assumes that proprio is stored in `state` and actions in `action`
-    # LeRobot assumes that dtype of image data is `image`
     dataset = LeRobotDataset.create(
         repo_id=repo_name,
         robot_type="panda",
@@ -83,16 +83,6 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                 "shape": (256, 256, 3),
                 "names": ["height", "width", "channel"],
             },
-            # "left_shoulder_image": {
-            #     "dtype": "image",
-            #     "shape": (256, 256, 3),
-            #     "names": ["height", "width", "channel"],
-            # },
-            # "right_shoulder_image": {
-            #     "dtype": "image",
-            #     "shape": (256, 256, 3),
-            #     "names": ["height", "width", "channel"],
-            # },
             "wrist_image": {
                 "dtype": "image",
                 "shape": (256, 256, 3),
@@ -113,44 +103,56 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
         image_writer_processes=5,
     )
 
-    # Initialize proprio mode
-    proprio_mode = JointPositionsProprioMode(joint_count=7)  # 7 joints for single arm
-    # Loop over raw Libero datasets and write episodes to the LeRobot dataset
-    # You can modify this for your own data format
+    proprio_mode = JointPositionsProprioMode(joint_count=7)
 
-    task_folders = Path.glob(data_dir + "/*")
+    task_folders = data_dir.glob("*")
     for task_folder in task_folders:
-        if not Path.is_dir(task_folder):
+        if not task_folder.is_dir():
             continue
 
-        # Extract the task name from the last part of the task_folder path
-        episodes_paths = Path.glob(task_folder + "/all_variations/episodes/*")
-
+        episodes_paths = task_folder.glob("all_variations/episodes/*")
         for episode_path in episodes_paths:
-            # language
-            descriptions_path = episode_path + "/variation_descriptions.pkl"
-            with Path.open(descriptions_path, "rb") as file:
+            if not episode_path.is_dir():
+                continue
+
+            descriptions_path = episode_path / "variation_descriptions.pkl"
+            if not descriptions_path.exists():
+                print(f"Warning: {descriptions_path} does not exist, skipping this episode")
+                continue
+            with descriptions_path.open("rb") as file:
                 all_descriptions = pickle.load(file)
                 description_vanilla = all_descriptions["vanilla"][0]
                 description_half = all_descriptions["oracle_half"][0].split("\n")
                 instr_index = 0
 
-            # action
-            low_dim_obs_path = episode_path + "/low_dim_obs.pkl"
-            with Path.open(low_dim_obs_path, "rb") as file:
+            low_dim_obs_path = episode_path / "low_dim_obs.pkl"
+            if not low_dim_obs_path.exists():
+                print(f"Warning: {low_dim_obs_path} does not exist, skipping this episode")
+                continue
+            with low_dim_obs_path.open("rb") as file:
                 low_dim_obs = pickle.load(file)
 
             for step_idx, _ in enumerate(low_dim_obs):
                 if step_idx == len(low_dim_obs) - 1:
                     break
-                front_image_path = episode_path + f"/front_rgb/{step_idx}.png"
-                # left_shoulder_image_path = episode_path + f"/left_shoulder_rgb/{step_idx}.png"
-                # right_shoulder_image_path = episode_path + f"/right_shoulder_rgb/{step_idx}.png"
-                wrist_image_path = episode_path + f"/wrist_rgb/{step_idx}.png"
-                front_image = np.array(Image.open(front_image_path))
-                # left_shoulder_image = np.array(Image.open(left_shoulder_image_path))
-                # right_shoulder_image = np.array(Image.open(right_shoulder_image_path))
-                wrist_image = np.array(Image.open(wrist_image_path))
+
+                front_image_path = episode_path / "front_rgb" / f"{step_idx}.png"
+                wrist_image_path = episode_path / "wrist_rgb" / f"{step_idx}.png"
+
+                if not front_image_path.exists():
+                    print(f"Warning: {front_image_path} does not exist, skipping this step")
+                    continue
+                if not wrist_image_path.exists():
+                    print(f"Warning: {wrist_image_path} does not exist, skipping this step")
+                    continue
+
+                try:
+                    front_image = np.array(Image.open(front_image_path))
+                    wrist_image = np.array(Image.open(wrist_image_path))
+                except Exception as e:
+                    print(f"Warning: Error reading images at step {step_idx}: {e}, skipping this step")
+                    continue
+
                 proprio = proprio_mode.convert_low_dim_obs_to_proprio(step_idx, low_dim_obs)
                 proprio_next = proprio_mode.convert_low_dim_obs_to_proprio(step_idx + 1, low_dim_obs)
 
@@ -158,14 +160,12 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                     description = description_vanilla
                 else:
                     description = description_half[instr_index]
-                    if abs(proprio[-1] - proprio_next[-1]) > 1e-9:  # gripper openness change
+                    if abs(proprio[-1] - proprio_next[-1]) > 1e-9:
                         instr_index = (instr_index + 1) % len(description_half)
 
                 dataset.add_frame(
                     {
                         "front_image": front_image,
-                        # "left_shoulder_image": left_shoulder_image,
-                        # "right_shoulder_image": right_shoulder_image,
                         "wrist_image": wrist_image,
                         "state": proprio,
                         "actions": proprio_next,
@@ -174,10 +174,8 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                 )
             dataset.save_episode()
 
-    # Consolidate the dataset, skip computing stats since we will do that later
     # dataset.consolidate(run_compute_stats=False)
 
-    # Optionally push to the Hugging Face Hub
     if push_to_hub:
         dataset.push_to_hub(
             tags=["libero", "panda", "rlds"],

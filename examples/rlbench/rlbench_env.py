@@ -364,6 +364,7 @@ class RLBenchEnv:
         instr_index = 0
         grasped_objects = self.env._rlbench_env._scene.robot.gripper.get_grasped_objects()  # noqa: SLF001
         prev_grasped_objects_len = len(grasped_objects)
+        prev_gripper_state = 1.0
         # ============================================================================
 
         reward = 0.0
@@ -422,13 +423,14 @@ class RLBenchEnv:
             # ============================================================================
             grasped_objects = self.env._rlbench_env._scene.robot.gripper.get_grasped_objects()  # noqa: SLF001
             cur_grasped_objects_len = len(grasped_objects)
-            if cur_grasped_objects_len != prev_grasped_objects_len:
+            if cur_grasped_objects_len != prev_grasped_objects_len or abs(obs.gripper_open - prev_gripper_state) > 1e-6:
                 instr_index = (instr_index + 1) % len(instruction_oracle_half)
 
                 # reset when grasped changed and gripper open
                 if abs(obs.gripper_open - 1.000) < 1e-9:
                     obs, reward, terminate = self.env._task.step(home_pose)  # noqa: SLF001
             prev_grasped_objects_len = cur_grasped_objects_len
+            prev_gripper_state = obs.gripper_open
             # ============================================================================
 
         success = reward == 1

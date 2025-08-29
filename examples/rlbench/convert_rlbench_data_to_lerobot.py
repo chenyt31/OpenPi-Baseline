@@ -156,9 +156,9 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                 proprio = proprio_mode.convert_low_dim_obs_to_proprio(step_idx, low_dim_obs)
                 proprio_next = proprio_mode.convert_low_dim_obs_to_proprio(step_idx + 1, low_dim_obs)
 
-                if train_mode == "half":
+                if train_mode == "vanilla":
                     description = description_vanilla
-                else:
+                else:  # train_mode == "half":
                     description = description_half[instr_index]
                     if abs(proprio[-1] - proprio_next[-1]) > 1e-9:
                         instr_index = (instr_index + 1) % len(description_half)

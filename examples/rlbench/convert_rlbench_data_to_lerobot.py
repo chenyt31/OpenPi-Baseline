@@ -132,8 +132,9 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
             with low_dim_obs_path.open("rb") as file:
                 low_dim_obs = pickle.load(file)
 
+            flag = False
             for step_idx, _ in enumerate(low_dim_obs):
-                if step_idx == len(low_dim_obs) - 1:
+                if step_idx == len(low_dim_obs) - 2:
                     break
 
                 front_image_path = episode_path / "front_rgb" / f"{step_idx}.png"
@@ -162,7 +163,8 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                     description = description_half[instr_index]
                     if abs(proprio[-1] - proprio_next[-1]) > 1e-9:
                         instr_index = (instr_index + 1) % len(description_half)
-
+                        flag = True
+                # print(description)
                 dataset.add_frame(
                     {
                         "front_image": front_image,
@@ -172,7 +174,14 @@ def main(data_dir: str, repo_name: str, train_mode: str, *, push_to_hub: bool = 
                         "task": description,
                     }
                 )
-            dataset.save_episode()
+
+                if flag:
+                    dataset.save_episode()
+                    flag = False
+            try:
+                dataset.save_episode()
+            except Exception as e:
+                print(e)
 
     # dataset.consolidate(run_compute_stats=False)
 
